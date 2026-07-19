@@ -28,6 +28,14 @@ Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um
 | **python3 + OpenCV** | clipper (reframe 9:16) | `pip install opencv-python` | BSD |
 | **Remotion** | visuals (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
 
+Atalho pras dependências Python (Whisper, VoxCPM, yt-dlp, OpenCV) de uma vez só:
+
+```bash
+pip install -r requirements.txt
+```
+
+ffmpeg/ffprobe e o Remotion ficam de fora do `requirements.txt` (não são pacotes PyPI) — instale conforme a tabela acima.
+
 Cheque tudo de uma vez: `node clipper/check-deps.js` (ou clique **ENGINES** no app — a barra lateral já mostra o status ao abrir).
 
 ---

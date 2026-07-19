@@ -1,0 +1,14 @@
+# Python engines used by AI Video Studio (all optional — the app degrades
+# gracefully per-step when one is missing, see `node clipper/check-deps.js`).
+#
+#   pip install -r requirements.txt
+#
+# Still needed separately (not on PyPI):
+#   - ffmpeg / ffprobe  → https://ffmpeg.org/download.html
+#   - Node.js >= 18     → https://nodejs.org
+#   - Remotion (optional, for Visuals step) → cd remotion && npm install
+
+openai-whisper   # captions, clipper — word-timed transcription (MIT)
+voxcpm           # voiceover — local TTS, voice cloning (Apache-2.0)
+yt-dlp           # clipper — download source video from a URL (Unlicense)
+opencv-python    # clipper — face/motion tracking for the 9:16 reframe crop (BSD)
