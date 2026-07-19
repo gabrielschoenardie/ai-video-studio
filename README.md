@@ -20,8 +20,8 @@ Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um
 ## Engines (instale o que for usar)
 
 | Engine | Etapa | Instalação | Licença |
-|---|---|---|---|
-| **ffmpeg / ffprobe** | tudo | https://ffmpeg.org/download.html | LGPL/GPL |
+| --- | --- | --- | --- |
+| **ffmpeg / ffprobe** | tudo | <https://ffmpeg.org/download.html> | LGPL/GPL |
 | **Whisper** | captions, clipper | `pip install openai-whisper` (ou compile whisper.cpp) | MIT |
 | **VoxCPM** | voiceover | `pip install voxcpm` | Apache-2.0 |
 | **yt-dlp** | clipper (URLs) | `pip install yt-dlp` | Unlicense |
@@ -65,7 +65,7 @@ Detalhes importantes dessa camada de compatibilidade (não é a API nativa da An
 
 ## Pipeline (o app automatiza isso)
 
-```
+```text
 BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT
 ```
 
@@ -92,7 +92,7 @@ Veja `LICENSES.md` para detalhes completos.
 
 ## Estrutura
 
-```
+```text
 ai-video-studio/
 ├── server.js              # backend HTTP, zero deps, job bus SSE
 ├── lib/                    # deps, ffmpeg, transcribe, captions, voiceover,
