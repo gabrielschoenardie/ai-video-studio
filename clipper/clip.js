@@ -6,6 +6,7 @@
 'use strict';
 const path = require('path');
 const readline = require('readline');
+require('../lib/loadEnv').loadEnv();
 const { clip } = require('../lib/clipper');
 
 function parseArgs(argv) {

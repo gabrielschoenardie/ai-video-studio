@@ -8,6 +8,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 
+require('./lib/loadEnv').loadEnv();
+
 const deps = require('./lib/deps');
 const { mediaInfo } = require('./lib/ffmpeg');
 const voiceover = require('./lib/voiceover');

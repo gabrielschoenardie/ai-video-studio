@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // clipper/check-deps.js — one-time environment check for the auto-clipper.
 'use strict';
+require('../lib/loadEnv').loadEnv();
 const { detect } = require('../lib/deps');
 
 (async () => {
