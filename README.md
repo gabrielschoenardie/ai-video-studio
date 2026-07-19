@@ -51,11 +51,15 @@ node clip.js --mode ai --reframe   # picking de momentos via LLM + reframe 9:16
 
 Sem API key? O **hook-detector offline** entra automaticamente (regex de perguntas, contraste, números, payoff markers + densidade de energia). Pra ligar o picking via IA:
 
+Pra usar sua própria chave da Anthropic (Claude), a camada de compatibilidade OpenAI da Anthropic aceita o mesmo formato Chat Completions que o clipper já fala — não precisa mudar nada no código:
+
 ```bash
-export LLM_BASE_URL="https://api.deepseek.com/v1"   # ou OpenAI, Ollama, LM Studio...
-export LLM_API_KEY="sua-chave"
-export LLM_MODEL="deepseek-chat"
+export LLM_BASE_URL="https://api.anthropic.com/v1"
+export LLM_API_KEY="sk-ant-..."          # sua API key da Anthropic
+export LLM_MODEL="claude-opus-4-8"       # ou claude-sonnet-5 / claude-haiku-4-5 (mais barato)
 ```
+
+Detalhes importantes dessa camada de compatibilidade (não é a API nativa da Anthropic): é voltada pra teste/avaliação, não é a via recomendada pra produção; `temperature` fica travado entre 0–1; sem suporte a prompt caching. Pra esse uso de "escolher os melhores momentos do vídeo", `claude-haiku-4-5` costuma ser rápido e barato o suficiente.
 
 ---
 
