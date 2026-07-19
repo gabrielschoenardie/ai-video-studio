@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/block-env-edit.js",
+            "statusMessage": "Checking for .env edits"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/server-path-safety-check.js 2>/dev/null || true",
+            "statusMessage": "Checking server.js path-safety boundary"
+          }
+        ]
+      }
+    ]
+  }
+}
