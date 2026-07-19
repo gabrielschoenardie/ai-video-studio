@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI VIDEO STUDIO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unica+One&family=Red+Hat+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0a; --panel:#101010; --panel2:#141414; --line:#1f1f1f;
+  --ink:#e8e8e8; --dim:#6f6f6f; --faint:#3a3a3a;
+  --go:#00ff88; --go-dim:#00ff8822; --warn:#ffb347; --bad:#ff4444;
+  --disp:'Unica One', 'Arial Narrow', sans-serif;
+  --mono:'Red Hat Mono', ui-monospace, 'Cascadia Mono', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink); font:400 13px/1.55 var(--mono);
+  display:grid; grid-template-columns:216px 1fr 340px; grid-template-rows:56px 1fr;
+  grid-template-areas:"head head head" "rail main side"; height:100vh; overflow:hidden;
+}
+body::after{ /* scanline atmosphere */
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:99;
+  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.012) 2px 3px);
+}
+/* ------------------------------------------------ header */
+header{grid-area:head; display:flex; align-items:center; gap:18px;
+  border-bottom:1px solid var(--line); padding:0 18px; background:var(--panel);}
+header h1{font:400 26px var(--disp); letter-spacing:.14em; color:var(--ink)}
+header h1 b{color:var(--go); font-weight:400}
+.rec{display:flex; align-items:center; gap:7px; color:var(--dim); font-size:11px; letter-spacing:.12em}
+.rec i{width:8px;height:8px;border-radius:50%;background:var(--bad);animation:blink 1.4s steps(2) infinite}
+@keyframes blink{50%{opacity:.2}}
+header .spacer{flex:1}
+.tag{border:1px solid var(--line); padding:3px 10px; font-size:10px; letter-spacing:.14em; color:var(--dim)}
+/* ------------------------------------------------ rail */
+nav{grid-area:rail; border-right:1px solid var(--line); background:var(--panel);
+  display:flex; flex-direction:column; padding:14px 0; overflow-y:auto}
+nav .lbl{padding:8px 18px 6px; font-size:10px; letter-spacing:.22em; color:var(--faint)}
+nav button{
+  all:unset; cursor:pointer; display:flex; gap:12px; align-items:baseline;
+  padding:11px 18px; color:var(--dim); border-left:2px solid transparent;
+  font:inherit; letter-spacing:.04em; transition:color .15s, background .15s;
+}
+nav button:hover{color:var(--ink); background:#0f0f0f}
+nav button.on{color:var(--go); border-left-color:var(--go); background:var(--go-dim)}
+nav button .n{font:400 15px var(--disp); width:22px; color:var(--faint)}
+nav button.on .n{color:var(--go)}
+nav hr{border:0;border-top:1px solid var(--line); margin:12px 18px}
+/* ------------------------------------------------ main */
+main{grid-area:main; overflow-y:auto; padding:26px 30px 60px}
+.step{display:none; max-width:820px}
+.step.on{display:block; animation:rise .3s ease both}
+@keyframes rise{from{opacity:0; transform:translateY(8px)}to{opacity:1;transform:none}}
+.step h2{font:400 34px var(--disp); letter-spacing:.08em; margin-bottom:4px}
+.step h2 em{color:var(--go); font-style:normal}
+.step .sub{color:var(--dim); margin-bottom:22px; max-width:64ch}
+.card{background:var(--panel); border:1px solid var(--line); padding:18px; margin-bottom:16px}
+.card h3{font-size:11px; letter-spacing:.2em; color:var(--dim); margin-bottom:12px}
+label{display:block; font-size:11px; letter-spacing:.1em; color:var(--dim); margin:12px 0 4px}
+input[type=text],input[type=number],textarea,select{
+  width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--ink);
+  font:400 13px var(--mono); padding:9px 11px; outline:none;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--go)}
+textarea{min-height:110px; resize:vertical}
+.row{display:flex; gap:12px; flex-wrap:wrap}
+.row>*{flex:1; min-width:140px}
+.btn{
+  all:unset; cursor:pointer; display:inline-block; margin-top:14px;
+  background:var(--go); color:#031; font:500 12px var(--mono); letter-spacing:.14em;
+  padding:11px 22px; transition:filter .15s;
+}
+.btn:hover{filter:brightness(1.15)}
+.btn[disabled]{background:var(--faint); color:#000; cursor:not-allowed}
+.btn.ghost{background:transparent; color:var(--go); border:1px solid var(--go)}
+.btn.ghost:hover{background:var(--go-dim)}
+.chip{display:inline-block; border:1px solid var(--line); color:var(--dim);
+  padding:2px 9px; font-size:10px; letter-spacing:.1em; margin:2px 4px 2px 0}
+.chip.ok{color:var(--go); border-color:var(--go)}
+.chip.no{color:var(--bad); border-color:var(--bad)}
+.chip.wn{color:var(--warn); border-color:var(--warn)}
+.drop{
+  border:1px dashed var(--faint); padding:26px; text-align:center; color:var(--dim);
+  cursor:pointer; transition:border-color .2s, color .2s;
+}
+.drop:hover,.drop.over{border-color:var(--go); color:var(--go)}
+.assets{margin-top:8px}
+.asset{display:flex; align-items:center; gap:10px; padding:8px 10px;
+  border:1px solid var(--line); margin-top:6px; font-size:12px}
+.asset .name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink)}
+.asset .meta{color:var(--faint); font-size:10px}
+.asset button{all:unset; cursor:pointer; color:var(--go); font-size:10px;
+  letter-spacing:.1em; border:1px solid var(--go); padding:3px 8px}
+.asset button:hover{background:var(--go-dim)}
+video,audio{width:100%; margin-top:12px; background:#000; outline:1px solid var(--line)}
+table{width:100%; border-collapse:collapse; margin-top:8px; font-size:12px}
+td,th{border-bottom:1px solid var(--line); padding:6px 8px; text-align:left}
+th{color:var(--faint); font-weight:400; font-size:10px; letter-spacing:.16em}
+.ok-x{color:var(--go)} .bad-x{color:var(--bad)} .warn-x{color:var(--warn)}
+canvas{width:100%; height:180px; background:var(--panel2); outline:1px solid var(--line); margin-top:10px}
+.big{font:400 46px var(--disp); color:var(--go)}
+.risk-min{color:var(--go)} .risk-mod{color:var(--warn)} .risk-high,.risk-guar{color:var(--bad)}
+/* ------------------------------------------------ side */
+aside{grid-area:side; border-left:1px solid var(--line); background:var(--panel);
+  display:flex; flex-direction:column; overflow:hidden}
+aside .blk{border-bottom:1px solid var(--line); padding:14px 16px}
+aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom:10px}
+#engines .chip{display:block; margin:0 0 5px; width:fit-content}
+#stage{color:var(--go); font-size:12px; min-height:18px; letter-spacing:.06em}
+#stage.err{color:var(--bad)}
+#console{flex:1; overflow-y:auto; padding:12px 16px; font-size:10.5px; line-height:1.5;
+  color:#8a8a8a; white-space:pre-wrap; word-break:break-all}
+#console .t{color:var(--faint)}
+::-webkit-scrollbar{width:8px} ::-webkit-scrollbar-thumb{background:var(--faint)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AI <b>VIDEO</b> STUDIO</h1>
+  <span class="rec"><i></i>LOCAL&nbsp;·&nbsp;PRIVATE&nbsp;·&nbsp;$0/USE</span>
+  <span class="spacer"></span>
+  <span class="tag" id="port">…</span>
+</header>
+
+<nav>
+  <div class="lbl">PIPELINE</div>
+  <button data-step="brief" class="on"><span class="n">01</span>BRIEF</button>
+  <button data-step="visuals"><span class="n">02</span>VISUALS</button>
+  <button data-step="voice"><span class="n">03</span>VOICE</button>
+  <button data-step="assemble"><span class="n">04</span>ASSEMBLE</button>
+  <button data-step="score"><span class="n">05</span>SCORE</button>
+  <button data-step="export"><span class="n">06</span>EXPORT</button>
+  <hr>
+  <div class="lbl">TOOLS</div>
+  <button data-step="clipper"><span class="n">✂</span>AUTO-CLIPPER</button>
+  <button data-step="library"><span class="n">▤</span>LIBRARY</button>
+</nav>
+
+<main>
+
+  <!-- 01 BRIEF -->
+  <section class="step on" id="step-brief">
+    <h2>01 / <em>BRIEF</em></h2>
+    <p class="sub">Decide the one idea the video sells and who it's for. The clearer the line, the cleaner everything downstream. The script written here feeds the VOICE step.</p>
+    <div class="card">
+      <label>ONE-LINE IDEA</label>
+      <input type="text" id="brief-idea" placeholder="e.g. Uptime is not success — measure outcomes.">
+      <label>AUDIENCE</label>
+      <input type="text" id="brief-aud" placeholder="e.g. AI & tech creators shipping reels weekly">
+      <label>SCRIPT (3–6 LINES)</label>
+      <textarea id="brief-script" placeholder="Line 1: the hook.&#10;Line 2–4: the payoff.&#10;Last line: the CTA."></textarea>
+      <button class="btn ghost" onclick="saveBrief()">SAVE BRIEF → FEEDS STEP 03</button>
+    </div>
+  </section>
+
+  <!-- 02 VISUALS -->
+  <section class="step" id="step-visuals">
+    <h2>02 / <em>VISUALS</em></h2>
+    <p class="sub">Bring the base visual. Upload footage, or render a motion-graphics composition with the bundled Remotion project. Detail rule: many small, sharp, glowing elements layered in depth — not big soft blobs.</p>
+    <div class="card">
+      <h3>UPLOAD FOOTAGE</h3>
+      <div class="drop" id="drop-visual">DROP A VIDEO HERE — OR CLICK</div>
+      <input type="file" id="file-visual" accept="video/*" hidden>
+    </div>
+    <div class="card">
+      <h3>RENDER MOTION GRAPHICS (REMOTION)</h3>
+      <div class="row">
+        <select id="remotion-comp">
+          <option value="AutoKillReel">AutoKillReel — 5-slide kinetic type reel</option>
+          <option value="NeuralIntro">NeuralIntro — glowing neural-net intro</option>
+        </select>
+        <button class="btn" style="flex:0" onclick="renderRemotion()">RENDER</button>
+      </div>
+      <p class="sub" style="margin-top:10px;font-size:11px">First time: <span style="color:var(--go)">cd remotion && npm install</span></p>
+    </div>
+    <div class="card"><h3>VISUAL ASSETS</h3><div class="assets" id="assets-visual"></div></div>
+  </section>
+
+  <!-- 03 VOICE -->
+  <section class="step" id="step-voice">
+    <h2>03 / <em>VOICE</em></h2>
+    <p class="sub">Paste the script — narration is generated on this machine, free, as many takes as you want. Engine: VoxCPM (Apache-2.0). Fallbacks: piper / espeak-ng / say for scratch tracks.</p>
+    <div class="card">
+      <label>SCRIPT</label>
+      <textarea id="vo-script"></textarea>
+      <button class="btn" onclick="genVoice()">GENERATE VOICEOVER</button>
+      <div id="vo-out"></div>
+    </div>
+    <div class="card"><h3>VOICE ASSETS</h3><div class="assets" id="assets-voice"></div></div>
+  </section>
+
+  <!-- 04 ASSEMBLE -->
+  <section class="step" id="step-assemble">
+    <h2>04 / <em>ASSEMBLE</em></h2>
+    <p class="sub">Stitch visual + voiceover into one MP4 with word-by-word captions timed to the beat (Whisper word timestamps). Output is a CRF-18 mezzanine — delivery encode happens in EXPORT.</p>
+    <div class="card">
+      <div class="row">
+        <div><label>VISUAL</label><select id="asm-visual"></select></div>
+        <div><label>VOICEOVER (OPTIONAL)</label><select id="asm-vo"><option value="">— none (use visual's audio) —</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>CAPTIONS</label>
+          <select id="asm-cap"><option value="1">word-by-word (impact)</option><option value="clean">word-by-word (clean)</option><option value="0">off</option></select></div>
+        <div><label>WHISPER MODEL</label>
+          <select id="asm-model"><option>tiny</option><option selected>base</option><option>small</option><option>medium</option></select></div>
+        <div><label>LANGUAGE (BLANK = AUTO)</label><input type="text" id="asm-lang" placeholder="pt / en / …"></div>
+      </div>
+      <button class="btn" onclick="doAssemble()">ASSEMBLE MP4</button>
+      <div id="asm-out"></div>
+    </div>
+  </section>
+
+  <!-- 05 SCORE -->
+  <section class="step" id="step-score">
+    <h2>05 / <em>SCORE</em></h2>
+    <p class="sub">The improvement loop: render → score → fix the flagged seconds → re-score, until the curve holds. Built-in curve is a local attention <b>proxy</b> (audio energy + cut density + speech density). For brain-response scoring, install TRIBE v2 yourself — non-commercial license, never bundled.</p>
+    <div class="card">
+      <label>VIDEO TO SCORE</label>
+      <select id="score-input"></select>
+      <button class="btn" onclick="doScore()">RUN ATTENTION CURVE</button>
+      <canvas id="curve" width="760" height="180"></canvas>
+      <div id="score-out"></div>
+    </div>
+    <div class="card">
+      <h3>TRIBE V2 — BRAIN MODEL (SELF-INSTALL)</h3>
+      <div id="tribe-info" class="sub" style="font-size:11.5px"></div>
+    </div>
+  </section>
+
+  <!-- 06 EXPORT -->
+  <section class="step" id="step-export">
+    <h2>06 / <em>EXPORT</em></h2>
+    <p class="sub">Instagram delivery encode — Metodologia Gabriel. VBV profile auto-selected from measured duration, premium x264 stack, BT.709, GOP ≤ 60, +faststart. Recompression risk scored before encode; full compliance validation after.</p>
+    <div class="card">
+      <div class="row">
+        <div><label>INPUT</label><select id="exp-input"></select></div>
+        <div><label>LUT 3D .CUBE (OPTIONAL)</label><select id="exp-lut"><option value="">— none —</option></select></div>
+      </div>
+      <div class="row">
+        <div><label>PSY-RD (OPTIONAL, e.g. 1.0,0.0)</label><input type="text" id="exp-psyrd" placeholder="comma, never colon"></div>
+        <div><label>DEBLOCK (OPTIONAL, e.g. -1,-1)</label><input type="text" id="exp-deblock" placeholder="comma, never colon"></div>
+      </div>
+      <button class="btn" onclick="doExport()">ENCODE FOR INSTAGRAM</button>
+      <div id="exp-out"></div>
+    </div>
+    <div class="card">
+      <h3>VBV PROFILES (AUTO BY DURATION)</h3>
+      <table>
+        <tr><th>PROFILE</th><th>TARGET</th><th>MAXRATE</th><th>BUFSIZE</th><th>VBV-INIT</th><th>VMAF TARGET (NEG)</th></tr>
+        <tr><td>Maximum Quality ≤30s</td><td>10000k</td><td>11200k</td><td>15000k</td><td>0.90</td><td>≥93</td></tr>
+        <tr><td>Transition 30–40s</td><td>9000k</td><td>9000k</td><td>12500k</td><td>0.90</td><td>≥90</td></tr>
+        <tr><td>Safe Premium ≥40s</td><td>8000k</td><td>9000k</td><td>12500k</td><td>0.90</td><td>≥90</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- CLIPPER -->
+  <section class="step" id="step-clipper">
+    <h2>✂ / <em>AUTO-CLIPPER</em></h2>
+    <p class="sub">Point it at a long video or URL. It transcribes (Whisper), picks the genuinely clip-worthy moments — with a reason for each — reframes landscape to 9:16 with a moving crop that follows the subject, cuts, and burns word captions. No API key? The offline hook-detector runs.</p>
+    <div class="card">
+      <label>SOURCE — URL OR UPLOADED FILE</label>
+      <div class="row">
+        <input type="text" id="clip-url" placeholder="https://…  (yt-dlp)  — or pick an upload below">
+        <select id="clip-file" style="flex:0.6"><option value="">— uploads —</option></select>
+      </div>
+      <div class="drop" id="drop-clip" style="margin-top:10px">DROP A LONG VIDEO HERE</div>
+      <input type="file" id="file-clip" accept="video/*" hidden>
+      <div class="row">
+        <div><label>MODE</label><select id="clip-mode">
+          <option value="auto">auto (AI if LLM_BASE_URL set, else offline)</option>
+          <option value="ai">ai — LLM moment-picking</option>
+          <option value="offline">offline hook-detector</option></select></div>
+        <div><label>CLIPS</label><input type="number" id="clip-count" value="3" min="1" max="8"></div>
+        <div><label>LEN (S)</label><div class="row" style="gap:6px">
+          <input type="number" id="clip-min" value="15"><input type="number" id="clip-max" value="45"></div></div>
+      </div>
+      <div class="row">
+        <div><label>9:16 REFRAME</label><select id="clip-reframe"><option value="1">moving crop (subject-follow)</option><option value="0">off</option></select></div>
+        <div><label>CAPTIONS</label><select id="clip-cap"><option value="1">word-by-word</option><option value="0">off</option></select></div>
+        <div><label>WHISPER</label><select id="clip-model"><option>tiny</option><option selected>base</option><option>small</option></select></div>
+      </div>
+      <button class="btn" onclick="doClip()">RUN CLIPPER</button>
+      <div id="clip-out"></div>
+    </div>
+  </section>
+
+  <!-- LIBRARY -->
+  <section class="step" id="step-library">
+    <h2>▤ / <em>LIBRARY</em></h2>
+    <p class="sub">Everything produced or uploaded in this session. Assets flow between steps — send any of them to Assemble, Score, or Export.</p>
+    <div class="card"><div class="assets" id="assets-all"></div></div>
+  </section>
+
+</main>
+
+<aside>
+  <div class="blk"><h3>ENGINES</h3><div id="engines">probing…</div></div>
+  <div class="blk"><h3>ACTIVE JOB</h3><div id="stage">idle</div></div>
+  <h3 style="padding:12px 16px 0">CONSOLE</h3>
+  <div id="console"></div>
+</aside>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+$('#port').textContent = location.host;
+
+/* ---------------- nav */
+$$('nav button').forEach(b => b.onclick = () => {
+  $$('nav button').forEach(x => x.classList.remove('on'));
+  $$('.step').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  $('#step-' + b.dataset.step).classList.add('on');
+});
+
+/* ---------------- asset registry */
+const assets = []; // {path, name, kind: video|audio|lut, info, source}
+function addAsset(a) {
+  assets.unshift(a); renderAssets();
+}
+function fmtInfo(i){ return i ? `${i.width}×${i.height} · ${i.duration?.toFixed(1)}s · ${i.vcodec||i.acodec||''}` : ''; }
+function renderAssets() {
+  const vids = assets.filter(a => a.kind === 'video');
+  const auds = assets.filter(a => a.kind === 'audio');
+  const luts = assets.filter(a => a.kind === 'lut');
+  const rowHtml = a => `<div class="asset">
+      <span class="name" title="${a.path}">${a.name}</span>
+      <span class="meta">${a.source}${a.info ? ' · ' + fmtInfo(a.info) : ''}</span>
+      ${a.kind !== 'lut' ? `<button onclick="preview('${a.path}','${a.kind}')">PLAY</button>` : ''}
+      <button onclick="location='/files/${encodeURIComponent(a.path)}?dl'">SAVE</button>
+    </div>`;
+  $('#assets-visual').innerHTML = vids.map(rowHtml).join('') || '<span class="chip">none yet</span>';
+  $('#assets-voice').innerHTML = auds.map(rowHtml).join('') || '<span class="chip">none yet</span>';
+  $('#assets-all').innerHTML = assets.map(rowHtml).join('') || '<span class="chip">empty</span>';
+  const opt = a => `<option value="${a.path}">${a.name}</option>`;
+  $('#asm-visual').innerHTML = vids.map(opt).join('');
+  $('#asm-vo').innerHTML = '<option value="">— none —</option>' + auds.map(opt).join('');
+  $('#score-input').innerHTML = vids.map(opt).join('');
+  $('#exp-input').innerHTML = vids.map(opt).join('');
+  $('#exp-lut').innerHTML = '<option value="">— none —</option>' + luts.map(opt).join('');
+  $('#clip-file').innerHTML = '<option value="">— uploads —</option>' + vids.map(opt).join('');
+}
+window.preview = (p, kind) => {
+  const el = document.createElement(kind === 'audio' ? 'audio' : 'video');
+  el.src = '/files/' + encodeURIComponent(p); el.controls = true; el.autoplay = true;
+  const host = $('.step.on .card:last-child') || $('.step.on');
+  host.appendChild(el); el.scrollIntoView({ behavior: 'smooth' });
+};
+
+/* ---------------- console / jobs */
+function clog(s){ const c = $('#console');
+  c.insertAdjacentText('beforeend', s); c.scrollTop = c.scrollHeight; }
+function stage(s, err){ const el = $('#stage'); el.textContent = s; el.className = err ? 'err' : ''; }
+
+function watchJob(id) {
+  return new Promise((resolve, reject) => {
+    const es = new EventSource('/api/jobs/' + id + '/events');
+    es.addEventListener('stage', e => stage(JSON.parse(e.data).label));
+    es.addEventListener('log', e => clog(JSON.parse(e.data).s));
+    es.addEventListener('progress', e => {
+      const p = JSON.parse(e.data);
+      stage(`encoding ${p.pct?.toFixed(0) ?? '…'}%  ${p.speed ? p.speed + 'x' : ''}`);
+    });
+    es.addEventListener('done', e => { es.close(); stage('done'); resolve(JSON.parse(e.data).result); });
+    es.addEventListener('error', e => {
+      try { const d = JSON.parse(e.data); es.close(); stage('error: ' + d.error, true); reject(new Error(d.error)); }
+      catch { /* transport retry */ }
+    });
+  });
+}
+async function api(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+/* ---------------- engines */
+(async () => {
+  const d = await (await fetch('/api/deps')).json();
+  const chip = (name, ok, extra) =>
+    `<span class="chip ${ok ? 'ok' : 'no'}" title="${extra || ''}">${ok ? '●' : '○'} ${name}</span>`;
+  $('#engines').innerHTML =
+    chip('ffmpeg', d.ffmpeg.ok, d.ffmpeg.install) +
+    chip('whisper' + (d.whisper.flavor ? ' · ' + d.whisper.flavor : ''), d.whisper.ok, d.whisper.install) +
+    chip('yt-dlp', d.ytdlp.ok, d.ytdlp.install) +
+    chip('voxcpm', d.voxcpm.ok, d.voxcpm.install) +
+    (d.llm.ok ? `<span class="chip ok">● LLM · ${d.llm.model || 'set'}</span>`
+              : `<span class="chip wn" title="${d.llm.note}">○ LLM (offline detector active)</span>`);
+})();
+(async () => {
+  const t = await (await fetch('/api/tribe-info')).json();
+  $('#tribe-info').innerHTML = `<b>${t.name}</b><br>${t.license}<br><br>` +
+    t.install.map((s,i)=>`${i+1}. ${s}`).join('<br>');
+})();
+
+/* ---------------- uploads */
+function wireDrop(dropId, fileId, after) {
+  const drop = $(dropId), file = $(fileId);
+  drop.onclick = () => file.click();
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); upload(e.dataTransfer.files[0], after); };
+  file.onchange = () => upload(file.files[0], after);
+}
+async function upload(f, after) {
+  if (!f) return;
+  stage('uploading ' + f.name);
+  const r = await fetch('/api/upload?name=' + encodeURIComponent(f.name), { method: 'POST', body: f });
+  const j = await r.json();
+  const kind = /\.cube$/i.test(f.name) ? 'lut' : (j.info && j.info.vcodec ? 'video' : 'audio');
+  addAsset({ path: j.path, name: f.name, kind, info: j.info, source: 'upload' });
+  stage('uploaded ' + f.name);
+  if (after) after(j);
+}
+wireDrop('#drop-visual', '#file-visual');
+wireDrop('#drop-clip', '#file-clip', j => { $('#clip-file').value = j.path; });
+
+/* ---------------- brief */
+window.saveBrief = () => {
+  const s = $('#brief-script').value.trim();
+  if (s) $('#vo-script').value = s;
+  localStorage.setItem('studio-brief', JSON.stringify({
+    idea: $('#brief-idea').value, aud: $('#brief-aud').value, script: s }));
+  stage('brief saved → script loaded in step 03');
+};
+try { const b = JSON.parse(localStorage.getItem('studio-brief') || 'null');
+  if (b) { $('#brief-idea').value = b.idea||''; $('#brief-aud').value = b.aud||'';
+    $('#brief-script').value = b.script||''; $('#vo-script').value = b.script||''; } } catch {}
+
+/* ---------------- remotion */
+window.renderRemotion = async () => {
+  try {
+    const { job } = await api('/api/remotion/render', { composition: $('#remotion-comp').value });
+    const r = await watchJob(job);
+    addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'remotion' });
+  } catch (e) { stage(e.message, true); }
+};
+
+/* ---------------- voice */
+window.genVoice = async () => {
+  try {
+    const { job } = await api('/api/voiceover', { script: $('#vo-script').value });
+    const r = await watchJob(job);
+    addAsset({ path: r.file, name: 'voiceover.wav', kind: 'audio', source: r.engine });
+    $('#vo-out').innerHTML = `<span class="chip ok">engine: ${r.engine}</span>
+      <audio controls autoplay src="/files/${encodeURIComponent(r.file)}"></audio>`;
+  } catch (e) { stage(e.message, true); }
+};
+
+/* ---------------- assemble */
+window.doAssemble = async () => {
+  try {
+    const cap = $('#asm-cap').value;
+    const { job } = await api('/api/assemble', {
+      visual: $('#asm-visual').value, voiceover: $('#asm-vo').value || null,
+      captions: cap !== '0', captionStyle: cap === 'clean' ? 'clean' : 'impact',
+      whisperModel: $('#asm-model').value, language: $('#asm-lang').value || null });
+    const r = await watchJob(job);
+    addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'assemble' });
+    $('#asm-out').innerHTML = `<span class="chip ok">${r.captionedWords} words captioned</span>
+      <video controls src="/files/${encodeURIComponent(r.output)}"></video>`;
+  } catch (e) { stage(e.message, true); }
+};
+
+/* ---------------- score */
+window.doScore = async () => {
+  try {
+    const { job } = await api('/api/score', { input: $('#score-input').value });
+    const r = await watchJob(job);
+    drawCurve(r);
+    $('#score-out').innerHTML =
+      `<span class="chip ${r.kind === 'tribe' ? 'ok' : 'wn'}">${r.kind === 'tribe' ? 'TRIBE v2 brain model' : 'local proxy'}</span>` +
+      (r.dips && r.dips.length
+        ? `<table><tr><th>DIP</th><th>SECONDS</th><th>FIX</th></tr>` +
+          r.dips.map(d => `<tr><td class="bad-x">▼</td><td>${d.start}s–${d.end}s</td><td>${d.advice||'tighten / rewrite / add motion'}</td></tr>`).join('') + '</table>'
+        : '<p class="sub" style="margin-top:10px">no dips below threshold — the curve holds.</p>') +
+      (r.note ? `<p class="sub" style="margin-top:8px;font-size:11px">${r.note}</p>` : '');
+  } catch (e) { stage(e.message, true); }
+};
+function drawCurve(r) {
+  const cv = $('#curve'), ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = '#1f1f1f';
+  for (let y = 0.25; y < 1; y += 0.25) { ctx.beginPath(); ctx.moveTo(0, H*y); ctx.lineTo(W, H*y); ctx.stroke(); }
+  const pts = r.curve || []; if (!pts.length) return;
+  const x = t => (t / Math.max(r.duration, 1)) * W;
+  const y = v => H - v * (H - 20) - 10;
+  // dip zones
+  ctx.fillStyle = 'rgba(255,68,68,.12)';
+  for (const d of r.dips || []) ctx.fillRect(x(d.start), 0, Math.max(x(d.end + 1) - x(d.start), 2), H);
+  // curve
+  ctx.beginPath(); ctx.strokeStyle = '#00ff88'; ctx.lineWidth = 2;
+  pts.forEach((p, i) => i ? ctx.lineTo(x(p.t), y(p.v)) : ctx.moveTo(x(p.t), y(p.v)));
+  ctx.stroke();
+  // mean
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = '#555';
+  ctx.beginPath(); ctx.moveTo(0, y(r.mean)); ctx.lineTo(W, y(r.mean)); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/* ---------------- export */
+window.doExport = async () => {
+  try {
+    const x264 = {};
+    if ($('#exp-psyrd').value.trim()) x264.psyRd = $('#exp-psyrd').value.trim();
+    if ($('#exp-deblock').value.trim()) x264.deblock = $('#exp-deblock').value.trim();
+    const { job } = await api('/api/export', {
+      input: $('#exp-input').value, lut: $('#exp-lut').value || null, x264 });
+    const r = await watchJob(job);
+    const riskCls = { minimal: 'risk-min', moderate: 'risk-mod', high: 'risk-high', guaranteed: 'risk-guar' }[r.risk.level];
+    $('#exp-out').innerHTML =
+      `<div class="row" style="margin-top:14px">
+         <div class="card" style="flex:1"><h3>PROFILE</h3><div class="big" style="font-size:22px">${r.profile.name}</div>
+           <span class="chip">target ${r.profile.target}k</span><span class="chip">maxrate ${r.profile.maxrate}k</span>
+           <span class="chip">bufsize ${r.profile.bufsize}k</span><span class="chip">vbv-init 0.90</span></div>
+         <div class="card" style="flex:1"><h3>RECOMPRESSION RISK</h3>
+           <div class="big ${riskCls}" style="font-size:34px">${r.risk.total} · ${r.risk.level.toUpperCase()}</div>
+           ${r.risk.rows.map(w => `<span class="chip wn">+${w.pts} ${w.label}</span>`).join('') || '<span class="chip ok">clean source</span>'}</div>
+       </div>
+       <div class="card"><h3>POST-ENCODE VALIDATION — ${r.validation.passed ? '<span class="ok-x">APROVADO</span>' : '<span class="bad-x">REPROVADO</span>'}</h3>
+         <table>${r.validation.checks.map(c =>
+           `<tr><td class="${c.ok ? 'ok-x' : 'bad-x'}">${c.ok ? '✓' : '✗'}</td><td>${c.label}</td><td class="meta">${c.got ?? ''}</td></tr>`).join('')}</table>
+         <span class="chip">real bitrate ${r.validation.bitrateKbps} kbps</span></div>
+       <video controls src="/files/${encodeURIComponent(r.output)}"></video>
+       <p class="sub" style="margin-top:10px;font-size:11px">command: <span style="color:#888;word-break:break-all">${r.command}</span></p>`;
+    addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'export' });
+  } catch (e) { stage(e.message, true); }
+};
+
+/* ---------------- clipper */
+window.doClip = async () => {
+  try {
+    const input = $('#clip-url').value.trim() || $('#clip-file').value;
+    if (!input) { stage('give the clipper a URL or an upload', true); return; }
+    const { job } = await api('/api/clip', {
+      input, mode: $('#clip-mode').value,
+      count: +$('#clip-count').value, minLen: +$('#clip-min').value, maxLen: +$('#clip-max').value,
+      reframe: $('#clip-reframe').value === '1', captions: $('#clip-cap').value === '1',
+      whisperModel: $('#clip-model').value });
+    const r = await watchJob(job);
+    $('#clip-out').innerHTML =
+      `<span class="chip ok">picker: ${r.picker}</span>` +
+      (r.reframed ? `<span class="chip ok">9:16 ${r.tracked ? 'subject-follow' : 'center'} crop</span>` : '') +
+      r.moments.map((m, i) => `
+        <div class="card" style="margin-top:12px">
+          <h3>CLIP ${i + 1} — ${m.start.toFixed(1)}s → ${m.end.toFixed(1)}s</h3>
+          <p class="sub" style="font-size:11.5px">${m.reason}${m.hookText ? ' — “' + m.hookText + '”' : ''}</p>
+          <video controls src="/files/${encodeURIComponent(m.file)}"></video>
+          <button class="btn ghost" onclick="sendToExport('${m.file}')">SEND TO EXPORT →</button>
+        </div>`).join('');
+    r.moments.forEach((m, i) => addAsset({ path: m.file, name: `clip-${i + 1}.mp4`, kind: 'video', source: 'clipper' }));
+  } catch (e) { stage(e.message, true); }
+};
+window.sendToExport = (p) => {
+  $('#exp-input').value = p;
+  $$('nav button').forEach(x => x.classList.remove('on'));
+  $$('.step').forEach(x => x.classList.remove('on'));
+  document.querySelector('[data-step=export]').classList.add('on');
+  $('#step-export').classList.add('on');
+};
+</script>
+</body>
+</html>

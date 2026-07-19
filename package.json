@@ -1,0 +1,13 @@
+{
+  "name": "ai-video-studio",
+  "version": "1.0.0",
+  "description": "One-window local AI video studio — clip, score, animate, voice, caption, export. $0 per use, nothing uploaded.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "clipper": "node clipper/clip.js",
+    "check": "node clipper/check-deps.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT (app code) — see README licensing section for engines"
+}
