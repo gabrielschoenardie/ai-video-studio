@@ -15,7 +15,7 @@ Tudo em `server.js`, `lib/`, `public/`, `clipper/`, `remotion/src/` (exceto `Aut
 | ffmpeg / ffprobe | LGPL/GPL (depende do build) | ✅ Sim |
 | Whisper (openai-whisper) | MIT | ✅ Sim |
 | whisper.cpp | MIT | ✅ Sim |
-| VoxCPM | Apache-2.0 | ✅ Sim |
+| Voicebox | MIT | ✅ Sim |
 | yt-dlp | Unlicense (domínio público) | ✅ Sim |
 | OpenCV (python3-opencv) | BSD/Apache | ✅ Sim |
 | Remotion | ver `remotion/` — licença própria (verifique termos comerciais no site oficial antes de vender vídeos renderizados em escala) | ⚠️ Confirmar termos |

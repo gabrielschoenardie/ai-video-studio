@@ -23,12 +23,12 @@ Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um
 | --- | --- | --- | --- |
 | **ffmpeg / ffprobe** | tudo | <https://ffmpeg.org/download.html> | LGPL/GPL |
 | **Whisper** | captions, clipper | `pip install openai-whisper` (ou compile whisper.cpp) | MIT |
-| **VoxCPM** | voiceover | `pip install voxcpm` | Apache-2.0 |
+| **Voicebox** | voiceover | baixe em <https://voicebox.sh> (deixe aberto rodando) | MIT |
 | **yt-dlp** | clipper (URLs) | `pip install yt-dlp` | Unlicense |
 | **python3 + OpenCV** | clipper (reframe 9:16) | `pip install opencv-python` | BSD |
 | **Remotion** | visuals (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
 
-Atalho pras dependências Python (Whisper, VoxCPM, yt-dlp, OpenCV) de uma vez só:
+Atalho pras dependências Python (Whisper, yt-dlp, OpenCV) de uma vez só:
 
 ```bash
 pip install -r requirements.txt
@@ -71,7 +71,7 @@ BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT
 
 1. **Brief** — a ideia + roteiro (3–6 linhas), salvo localmente e injetado na etapa Voice.
 2. **Visuals** — sobe seu footage ou renderiza uma composição Remotion (`AutoKillReel`, `NeuralIntro`).
-3. **Voice** — VoxCPM gera a narração no seu hardware, sem custo por palavra.
+3. **Voice** — Voicebox gera a narração no seu hardware, sem custo por palavra.
 4. **Assemble** — funde visual + voz + legendas palavra-por-palavra (Whisper word timestamps) num MP4 mezzanine (CRF 18).
 5. **Score** — curva de atenção segundo a segundo. Proxy local por padrão (energia de áudio + densidade de cortes + densidade de fala); ver seção TRIBE v2 abaixo pro modelo de resposta cerebral.
 6. **Export** — encode de entrega Instagram: perfil VBV por duração, stack x264 premium, BT.709, GOP ≤60, `validate_encode.sh`-equivalente embutido (APROVADO/REPROVADO).

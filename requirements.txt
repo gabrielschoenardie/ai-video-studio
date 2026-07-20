@@ -7,8 +7,9 @@
 #   - ffmpeg / ffprobe  → https://ffmpeg.org/download.html
 #   - Node.js >= 18     → https://nodejs.org
 #   - Remotion (optional, for Visuals step) → cd remotion && npm install
+#   - Voicebox (voiceover — local TTS, voice cloning, MIT) → https://voicebox.sh
+#     (standalone desktop app, not a pip package — leave it running)
 
 openai-whisper   # captions, clipper — word-timed transcription (MIT)
-voxcpm           # voiceover — local TTS, voice cloning (Apache-2.0)
 yt-dlp           # clipper — download source video from a URL (Unlicense)
 opencv-python    # clipper — face/motion tracking for the 9:16 reframe crop (BSD)

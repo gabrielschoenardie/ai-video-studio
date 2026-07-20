@@ -25,7 +25,7 @@ The app **degrades gracefully** — each engine is independently probed (`lib/de
 |---|---|---|
 | `ffmpeg` / `ffprobe` | every media operation | `lib/ffmpeg.js` |
 | `whisper` (openai-whisper) or `whisper-cli` (whisper.cpp) | word-timed transcription/captions | `lib/transcribe.js` |
-| `voicebox` (primary, local REST API on `127.0.0.1:17493` — app must be running), `voxcpm`, `piper`, `espeak-ng`, macOS `say` (fallback chain) | voiceover TTS | `lib/voiceover.js` |
+| `voicebox` (primary, local REST API on `127.0.0.1:17493` — app must be running), `piper`, `espeak-ng`, macOS `say` (fallback chain) | voiceover TTS | `lib/voiceover.js` |
 | `yt-dlp` | downloading clipper source URLs | `lib/clipper.js` |
 | `python3` + OpenCV | face/motion tracking for 9:16 reframe crop | `lib/clipper.js` (`TRACKER_PY` inline script) |
 | `npx remotion render` | motion-graphics compositions | `server.js` (`/api/remotion/render`) |
@@ -42,7 +42,7 @@ When adding a new engine integration, follow the existing pattern: probe it in `
 
 **The pipeline** (`lib/` modules, one per stage, matching the product flow BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT):
 - `lib/clipper.js` — full auto-clipper: download (yt-dlp) → transcribe → pick moments (LLM via `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` env vars, or the offline regex-based `HOOK_PATTERNS` hook-detector) → 9:16 reframe (OpenCV face/motion tracker → smoothed piecewise-linear ffmpeg crop expression, EMA-smoothed to avoid jitter) → cut + burn captions. Also has a CLI face at `clipper/clip.js`.
-- `lib/voiceover.js` — TTS with an ordered fallback chain (VoxCPM → piper → espeak-ng → macOS `say`), first one available wins.
+- `lib/voiceover.js` — TTS with an ordered fallback chain (Voicebox → piper → espeak-ng → macOS `say`), first one available wins.
 - `lib/assemble.js` — muxes visual + voiceover + Whisper word-timed captions into a CRF-18 mezzanine MP4. This is a *working* file, not the delivery encode.
 - `lib/captions.js` — builds ASS subtitles with one `Dialogue` event per word (word-by-word pop-on style), two style presets (`impact`, `clean`).
 - `lib/score.js` — attention curve. Two tiers: TRIBE v2 (external brain-response model, non-commercial license, never bundled — only invoked if `STUDIO_TRIBE_CMD` env var points at a local runner that prints `{"curve":[...]}`) and a built-in local proxy (`proxyCurve`) combining audio RMS energy, scene-cut density, and speech density into a smoothed 1s-resolution curve with dip detection.

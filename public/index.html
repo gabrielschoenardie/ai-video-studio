@@ -231,7 +231,7 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
   <!-- 03 VOICE -->
   <section class="step" id="step-voice">
     <h2>03 / <em>VOICE</em></h2>
-    <p class="sub">Paste the script — narration is generated on this machine, free, as many takes as you want. Engine: Voicebox (MIT — start the app first). Fallbacks: VoxCPM / piper / espeak-ng / say for scratch tracks.</p>
+    <p class="sub">Paste the script — narration is generated on this machine, free, as many takes as you want. Engine: Voicebox (MIT — start the app first). Fallbacks: piper / espeak-ng / say for scratch tracks.</p>
     <div class="card">
       <label for="vo-script">SCRIPT</label>
       <textarea id="vo-script"></textarea>
@@ -443,7 +443,6 @@ async function api(path, body) {
     chip('whisper' + (d.whisper.flavor ? ' · ' + d.whisper.flavor : ''), d.whisper.ok, d.whisper.install) +
     chip('yt-dlp', d.ytdlp.ok, d.ytdlp.install) +
     chip('voicebox', d.voicebox.ok, d.voicebox.install) +
-    chip('voxcpm', d.voxcpm.ok, d.voxcpm.install) +
     (d.llm.ok ? `<span class="chip ok">● LLM · ${d.llm.model || 'set'}</span>`
               : `<span class="chip wn" title="${d.llm.note}">○ LLM (offline detector active)</span>`);
 })();
