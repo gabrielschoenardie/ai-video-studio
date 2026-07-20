@@ -154,15 +154,19 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, await mediaInfo(resolveInput(input)));
     }
 
+    // voice picker — the pt-BR presets Voicebox ships with
+    if (req.method === 'GET' && p === '/api/voices')
+      return send(res, 200, { voices: voiceover.VOICEBOX_PT_VOICES });
+
     // Step 4 — voiceover
     if (req.method === 'POST' && p === '/api/voiceover') {
-      const { script, refVoice } = await readJson(req);
+      const { script, refVoice, voice } = await readJson(req);
       if (!script || !script.trim()) return send(res, 400, { error: 'empty script' });
       const job = runJob('voiceover', async (job) => {
         const dir = path.join(JOBS_DIR, job.id); fs.mkdirSync(dir, { recursive: true });
         jstage(job, 'tts', 'Generating narration locally');
         const r = await voiceover.generate(script, dir, {
-          refVoice: refVoice ? resolveInput(refVoice) : null, onLog: s => jlog(job, s) });
+          refVoice: refVoice ? resolveInput(refVoice) : null, voice: voice || null, onLog: s => jlog(job, s) });
         return { engine: r.engine, file: path.relative(ROOT, r.file) };
       });
       return send(res, 200, { job: job.id });

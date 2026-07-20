@@ -8,11 +8,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Unica+One&family=Red+Hat+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0a0a0a; --panel:#101010; --panel2:#141414; --line:#1f1f1f;
-  --ink:#e8e8e8; --dim:#6f6f6f; --faint:#3a3a3a;
-  --go:#00ff88; --go-dim:#00ff8822; --warn:#ffb347; --bad:#ff4444;
+  /* Hollywood / futuristic — deep indigo night + spotlight gold */
+  --bg:#0b0b1e; --panel:#14142c; --panel2:#191a3a;
+  --line:rgba(99,102,241,.28); --line-soft:rgba(99,102,241,.14);
+  --ink:#f8fafc; --dim:#9aa3c2; --faint:#4b4d72;
+  --go:#fbbf24; --go-solid:#ca8a04; --go-dim:rgba(251,191,36,.14);
+  --warn:#ffb347; --bad:#fb7185;
   --disp:'Unica One', 'Arial Narrow', sans-serif;
   --mono:'Red Hat Mono', ui-monospace, 'Cascadia Mono', monospace;
+  --radius:10px; --radius-sm:6px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -20,101 +24,145 @@ body{
   background:var(--bg); color:var(--ink); font:400 13px/1.55 var(--mono);
   display:grid; grid-template-columns:216px 1fr 340px; grid-template-rows:56px 1fr;
   grid-template-areas:"head head head" "rail main side"; height:100vh; overflow:hidden;
+  position:relative;
 }
+body::before{ /* ambient cinematic glow — behind all panels */
+  content:""; position:fixed; inset:-10%; pointer-events:none; z-index:-1;
+  background:
+    radial-gradient(640px circle at 12% 15%, rgba(251,191,36,.06), transparent 60%),
+    radial-gradient(760px circle at 88% 85%, rgba(99,102,241,.12), transparent 60%);
+  filter:blur(40px);
+  animation:drift 24s ease-in-out infinite alternate;
+}
+@keyframes drift{from{transform:translate3d(0,0,0)}to{transform:translate3d(2.5%,-2.5%,0)}}
 body::after{ /* scanline atmosphere */
   content:""; position:fixed; inset:0; pointer-events:none; z-index:99;
-  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,.012) 2px 3px);
+  background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(180,180,255,.014) 2px 3px);
 }
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important; animation-iteration-count:1 !important;
+    transition-duration:.001ms !important; scroll-behavior:auto !important;
+  }
+}
+/* ------------------------------------------------ focus (keyboard) */
+:is(input,textarea,select,a,summary):focus-visible{
+  outline:2px solid var(--go); outline-offset:2px; border-radius:var(--radius-sm);
+}
+nav button:focus-visible{outline:2px solid var(--go); outline-offset:-2px}
+.btn:focus-visible{outline:2px solid var(--go); outline-offset:3px}
+.asset button:focus-visible{outline:2px solid var(--go); outline-offset:2px}
+.drop:focus-visible{outline:2px solid var(--go); outline-offset:3px; border-color:var(--go)}
 /* ------------------------------------------------ header */
 header{grid-area:head; display:flex; align-items:center; gap:18px;
-  border-bottom:1px solid var(--line); padding:0 18px; background:var(--panel);}
+  border-bottom:1px solid var(--line); padding:0 18px;
+  background:linear-gradient(180deg, rgba(25,26,58,.92), rgba(20,20,44,.92)); backdrop-filter:blur(10px);}
 header h1{font:400 26px var(--disp); letter-spacing:.14em; color:var(--ink)}
-header h1 b{color:var(--go); font-weight:400}
+header h1 b{color:var(--go); font-weight:400; text-shadow:0 0 18px rgba(251,191,36,.35)}
 .rec{display:flex; align-items:center; gap:7px; color:var(--dim); font-size:11px; letter-spacing:.12em}
-.rec i{width:8px;height:8px;border-radius:50%;background:var(--bad);animation:blink 1.4s steps(2) infinite}
+.rec i{width:8px;height:8px;border-radius:50%;background:var(--bad);animation:blink 1.4s steps(2) infinite;
+  box-shadow:0 0 8px rgba(251,113,133,.7)}
 @keyframes blink{50%{opacity:.2}}
 header .spacer{flex:1}
-.tag{border:1px solid var(--line); padding:3px 10px; font-size:10px; letter-spacing:.14em; color:var(--dim)}
+.tag{border:1px solid var(--line); border-radius:var(--radius-sm); padding:3px 10px;
+  font-size:10px; letter-spacing:.14em; color:var(--dim)}
 /* ------------------------------------------------ rail */
-nav{grid-area:rail; border-right:1px solid var(--line); background:var(--panel);
-  display:flex; flex-direction:column; padding:14px 0; overflow-y:auto}
+nav{grid-area:rail; border-right:1px solid var(--line); background:rgba(20,20,44,.85);
+  backdrop-filter:blur(10px); display:flex; flex-direction:column; padding:14px 0; overflow-y:auto}
 nav .lbl{padding:8px 18px 6px; font-size:10px; letter-spacing:.22em; color:var(--faint)}
 nav button{
   all:unset; cursor:pointer; display:flex; gap:12px; align-items:baseline;
   padding:11px 18px; color:var(--dim); border-left:2px solid transparent;
   font:inherit; letter-spacing:.04em; transition:color .15s, background .15s;
 }
-nav button:hover{color:var(--ink); background:#0f0f0f}
+nav button:hover{color:var(--ink); background:rgba(99,102,241,.08)}
 nav button.on{color:var(--go); border-left-color:var(--go); background:var(--go-dim)}
 nav button .n{font:400 15px var(--disp); width:22px; color:var(--faint)}
 nav button.on .n{color:var(--go)}
 nav hr{border:0;border-top:1px solid var(--line); margin:12px 18px}
 /* ------------------------------------------------ main */
-main{grid-area:main; overflow-y:auto; padding:26px 30px 60px}
+main{grid-area:main; overflow-y:auto; padding:26px 30px 60px; position:relative}
 .step{display:none; max-width:820px}
 .step.on{display:block; animation:rise .3s ease both}
 @keyframes rise{from{opacity:0; transform:translateY(8px)}to{opacity:1;transform:none}}
 .step h2{font:400 34px var(--disp); letter-spacing:.08em; margin-bottom:4px}
-.step h2 em{color:var(--go); font-style:normal}
+.step h2 em{color:var(--go); font-style:normal; text-shadow:0 0 16px rgba(251,191,36,.3)}
 .step .sub{color:var(--dim); margin-bottom:22px; max-width:64ch}
-.card{background:var(--panel); border:1px solid var(--line); padding:18px; margin-bottom:16px}
+.card{
+  background:linear-gradient(180deg, rgba(30,27,75,.5), rgba(20,20,44,.55));
+  backdrop-filter:blur(14px); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 16px 32px -20px rgba(0,0,0,.75);
+  padding:18px; margin-bottom:16px;
+}
 .card h3{font-size:11px; letter-spacing:.2em; color:var(--dim); margin-bottom:12px}
 label{display:block; font-size:11px; letter-spacing:.1em; color:var(--dim); margin:12px 0 4px}
 input[type=text],input[type=number],textarea,select{
-  width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--ink);
-  font:400 13px var(--mono); padding:9px 11px; outline:none;
+  width:100%; background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius-sm);
+  color:var(--ink); font:400 13px var(--mono); padding:9px 11px; outline:none; transition:border-color .15s;
 }
 input:focus,textarea:focus,select:focus{border-color:var(--go)}
 textarea{min-height:110px; resize:vertical}
 .row{display:flex; gap:12px; flex-wrap:wrap}
 .row>*{flex:1; min-width:140px}
 .btn{
-  all:unset; cursor:pointer; display:inline-block; margin-top:14px;
-  background:var(--go); color:#031; font:500 12px var(--mono); letter-spacing:.14em;
-  padding:11px 22px; transition:filter .15s;
+  all:unset; cursor:pointer; display:inline-block; margin-top:14px; border-radius:var(--radius-sm);
+  background:var(--go); color:#1a1200; font:500 12px var(--mono); letter-spacing:.14em;
+  padding:11px 22px; transition:filter .15s, box-shadow .15s;
+  box-shadow:0 0 0 rgba(251,191,36,0);
 }
-.btn:hover{filter:brightness(1.15)}
-.btn[disabled]{background:var(--faint); color:#000; cursor:not-allowed}
+.btn:hover{filter:brightness(1.1); box-shadow:0 4px 22px -6px rgba(251,191,36,.45)}
+.btn[disabled]{background:var(--faint); color:#000; cursor:not-allowed; box-shadow:none}
 .btn.ghost{background:transparent; color:var(--go); border:1px solid var(--go)}
 .btn.ghost:hover{background:var(--go-dim)}
-.chip{display:inline-block; border:1px solid var(--line); color:var(--dim);
+.chip{display:inline-block; border:1px solid var(--line); border-radius:999px; color:var(--dim);
   padding:2px 9px; font-size:10px; letter-spacing:.1em; margin:2px 4px 2px 0}
 .chip.ok{color:var(--go); border-color:var(--go)}
 .chip.no{color:var(--bad); border-color:var(--bad)}
 .chip.wn{color:var(--warn); border-color:var(--warn)}
 .drop{
-  border:1px dashed var(--faint); padding:26px; text-align:center; color:var(--dim);
-  cursor:pointer; transition:border-color .2s, color .2s;
+  border:1px dashed var(--faint); border-radius:var(--radius); padding:26px; text-align:center;
+  color:var(--dim); cursor:pointer; transition:border-color .2s, color .2s, background .2s;
 }
-.drop:hover,.drop.over{border-color:var(--go); color:var(--go)}
+.drop:hover,.drop.over{border-color:var(--go); color:var(--go); background:var(--go-dim)}
 .assets{margin-top:8px}
-.asset{display:flex; align-items:center; gap:10px; padding:8px 10px;
+.asset{display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm);
   border:1px solid var(--line); margin-top:6px; font-size:12px}
 .asset .name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink)}
 .asset .meta{color:var(--faint); font-size:10px}
-.asset button{all:unset; cursor:pointer; color:var(--go); font-size:10px;
+.asset button{all:unset; cursor:pointer; color:var(--go); font-size:10px; border-radius:999px;
   letter-spacing:.1em; border:1px solid var(--go); padding:3px 8px}
 .asset button:hover{background:var(--go-dim)}
-video,audio{width:100%; margin-top:12px; background:#000; outline:1px solid var(--line)}
+video,audio{width:100%; margin-top:12px; background:#000; border-radius:var(--radius-sm); outline:1px solid var(--line)}
 table{width:100%; border-collapse:collapse; margin-top:8px; font-size:12px}
 td,th{border-bottom:1px solid var(--line); padding:6px 8px; text-align:left}
 th{color:var(--faint); font-weight:400; font-size:10px; letter-spacing:.16em}
 .ok-x{color:var(--go)} .bad-x{color:var(--bad)} .warn-x{color:var(--warn)}
-canvas{width:100%; height:180px; background:var(--panel2); outline:1px solid var(--line); margin-top:10px}
-.big{font:400 46px var(--disp); color:var(--go)}
+canvas{width:100%; height:180px; background:var(--panel2); border-radius:var(--radius-sm); outline:1px solid var(--line); margin-top:10px}
+.big{font:400 46px var(--disp); color:var(--go); text-shadow:0 0 20px rgba(251,191,36,.25)}
 .risk-min{color:var(--go)} .risk-mod{color:var(--warn)} .risk-high,.risk-guar{color:var(--bad)}
 /* ------------------------------------------------ side */
-aside{grid-area:side; border-left:1px solid var(--line); background:var(--panel);
-  display:flex; flex-direction:column; overflow:hidden}
+aside{grid-area:side; border-left:1px solid var(--line); background:rgba(20,20,44,.85);
+  backdrop-filter:blur(10px); display:flex; flex-direction:column; overflow:hidden}
 aside .blk{border-bottom:1px solid var(--line); padding:14px 16px}
 aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom:10px}
 #engines .chip{display:block; margin:0 0 5px; width:fit-content}
 #stage{color:var(--go); font-size:12px; min-height:18px; letter-spacing:.06em}
 #stage.err{color:var(--bad)}
+#stage.err::before{content:"⚠ "}
 #console{flex:1; overflow-y:auto; padding:12px 16px; font-size:10.5px; line-height:1.5;
-  color:#8a8a8a; white-space:pre-wrap; word-break:break-all}
+  color:#a3a8c9; white-space:pre-wrap; word-break:break-all}
 #console .t{color:var(--faint)}
-::-webkit-scrollbar{width:8px} ::-webkit-scrollbar-thumb{background:var(--faint)}
+::-webkit-scrollbar{width:8px} ::-webkit-scrollbar-thumb{background:var(--faint); border-radius:99px}
+/* ------------------------------------------------ responsive */
+@media (max-width:900px){
+  body{grid-template-columns:1fr; grid-template-rows:56px auto 1fr auto;
+    grid-template-areas:"head" "rail" "main" "side"; height:auto; min-height:100vh; overflow:auto}
+  nav{flex-direction:row; overflow-x:auto; padding:8px 6px; border-right:none; border-bottom:1px solid var(--line)}
+  nav .lbl,nav hr{display:none}
+  nav button{padding:8px 12px; white-space:nowrap; border-left:none; border-bottom:2px solid transparent}
+  nav button.on{border-left:none; border-bottom-color:var(--go)}
+  aside{border-left:none; border-top:1px solid var(--line); max-height:280px}
+}
 </style>
 </head>
 <body>
@@ -126,18 +174,18 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
   <span class="tag" id="port">…</span>
 </header>
 
-<nav>
+<nav aria-label="Pipeline steps">
   <div class="lbl">PIPELINE</div>
-  <button data-step="brief" class="on"><span class="n">01</span>BRIEF</button>
-  <button data-step="visuals"><span class="n">02</span>VISUALS</button>
-  <button data-step="voice"><span class="n">03</span>VOICE</button>
-  <button data-step="assemble"><span class="n">04</span>ASSEMBLE</button>
-  <button data-step="score"><span class="n">05</span>SCORE</button>
-  <button data-step="export"><span class="n">06</span>EXPORT</button>
+  <button data-step="brief" class="on" aria-current="step"><span class="n" aria-hidden="true">01</span>BRIEF</button>
+  <button data-step="visuals"><span class="n" aria-hidden="true">02</span>VISUALS</button>
+  <button data-step="voice"><span class="n" aria-hidden="true">03</span>VOICE</button>
+  <button data-step="assemble"><span class="n" aria-hidden="true">04</span>ASSEMBLE</button>
+  <button data-step="score"><span class="n" aria-hidden="true">05</span>SCORE</button>
+  <button data-step="export"><span class="n" aria-hidden="true">06</span>EXPORT</button>
   <hr>
   <div class="lbl">TOOLS</div>
-  <button data-step="clipper"><span class="n">✂</span>AUTO-CLIPPER</button>
-  <button data-step="library"><span class="n">▤</span>LIBRARY</button>
+  <button data-step="clipper"><span class="n" aria-hidden="true">✂</span>AUTO-CLIPPER</button>
+  <button data-step="library"><span class="n" aria-hidden="true">▤</span>LIBRARY</button>
 </nav>
 
 <main>
@@ -147,11 +195,11 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
     <h2>01 / <em>BRIEF</em></h2>
     <p class="sub">Decide the one idea the video sells and who it's for. The clearer the line, the cleaner everything downstream. The script written here feeds the VOICE step.</p>
     <div class="card">
-      <label>ONE-LINE IDEA</label>
+      <label for="brief-idea">ONE-LINE IDEA</label>
       <input type="text" id="brief-idea" placeholder="e.g. Uptime is not success — measure outcomes.">
-      <label>AUDIENCE</label>
+      <label for="brief-aud">AUDIENCE</label>
       <input type="text" id="brief-aud" placeholder="e.g. AI & tech creators shipping reels weekly">
-      <label>SCRIPT (3–6 LINES)</label>
+      <label for="brief-script">SCRIPT (3–6 LINES)</label>
       <textarea id="brief-script" placeholder="Line 1: the hook.&#10;Line 2–4: the payoff.&#10;Last line: the CTA."></textarea>
       <button class="btn ghost" onclick="saveBrief()">SAVE BRIEF → FEEDS STEP 03</button>
     </div>
@@ -163,7 +211,7 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
     <p class="sub">Bring the base visual. Upload footage, or render a motion-graphics composition with the bundled Remotion project. Detail rule: many small, sharp, glowing elements layered in depth — not big soft blobs.</p>
     <div class="card">
       <h3>UPLOAD FOOTAGE</h3>
-      <div class="drop" id="drop-visual">DROP A VIDEO HERE — OR CLICK</div>
+      <div class="drop" id="drop-visual" role="button" tabindex="0" aria-label="Drop a video here, or press Enter to browse files">DROP A VIDEO HERE — OR CLICK</div>
       <input type="file" id="file-visual" accept="video/*" hidden>
     </div>
     <div class="card">
@@ -183,10 +231,12 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
   <!-- 03 VOICE -->
   <section class="step" id="step-voice">
     <h2>03 / <em>VOICE</em></h2>
-    <p class="sub">Paste the script — narration is generated on this machine, free, as many takes as you want. Engine: VoxCPM (Apache-2.0). Fallbacks: piper / espeak-ng / say for scratch tracks.</p>
+    <p class="sub">Paste the script — narration is generated on this machine, free, as many takes as you want. Engine: Voicebox (MIT — start the app first). Fallbacks: VoxCPM / piper / espeak-ng / say for scratch tracks.</p>
     <div class="card">
-      <label>SCRIPT</label>
+      <label for="vo-script">SCRIPT</label>
       <textarea id="vo-script"></textarea>
+      <label for="vo-voice">VOICE (PT-BR)</label>
+      <select id="vo-voice"></select>
       <button class="btn" onclick="genVoice()">GENERATE VOICEOVER</button>
       <div id="vo-out"></div>
     </div>
@@ -199,15 +249,15 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
     <p class="sub">Stitch visual + voiceover into one MP4 with word-by-word captions timed to the beat (Whisper word timestamps). Output is a CRF-18 mezzanine — delivery encode happens in EXPORT.</p>
     <div class="card">
       <div class="row">
-        <div><label>VISUAL</label><select id="asm-visual"></select></div>
-        <div><label>VOICEOVER (OPTIONAL)</label><select id="asm-vo"><option value="">— none (use visual's audio) —</option></select></div>
+        <div><label for="asm-visual">VISUAL</label><select id="asm-visual"></select></div>
+        <div><label for="asm-vo">VOICEOVER (OPTIONAL)</label><select id="asm-vo"><option value="">— none (use visual's audio) —</option></select></div>
       </div>
       <div class="row">
-        <div><label>CAPTIONS</label>
+        <div><label for="asm-cap">CAPTIONS</label>
           <select id="asm-cap"><option value="1">word-by-word (impact)</option><option value="clean">word-by-word (clean)</option><option value="0">off</option></select></div>
-        <div><label>WHISPER MODEL</label>
+        <div><label for="asm-model">WHISPER MODEL</label>
           <select id="asm-model"><option>tiny</option><option selected>base</option><option>small</option><option>medium</option></select></div>
-        <div><label>LANGUAGE (BLANK = AUTO)</label><input type="text" id="asm-lang" placeholder="pt / en / …"></div>
+        <div><label for="asm-lang">LANGUAGE (BLANK = AUTO)</label><input type="text" id="asm-lang" placeholder="pt / en / …"></div>
       </div>
       <button class="btn" onclick="doAssemble()">ASSEMBLE MP4</button>
       <div id="asm-out"></div>
@@ -219,7 +269,7 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
     <h2>05 / <em>SCORE</em></h2>
     <p class="sub">The improvement loop: render → score → fix the flagged seconds → re-score, until the curve holds. Built-in curve is a local attention <b>proxy</b> (audio energy + cut density + speech density). For brain-response scoring, install TRIBE v2 yourself — non-commercial license, never bundled.</p>
     <div class="card">
-      <label>VIDEO TO SCORE</label>
+      <label for="score-input">VIDEO TO SCORE</label>
       <select id="score-input"></select>
       <button class="btn" onclick="doScore()">RUN ATTENTION CURVE</button>
       <canvas id="curve" width="760" height="180"></canvas>
@@ -237,12 +287,12 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
     <p class="sub">Instagram delivery encode — Metodologia Gabriel. VBV profile auto-selected from measured duration, premium x264 stack, BT.709, GOP ≤ 60, +faststart. Recompression risk scored before encode; full compliance validation after.</p>
     <div class="card">
       <div class="row">
-        <div><label>INPUT</label><select id="exp-input"></select></div>
-        <div><label>LUT 3D .CUBE (OPTIONAL)</label><select id="exp-lut"><option value="">— none —</option></select></div>
+        <div><label for="exp-input">INPUT</label><select id="exp-input"></select></div>
+        <div><label for="exp-lut">LUT 3D .CUBE (OPTIONAL)</label><select id="exp-lut"><option value="">— none —</option></select></div>
       </div>
       <div class="row">
-        <div><label>PSY-RD (OPTIONAL, e.g. 1.0,0.0)</label><input type="text" id="exp-psyrd" placeholder="comma, never colon"></div>
-        <div><label>DEBLOCK (OPTIONAL, e.g. -1,-1)</label><input type="text" id="exp-deblock" placeholder="comma, never colon"></div>
+        <div><label for="exp-psyrd">PSY-RD (OPTIONAL, e.g. 1.0,0.0)</label><input type="text" id="exp-psyrd" placeholder="comma, never colon"></div>
+        <div><label for="exp-deblock">DEBLOCK (OPTIONAL, e.g. -1,-1)</label><input type="text" id="exp-deblock" placeholder="comma, never colon"></div>
       </div>
       <button class="btn" onclick="doExport()">ENCODE FOR INSTAGRAM</button>
       <div id="exp-out"></div>
@@ -263,26 +313,27 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
     <h2>✂ / <em>AUTO-CLIPPER</em></h2>
     <p class="sub">Point it at a long video or URL. It transcribes (Whisper), picks the genuinely clip-worthy moments — with a reason for each — reframes landscape to 9:16 with a moving crop that follows the subject, cuts, and burns word captions. No API key? The offline hook-detector runs.</p>
     <div class="card">
-      <label>SOURCE — URL OR UPLOADED FILE</label>
+      <label for="clip-url">SOURCE — URL OR UPLOADED FILE</label>
       <div class="row">
         <input type="text" id="clip-url" placeholder="https://…  (yt-dlp)  — or pick an upload below">
-        <select id="clip-file" style="flex:0.6"><option value="">— uploads —</option></select>
+        <select id="clip-file" style="flex:0.6" aria-label="Or pick an already-uploaded file"><option value="">— uploads —</option></select>
       </div>
-      <div class="drop" id="drop-clip" style="margin-top:10px">DROP A LONG VIDEO HERE</div>
+      <div class="drop" id="drop-clip" style="margin-top:10px" role="button" tabindex="0" aria-label="Drop a long video here, or press Enter to browse files">DROP A LONG VIDEO HERE</div>
       <input type="file" id="file-clip" accept="video/*" hidden>
       <div class="row">
-        <div><label>MODE</label><select id="clip-mode">
+        <div><label for="clip-mode">MODE</label><select id="clip-mode">
           <option value="auto">auto (AI if LLM_BASE_URL set, else offline)</option>
           <option value="ai">ai — LLM moment-picking</option>
           <option value="offline">offline hook-detector</option></select></div>
-        <div><label>CLIPS</label><input type="number" id="clip-count" value="3" min="1" max="8"></div>
-        <div><label>LEN (S)</label><div class="row" style="gap:6px">
-          <input type="number" id="clip-min" value="15"><input type="number" id="clip-max" value="45"></div></div>
+        <div><label for="clip-count">CLIPS</label><input type="number" id="clip-count" value="3" min="1" max="8"></div>
+        <div><label id="clip-len-lbl">LEN (S)</label><div class="row" style="gap:6px">
+          <input type="number" id="clip-min" value="15" aria-labelledby="clip-len-lbl" aria-label="Minimum length, seconds">
+          <input type="number" id="clip-max" value="45" aria-labelledby="clip-len-lbl" aria-label="Maximum length, seconds"></div></div>
       </div>
       <div class="row">
-        <div><label>9:16 REFRAME</label><select id="clip-reframe"><option value="1">moving crop (subject-follow)</option><option value="0">off</option></select></div>
-        <div><label>CAPTIONS</label><select id="clip-cap"><option value="1">word-by-word</option><option value="0">off</option></select></div>
-        <div><label>WHISPER</label><select id="clip-model"><option>tiny</option><option selected>base</option><option>small</option></select></div>
+        <div><label for="clip-reframe">9:16 REFRAME</label><select id="clip-reframe"><option value="1">moving crop (subject-follow)</option><option value="0">off</option></select></div>
+        <div><label for="clip-cap">CAPTIONS</label><select id="clip-cap"><option value="1">word-by-word</option><option value="0">off</option></select></div>
+        <div><label for="clip-model">WHISPER</label><select id="clip-model"><option>tiny</option><option selected>base</option><option>small</option></select></div>
       </div>
       <button class="btn" onclick="doClip()">RUN CLIPPER</button>
       <div id="clip-out"></div>
@@ -300,7 +351,7 @@ aside h3{font-size:10px; letter-spacing:.22em; color:var(--faint); margin-bottom
 
 <aside>
   <div class="blk"><h3>ENGINES</h3><div id="engines">probing…</div></div>
-  <div class="blk"><h3>ACTIVE JOB</h3><div id="stage">idle</div></div>
+  <div class="blk"><h3>ACTIVE JOB</h3><div id="stage" role="status" aria-live="polite">idle</div></div>
   <h3 style="padding:12px 16px 0">CONSOLE</h3>
   <div id="console"></div>
 </aside>
@@ -313,9 +364,9 @@ $('#port').textContent = location.host;
 
 /* ---------------- nav */
 $$('nav button').forEach(b => b.onclick = () => {
-  $$('nav button').forEach(x => x.classList.remove('on'));
+  $$('nav button').forEach(x => { x.classList.remove('on'); x.removeAttribute('aria-current'); });
   $$('.step').forEach(x => x.classList.remove('on'));
-  b.classList.add('on');
+  b.classList.add('on'); b.setAttribute('aria-current', 'step');
   $('#step-' + b.dataset.step).classList.add('on');
 });
 
@@ -391,6 +442,7 @@ async function api(path, body) {
     chip('ffmpeg', d.ffmpeg.ok, d.ffmpeg.install) +
     chip('whisper' + (d.whisper.flavor ? ' · ' + d.whisper.flavor : ''), d.whisper.ok, d.whisper.install) +
     chip('yt-dlp', d.ytdlp.ok, d.ytdlp.install) +
+    chip('voicebox', d.voicebox.ok, d.voicebox.install) +
     chip('voxcpm', d.voxcpm.ok, d.voxcpm.install) +
     (d.llm.ok ? `<span class="chip ok">● LLM · ${d.llm.model || 'set'}</span>`
               : `<span class="chip wn" title="${d.llm.note}">○ LLM (offline detector active)</span>`);
@@ -405,6 +457,7 @@ async function api(path, body) {
 function wireDrop(dropId, fileId, after) {
   const drop = $(dropId), file = $(fileId);
   drop.onclick = () => file.click();
+  drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); upload(e.dataTransfer.files[0], after); };
@@ -445,9 +498,15 @@ window.renderRemotion = async () => {
 };
 
 /* ---------------- voice */
+(async () => {
+  const { voices } = await (await fetch('/api/voices')).json();
+  $('#vo-voice').innerHTML = voices.map(v =>
+    `<option value="${v.id}">${v.name} (${v.gender === 'female' ? 'feminina' : 'masculina'})</option>`).join('');
+})();
+
 window.genVoice = async () => {
   try {
-    const { job } = await api('/api/voiceover', { script: $('#vo-script').value });
+    const { job } = await api('/api/voiceover', { script: $('#vo-script').value, voice: $('#vo-voice').value });
     const r = await watchJob(job);
     addAsset({ path: r.file, name: 'voiceover.wav', kind: 'audio', source: r.engine });
     $('#vo-out').innerHTML = `<span class="chip ok">engine: ${r.engine}</span>
@@ -562,9 +621,10 @@ window.doClip = async () => {
 };
 window.sendToExport = (p) => {
   $('#exp-input').value = p;
-  $$('nav button').forEach(x => x.classList.remove('on'));
+  $$('nav button').forEach(x => { x.classList.remove('on'); x.removeAttribute('aria-current'); });
   $$('.step').forEach(x => x.classList.remove('on'));
-  document.querySelector('[data-step=export]').classList.add('on');
+  const exportBtn = document.querySelector('[data-step=export]');
+  exportBtn.classList.add('on'); exportBtn.setAttribute('aria-current', 'step');
   $('#step-export').classList.add('on');
 };
 </script>

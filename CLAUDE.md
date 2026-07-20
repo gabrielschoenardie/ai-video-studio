@@ -17,7 +17,7 @@ node clipper/clip.js --mode ai --reframe   # AI moment-picking + 9:16 subject-fo
 
 There is no build step, bundler, test suite, or linter — the backend is plain CommonJS Node ≥18 run directly. `remotion/` has its own npm project (`cd remotion && npm install`) used only for rendering the Visuals step via `npx remotion render <composition> <out>`.
 
-## External engines (all optional, all invoked via `child_process`)
+## External engines (all optional, all invoked via `child_process` except Voicebox, which is a local HTTP API)
 
 The app **degrades gracefully** — each engine is independently probed (`lib/deps.js`, `GET /api/deps`) and only the step that needs it is disabled if missing:
 
@@ -25,7 +25,7 @@ The app **degrades gracefully** — each engine is independently probed (`lib/de
 |---|---|---|
 | `ffmpeg` / `ffprobe` | every media operation | `lib/ffmpeg.js` |
 | `whisper` (openai-whisper) or `whisper-cli` (whisper.cpp) | word-timed transcription/captions | `lib/transcribe.js` |
-| `voxcpm` (primary), `piper`, `espeak-ng`, macOS `say` (fallback chain) | voiceover TTS | `lib/voiceover.js` |
+| `voicebox` (primary, local REST API on `127.0.0.1:17493` — app must be running), `voxcpm`, `piper`, `espeak-ng`, macOS `say` (fallback chain) | voiceover TTS | `lib/voiceover.js` |
 | `yt-dlp` | downloading clipper source URLs | `lib/clipper.js` |
 | `python3` + OpenCV | face/motion tracking for 9:16 reframe crop | `lib/clipper.js` (`TRACKER_PY` inline script) |
 | `npx remotion render` | motion-graphics compositions | `server.js` (`/api/remotion/render`) |
