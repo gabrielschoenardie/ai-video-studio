@@ -256,7 +256,13 @@ const server = http.createServer(async (req, res) => {
         const out = path.join(OUT_DIR, `visual-${composition}-${job.id}.mp4`);
         jstage(job, 'render', `Rendering composition ${composition}`);
         await new Promise((ok, bad) => {
-          const pr = spawn('npx', ['remotion', 'render', composition, out], { cwd: projDir });
+          // Windows: npx is npx.cmd, and spawning .cmd requires a shell
+          // (plain spawn('npx') throws ENOENT / EINVAL). Args are safe to
+          // join for the shell: composition is ^[\w-]+$-validated and out
+          // is quoted in case the install path contains spaces.
+          const win = process.platform === 'win32';
+          const args = ['remotion', 'render', composition, win ? `"${out}"` : out];
+          const pr = spawn(win ? 'npx.cmd' : 'npx', args, { cwd: projDir, shell: win });
           pr.stdout.on('data', d => jlog(job, d.toString()));
           pr.stderr.on('data', d => jlog(job, d.toString()));
           pr.on('error', bad);
