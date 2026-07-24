@@ -652,6 +652,8 @@ window.doScore = async () => {
     markDone('score');
     $('#score-out').innerHTML =
       `<span class="chip ${r.kind === 'tribe' ? 'ok' : 'wn'}">${r.kind === 'tribe' ? 'TRIBE v2 brain model' : 'local proxy'}</span>` +
+      (r.score != null ? ` <span class="chip ${r.score >= 60 ? 'ok' : 'wn'}">retention ${r.score}/100</span>` : '') +
+      (r.hook ? ` <span class="chip ${r.hook.weak ? 'wn' : 'ok'}" title="${r.hook.advice}">${r.hook.weak ? 'hook fraco' : 'hook forte'}</span>` : '') +
       (r.dips && r.dips.length
         ? `<table><tr><th>DIP</th><th>SECONDS</th><th>FIX</th></tr>` +
           r.dips.map(d => `<tr><td class="bad-x">▼</td><td>${d.start}s–${d.end}s</td><td>${d.advice||'tighten / rewrite / add motion'}</td></tr>`).join('') + '</table>'
