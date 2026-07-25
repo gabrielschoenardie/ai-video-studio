@@ -262,6 +262,9 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   <button data-step="clipper">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>
     AUTO-CLIPPER</button>
+  <button data-step="download">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+    DOWNLOAD</button>
   <button data-step="library">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
     LIBRARY</button>
@@ -425,6 +428,24 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
     </div>
   </section>
 
+  <!-- DOWNLOAD -->
+  <section class="step" id="step-download">
+    <h2>⬇ / <em>DOWNLOAD</em></h2>
+    <p class="sub">Paste a video URL and pull it down at the best available resolution (uncapped — unlike the auto-clipper's 1080p). The file lands in your Library, ready for any step.</p>
+    <div class="card">
+      <label for="dl-url">SOURCE — URL</label>
+      <input type="text" id="dl-url" placeholder="https://…  (yt-dlp)">
+      <div class="row">
+        <div><label for="dl-quality">QUALITY</label><select id="dl-quality">
+          <option value="best" selected>best available</option>
+          <option value="1080">cap 1080p</option>
+          <option value="720">cap 720p</option></select></div>
+      </div>
+      <button class="btn" onclick="doDownload()">RUN DOWNLOAD</button>
+      <div id="dl-out"></div>
+    </div>
+  </section>
+
   <!-- LIBRARY -->
   <section class="step" id="step-library">
     <h2>▤ / <em>LIBRARY</em></h2>
@@ -485,6 +506,7 @@ function addAsset(a) {
   else if (a.source === 'assemble') markDone('assemble');
   else if (a.source === 'export') markDone('export');
   else if (a.source === 'clipper') markDone('clipper');
+  else if (a.source === 'download') markDone('download');
 }
 function fmtInfo(i){ return i ? `${i.width}×${i.height} · ${i.duration?.toFixed(1)}s · ${i.vcodec||i.acodec||''}` : ''; }
 function renderAssets() {
@@ -748,6 +770,31 @@ window.doClip = async () => {
 window.sendToExport = (p) => {
   goStep('export');
   $('#exp-input').value = p;
+};
+
+/* ---------------- downloader */
+window.doDownload = async () => {
+  try {
+    const url = $('#dl-url').value.trim();
+    if (!url) { stage('paste a URL to download', true); return; }
+    const { job } = await api('/api/download', { url, quality: $('#dl-quality').value });
+    const r = await watchJob(job);
+    // Windows job paths come back with backslashes; normalize to '/' so the
+    // filename split, the /files/ URL, and the onclick string literal are all safe.
+    const out = r.output.replace(/\\/g, '/');
+    const name = out.split('/').pop();
+    $('#dl-out').innerHTML =
+      `<div class="card" style="margin-top:12px">
+         <h3>${name}${r.info ? ' — ' + r.info.width + '×' + r.info.height : ''}</h3>
+         <video controls src="/files/${encodeURIComponent(out)}"></video>
+         <button class="btn ghost" onclick="sendToClipper('${out}')">SEND TO CLIPPER →</button>
+       </div>`;
+    addAsset({ path: out, name, kind: 'video', info: r.info, source: 'download' });
+  } catch (e) { stage(e.message, true); }
+};
+window.sendToClipper = (p) => {
+  goStep('clipper');
+  $('#clip-file').value = p;
 };
 </script>
 </body>

@@ -17,6 +17,7 @@ const { assemble } = require('./lib/assemble');
 const { clip } = require('./lib/clipper');
 const { encodeReel } = require('./lib/encode');
 const { score, TRIBE_INFO } = require('./lib/score');
+const { download } = require('./lib/download');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT || '4870', 10);
@@ -209,6 +210,25 @@ const server = http.createServer(async (req, res) => {
         r.moments = r.moments.map(m => ({ ...m, file: path.relative(ROOT, m.file) }));
         delete r.source;
         return r;
+      });
+      return send(res, 200, { job: job.id });
+    }
+
+    // URL downloader — best-resolution source fetch (yt-dlp)
+    if (req.method === 'POST' && p === '/api/download') {
+      const b = await readJson(req);
+      if (!b.url || !/^https?:\/\//i.test(b.url))
+        return send(res, 400, { error: 'give a http(s) URL' });
+      const job = runJob('download', async (job) => {
+        const dir = path.join(JOBS_DIR, job.id); fs.mkdirSync(dir, { recursive: true });
+        jstage(job, 'download', 'Fetching best-resolution source');
+        const r = await download(b.url, {
+          outDir: dir, quality: b.quality || 'best',
+          onLog: s => jlog(job, s),
+          onProgress: pr => emit(job, 'progress', pr),
+        });
+        let info = null; try { info = await mediaInfo(r.file); } catch {}
+        return { output: path.relative(ROOT, r.file), info };
       });
       return send(res, 200, { job: job.id });
     }
