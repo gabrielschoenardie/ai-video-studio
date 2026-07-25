@@ -2,6 +2,10 @@
 /jobs/
 /output/
 
+## Local LUT library — keep the folder, but the .cube files are the user's own
+## (potentially large/licensed) assets, handled like other local media
+/luts/*.cube
+
 ## Local secrets — never commit (see .env.example for the template)
 .env
 .env.*

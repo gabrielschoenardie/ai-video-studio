@@ -374,6 +374,10 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
       <div class="row">
         <div><label for="exp-input">INPUT</label><select id="exp-input"></select></div>
         <div><label for="exp-lut">LUT 3D .CUBE (OPTIONAL)</label><select id="exp-lut"><option value="">— none —</option></select></div>
+        <div><label for="exp-fit">FIT (SE NÃO FOR 9:16)</label><select id="exp-fit">
+          <option value="blur" selected>fundo desfocado</option>
+          <option value="crop">preencher e cortar</option>
+          <option value="pad">encaixar (barras)</option></select></div>
       </div>
       <div class="row">
         <div><label for="exp-psyrd">PSY-RD (OPTIONAL, e.g. 1.0,0.0)</label><input type="text" id="exp-psyrd" placeholder="comma, never colon"></div>
@@ -587,6 +591,13 @@ async function api(path, body) {
   $('#tribe-info').innerHTML = `<b>${t.name}</b><br>${t.license}<br><br>` +
     t.install.map((s,i)=>`${i+1}. ${s}`).join('<br>');
 })();
+/* LUT library — .cube files sitting in luts/ become selectable at export */
+(async () => {
+  try {
+    const { luts } = await (await fetch('/api/luts')).json();
+    luts.forEach(l => addAsset({ path: l.path, name: l.name, kind: 'lut', source: 'luts' }));
+  } catch { /* no luts folder / none present — export just shows "— none —" */ }
+})();
 
 /* ---------------- uploads */
 function wireDrop(dropId, fileId, after) {
@@ -721,7 +732,7 @@ window.doExport = async () => {
     if ($('#exp-psyrd').value.trim()) x264.psyRd = $('#exp-psyrd').value.trim();
     if ($('#exp-deblock').value.trim()) x264.deblock = $('#exp-deblock').value.trim();
     const { job } = await api('/api/export', {
-      input: $('#exp-input').value, lut: $('#exp-lut').value || null, x264 });
+      input: $('#exp-input').value, lut: $('#exp-lut').value || null, fit: $('#exp-fit').value, x264 });
     const r = await watchJob(job);
     const riskCls = { minimal: 'risk-min', moderate: 'risk-mod', high: 'risk-high', guaranteed: 'risk-guar' }[r.risk.level];
     $('#exp-out').innerHTML =

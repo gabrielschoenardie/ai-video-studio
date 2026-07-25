@@ -24,7 +24,8 @@ const PORT = parseInt(process.env.PORT || '4870', 10);
 const JOBS_DIR = path.join(ROOT, 'jobs');
 const OUT_DIR = path.join(ROOT, 'output');
 const UP_DIR = path.join(JOBS_DIR, 'uploads');
-for (const d of [JOBS_DIR, OUT_DIR, UP_DIR]) fs.mkdirSync(d, { recursive: true });
+const LUTS_DIR = path.join(ROOT, 'luts'); // persistent 3D .cube library, picked at export
+for (const d of [JOBS_DIR, OUT_DIR, UP_DIR, LUTS_DIR]) fs.mkdirSync(d, { recursive: true });
 
 // ------------------------------------------------------------- job bus
 const jobs = new Map(); // id → {id, kind, state, stage, log[], result, error, listeners:Set}
@@ -91,7 +92,8 @@ function safeName(n) { return (n || 'file').replace(/[^\w.\-]+/g, '_').slice(0, 
 // only serve/consume files inside the project tree
 function insideRoot(p) {
   const r = path.resolve(p);
-  return r.startsWith(JOBS_DIR + path.sep) || r.startsWith(OUT_DIR + path.sep);
+  return r.startsWith(JOBS_DIR + path.sep) || r.startsWith(OUT_DIR + path.sep)
+    || r.startsWith(LUTS_DIR + path.sep);
 }
 function resolveInput(p) {
   if (!p) throw new Error('missing input');
@@ -158,6 +160,15 @@ const server = http.createServer(async (req, res) => {
     // voice picker — the pt-BR presets Voicebox ships with
     if (req.method === 'GET' && p === '/api/voices')
       return send(res, 200, { voices: voiceover.VOICEBOX_PT_VOICES });
+
+    // LUT library — .cube files the user drops in luts/, picked at export
+    if (req.method === 'GET' && p === '/api/luts') {
+      const files = fs.readdirSync(LUTS_DIR)
+        .filter(f => /\.cube$/i.test(f))
+        .sort((a, b) => a.localeCompare(b))
+        .map(f => ({ name: f, path: path.relative(ROOT, path.join(LUTS_DIR, f)) }));
+      return send(res, 200, { luts: files });
+    }
 
     // Step 4 — voiceover
     if (req.method === 'POST' && p === '/api/voiceover') {
@@ -256,6 +267,7 @@ const server = http.createServer(async (req, res) => {
           lut: b.lut ? resolveInput(b.lut) : null,
           denoise: b.denoise || null,
           x264: b.x264 || {},
+          fit: b.fit || 'blur',
           onLog: s => jlog(job, s),
           onProgress: pr => emit(job, 'progress', pr),
         });
