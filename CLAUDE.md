@@ -29,6 +29,7 @@ The app **degrades gracefully** — each engine is independently probed (`lib/de
 | `yt-dlp` | downloading clipper source URLs | `lib/clipper.js` |
 | `python3` + OpenCV | face/motion tracking for 9:16 reframe crop | `lib/clipper.js` (`TRACKER_PY` inline script) |
 | `npx remotion render` | motion-graphics compositions | `server.js` (`/api/remotion/render`) |
+| `libvmaf` | Export quality metric | `lib/vmaf.js` |
 
 When adding a new engine integration, follow the existing pattern: probe it in `lib/deps.js`, spawn it with a `run()`/`runFfmpeg()`-style helper that captures a tail of stdout/stderr for error messages, and make the calling step fail soft with an actionable install hint rather than crashing the server.
 
@@ -44,10 +45,11 @@ When adding a new engine integration, follow the existing pattern: probe it in `
 
 - `lib/clipper.js` — full auto-clipper: download (yt-dlp) → transcribe → pick moments (LLM via `LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL` env vars, or the offline regex-based `HOOK_PATTERNS` hook-detector) → 9:16 reframe (OpenCV face/motion tracker → smoothed piecewise-linear ffmpeg crop expression, EMA-smoothed to avoid jitter) → cut + burn captions. Also has a CLI face at `clipper/clip.js`.
 - `lib/voiceover.js` — TTS with an ordered fallback chain (Voicebox → piper → espeak-ng → macOS `say`), first one available wins.
-- `lib/assemble.js` — muxes visual + voiceover + Whisper word-timed captions into a CRF-18 mezzanine MP4. This is a *working* file, not the delivery encode.
+- `lib/assemble.js` — muxes visual + voiceover + Whisper word-timed captions into a visually-lossless CRF-12 4:4:4 mezzanine MP4 (working file, not the delivery encode); shares `buildFit()` with `encode.js` so both steps use the same aspect-preserving fit.
 - `lib/captions.js` — builds ASS subtitles with one `Dialogue` event per word (word-by-word pop-on style), two style presets (`impact`, `clean`).
 - `lib/score.js` — attention curve. Two tiers: TRIBE v2 (external brain-response model, non-commercial license, never bundled — only invoked if `STUDIO_TRIBE_CMD` env var points at a local runner that prints `{"curve":[...]}`) and a built-in local proxy (`proxyCurve`) combining audio RMS energy, scene-cut density, and speech density into a smoothed 1s-resolution curve with dip detection.
 - `lib/encode.js` — **"Metodologia Gabriel"**: the final Instagram delivery encode. VBV rate control is mandatory (never bare CRF for delivery); the rate-control profile (`selectProfile`) is chosen strictly from *measured* source duration (≤30s / 30–40s transition / ≥40s bands), never guessed. Includes a `riskScore()` pre-flight (flags 10-bit, HEVC, non-4:2:0 chroma, non-BT.709, high source bitrate, off-spec fps/resolution/audio codec as re-encode risk) and a post-encode `validate()` that re-probes the output file to check codec/profile/level/pix_fmt/resolution/color tags/bitrate ceiling/audio/GOP spacing — treat this as the source of truth for "did the encode actually meet spec," don't assume `buildArgs()` alone guarantees it.
+- `lib/vmaf.js` — measures VMAF of the delivery encode against the mezzanine that fed it, using the standard `vmaf_v0.6.1` model (not the NEG variant) by deliberate project decision; `passed` is decided by the harmonic mean, not the arithmetic mean, because it punishes a single low-scoring stretch that would otherwise hide behind a good average. Degrades soft when the installed ffmpeg has no `libvmaf` filter — the Export never fails because of this metric.
 - `remotion/src/scenes/` — `AutoKillReel` and `NeuralIntro` compositions (1080×1920), rendered on demand, not pre-built.
 
 **Licensing boundary** (see `LICENSES.md`): app code and all bundled engines are commercially free to use. TRIBE v2 is the one deliberately-excluded piece (non-commercial research license) — never bundle it or hardcode a fetch of it; the existing self-install-instructions pattern in `lib/score.js` (`TRIBE_INFO`) is intentional and should be preserved for any similar restricted-license integration.

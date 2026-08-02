@@ -580,6 +580,7 @@ async function api(path, body) {
     `<span class="chip ${ok ? 'ok' : 'no'}" title="${extra || ''}">${ok ? '●' : '○'} ${name}</span>`;
   $('#engines').innerHTML =
     chip('ffmpeg', d.ffmpeg.ok, d.ffmpeg.install) +
+    chip('libvmaf', d.libvmaf.ok, d.libvmaf.install) +
     chip('whisper' + (d.whisper.flavor ? ' · ' + d.whisper.flavor : ''), d.whisper.ok, d.whisper.install) +
     chip('yt-dlp', d.ytdlp.ok, d.ytdlp.install) +
     chip('voicebox', d.voicebox.ok, d.voicebox.install) +
@@ -731,8 +732,12 @@ window.doExport = async () => {
     const x264 = {};
     if ($('#exp-psyrd').value.trim()) x264.psyRd = $('#exp-psyrd').value.trim();
     if ($('#exp-deblock').value.trim()) x264.deblock = $('#exp-deblock').value.trim();
+    const input = $('#exp-input').value;
+    const isMezz = /(^|\/)assembled-[a-f0-9]+\.mp4$/.test(input);
     const { job } = await api('/api/export', {
-      input: $('#exp-input').value, lut: $('#exp-lut').value || null, fit: $('#exp-fit').value, x264 });
+      input, lut: $('#exp-lut').value || null, fit: $('#exp-fit').value, x264,
+      sourceKind: isMezz ? 'mezzanine' : 'external',
+    });
     const r = await watchJob(job);
     const riskCls = { minimal: 'risk-min', moderate: 'risk-mod', high: 'risk-high', guaranteed: 'risk-guar' }[r.risk.level];
     $('#exp-out').innerHTML =
@@ -748,6 +753,16 @@ window.doExport = async () => {
          <table>${r.validation.checks.map(c =>
            `<tr><td class="${c.ok ? 'ok-x' : 'bad-x'}">${c.ok ? '✓' : '✗'}</td><td>${c.label}</td><td class="meta">${c.got ?? ''}</td></tr>`).join('')}</table>
          <span class="chip">real bitrate ${r.validation.bitrateKbps} kbps</span></div>
+       <div class="card"><h3>VMAF — ${r.vmaf.model || 'n/a'}${r.vmaf.neg === false ? ' (padrão, não-NEG)' : ''}</h3>` +
+        (r.vmaf.available === false || r.vmaf.skipped
+          ? `<span class="chip wn" title="${r.vmaf.install || ''}">indisponível — ${r.vmaf.reason || ''}</span>`
+          : `<div class="big ${r.vmaf.passed ? 'ok-x' : 'bad-x'}" style="font-size:34px">${r.vmaf.harmonicMean}</div>` +
+            `<span class="chip">média ${r.vmaf.mean}</span>` +
+            `<span class="chip">min ${r.vmaf.min}</span>` +
+            `<span class="chip ${r.vmaf.p1 >= (r.vmaf.target - 5) ? 'ok' : 'wn'}">p1 ${r.vmaf.p1}</span>` +
+            `<span class="chip">alvo ${r.vmaf.target}</span>` +
+            `<span class="chip">${r.vmaf.frames} frames</span>`) +
+        `</div>
        <video controls src="/files/${encodeURIComponent(r.output)}"></video>
        <p class="sub" style="margin-top:10px;font-size:11px">command: <span style="color:#888;word-break:break-all">${r.command}</span></p>`;
     addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'export' });

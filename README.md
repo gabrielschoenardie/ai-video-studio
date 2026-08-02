@@ -27,6 +27,7 @@ Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um
 | **yt-dlp** | clipper (URLs) | `pip install yt-dlp` | Unlicense |
 | **python3 + OpenCV** | clipper (reframe 9:16) | `pip install opencv-python` | BSD |
 | **Remotion** | visuals (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
+| **libvmaf** (parte do ffmpeg) | métrica de qualidade do Export | build do ffmpeg com `--enable-libvmaf` | BSD-2-Clause — builds sem esse flag só perdem a métrica, o encode continua funcionando |
 
 Atalho pras dependências Python (Whisper, yt-dlp, OpenCV) de uma vez só:
 
@@ -72,9 +73,9 @@ BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT
 1. **Brief** — a ideia + roteiro (3–6 linhas), salvo localmente e injetado na etapa Voice.
 2. **Visuals** — sobe seu footage ou renderiza uma composição Remotion (`AutoKillReel`, `NeuralIntro`).
 3. **Voice** — Voicebox gera a narração no seu hardware, sem custo por palavra.
-4. **Assemble** — funde visual + voz + legendas palavra-por-palavra (Whisper word timestamps) num MP4 mezzanine (CRF 18).
+4. **Assemble** — funde visual + voz + legendas palavra-por-palavra (Whisper word timestamps) num mezzanine visualmente lossless (CRF 12, 4:4:4).
 5. **Score** — curva de atenção segundo a segundo. Proxy local por padrão (energia de áudio + densidade de cortes + densidade de fala); ver seção TRIBE v2 abaixo pro modelo de resposta cerebral.
-6. **Export** — encode de entrega Instagram: perfil VBV por duração, stack x264 premium, BT.709, GOP ≤60, `validate_encode.sh`-equivalente embutido (APROVADO/REPROVADO).
+6. **Export** — encode de entrega Instagram: perfil VBV por duração, stack x264 premium, BT.709, GOP ≤60, `validate_encode.sh`-equivalente embutido (APROVADO/REPROVADO). Também reporta VMAF do encode de entrega contra o mezzanine que o alimentou (modelo `vmaf_v0.6.1`).
 
 ---
 

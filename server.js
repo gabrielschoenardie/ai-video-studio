@@ -268,6 +268,8 @@ const server = http.createServer(async (req, res) => {
           denoise: b.denoise || null,
           x264: b.x264 || {},
           fit: b.fit || 'blur',
+          sourceKind: b.sourceKind === 'mezzanine' ? 'mezzanine' : 'external',
+          reference: b.reference ? resolveInput(b.reference) : null,
           onLog: s => jlog(job, s),
           onProgress: pr => emit(job, 'progress', pr),
         });
@@ -285,15 +287,18 @@ const server = http.createServer(async (req, res) => {
         return send(res, 409, { error: 'Remotion project not installed. Run: cd remotion && npm install' });
       }
       const job = runJob('remotion', async (job) => {
-        const out = path.join(OUT_DIR, `visual-${composition}-${job.id}.mp4`);
+        const out = path.join(OUT_DIR, `visual-${composition}-${job.id}.mov`);
         jstage(job, 'render', `Rendering composition ${composition}`);
         await new Promise((ok, bad) => {
           // Windows: npx is npx.cmd, and spawning .cmd requires a shell
           // (plain spawn('npx') throws ENOENT / EINVAL). Args are safe to
           // join for the shell: composition is ^[\w-]+$-validated and out
           // is quoted in case the install path contains spaces.
+          // ProRes HQ output (no codec flags = Remotion's default H.264,
+          // the first of three lossy generations before the Export encode).
           const win = process.platform === 'win32';
-          const args = ['remotion', 'render', composition, win ? `"${out}"` : out];
+          const args = ['remotion', 'render', composition, win ? `"${out}"` : out,
+            '--codec=prores', '--prores-profile=hq'];
           const pr = spawn(win ? 'npx.cmd' : 'npx', args, { cwd: projDir, shell: win });
           pr.stdout.on('data', d => jlog(job, d.toString()));
           pr.stderr.on('data', d => jlog(job, d.toString()));
