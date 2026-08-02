@@ -28,6 +28,7 @@ Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um
 | **python3 + OpenCV** | clipper (reframe 9:16) | `pip install opencv-python` | BSD |
 | **Remotion** | visuals (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
 | **libvmaf** (parte do ffmpeg) | métrica de qualidade do Export | build do ffmpeg com `--enable-libvmaf` | BSD-2-Clause — builds sem esse flag só perdem a métrica, o encode continua funcionando |
+| **zscale** (parte do ffmpeg) | LUT 3D em precisão float + dither RPDF nativo no Export | build do ffmpeg com `--enable-libzimg` | BSD-2-Clause — builds sem esse flag caem para a rota `swscale` (LUT em 8-bit, dither aproximado), o encode continua funcionando |
 
 Atalho pras dependências Python (Whisper, yt-dlp, OpenCV) de uma vez só:
 
@@ -73,9 +74,9 @@ BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT
 1. **Brief** — a ideia + roteiro (3–6 linhas), salvo localmente e injetado na etapa Voice.
 2. **Visuals** — sobe seu footage ou renderiza uma composição Remotion (`AutoKillReel`, `NeuralIntro`).
 3. **Voice** — Voicebox gera a narração no seu hardware, sem custo por palavra.
-4. **Assemble** — funde visual + voz + legendas palavra-por-palavra (Whisper word timestamps) num mezzanine visualmente lossless (CRF 12, 4:4:4).
+4. **Assemble** — funde visual + voz + transcreve as legendas palavra-por-palavra (Whisper word timestamps) num mezzanine visualmente lossless (CRF 12, 4:4:4) — a legenda **não** é queimada aqui: o mezzanine carrega só vídeo + voz, e o `.ass` viaja ao lado, pronto pro Export.
 5. **Score** — curva de atenção segundo a segundo. Proxy local por padrão (energia de áudio + densidade de cortes + densidade de fala); ver seção TRIBE v2 abaixo pro modelo de resposta cerebral.
-6. **Export** — encode de entrega Instagram: perfil VBV por duração, stack x264 premium, BT.709, GOP ≤60, `validate_encode.sh`-equivalente embutido (APROVADO/REPROVADO). Também reporta VMAF do encode de entrega contra o mezzanine que o alimentou (modelo `vmaf_v0.6.1`).
+6. **Export** — encode de entrega Instagram: perfil VBV por duração, stack x264 premium, BT.709, GOP ≤60, `validate_encode.sh`-equivalente embutido (APROVADO/REPROVADO). Aplica a LUT 3D em precisão float com dither RPDF e **só então** queima a legenda — nessa ordem porque a LUT não deve gradar gráfico/texto, só o plate. Também reporta VMAF do encode de entrega contra o mezzanine que o alimentou (modelo `vmaf_v0.6.1`).
 
 ---
 

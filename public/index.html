@@ -380,6 +380,15 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
           <option value="pad">encaixar (barras)</option></select></div>
       </div>
       <div class="row">
+        <div><label for="exp-grade">GRADE</label><select id="exp-grade">
+          <option value="plate">GRADE: plate (aplica LUT)</option>
+          <option value="none">GRADE: none (só gráficos, sem LUT)</option></select></div>
+        <div><label for="exp-dither">DITHER</label><select id="exp-dither">
+          <option value="random">DITHER: RPDF (random)</option>
+          <option value="error_diffusion">DITHER: error diffusion</option>
+          <option value="none">DITHER: none</option></select></div>
+      </div>
+      <div class="row">
         <div><label for="exp-psyrd">PSY-RD (OPTIONAL, e.g. 1.0,0.0)</label><input type="text" id="exp-psyrd" placeholder="comma, never colon"></div>
         <div><label for="exp-deblock">DEBLOCK (OPTIONAL, e.g. -1,-1)</label><input type="text" id="exp-deblock" placeholder="comma, never colon"></div>
       </div>
@@ -502,6 +511,7 @@ function markDone(step) {
 }
 
 /* ---------------- asset registry */
+let lastAss = null; // .ass path from the most recent Assemble — burned in at Export, after the grade
 const assets = []; // {path, name, kind: video|audio|lut, info, source}
 function addAsset(a) {
   assets.unshift(a); renderAssets();
@@ -581,6 +591,7 @@ async function api(path, body) {
   $('#engines').innerHTML =
     chip('ffmpeg', d.ffmpeg.ok, d.ffmpeg.install) +
     chip('libvmaf', d.libvmaf.ok, d.libvmaf.install) +
+    chip('zscale', d.zscale.ok, d.zscale.install) +
     chip('whisper' + (d.whisper.flavor ? ' · ' + d.whisper.flavor : ''), d.whisper.ok, d.whisper.install) +
     chip('yt-dlp', d.ytdlp.ok, d.ytdlp.install) +
     chip('voicebox', d.voicebox.ok, d.voicebox.install) +
@@ -672,8 +683,10 @@ window.doAssemble = async () => {
       whisperModel: $('#asm-model').value, language: $('#asm-lang').value || null });
     const r = await watchJob(job);
     addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'assemble' });
-    $('#asm-out').innerHTML = `<span class="chip ok">${r.captionedWords} words captioned</span>
-      <video controls src="/files/${encodeURIComponent(r.output)}"></video>`;
+    lastAss = r.ass || null;
+    $('#asm-out').innerHTML = `<span class="chip ok">${r.captionedWords} words captioned</span>` +
+      (r.ass ? `<span class="chip ok">.ass pronto — queima no Export</span>` : '') +
+      `<video controls src="/files/${encodeURIComponent(r.output)}"></video>`;
   } catch (e) { stage(e.message, true); }
 };
 
@@ -736,6 +749,7 @@ window.doExport = async () => {
     const isMezz = /(^|[\\/])assembled-[a-f0-9]+\.mp4$/.test(input);
     const { job } = await api('/api/export', {
       input, lut: $('#exp-lut').value || null, fit: $('#exp-fit').value, x264,
+      captions: lastAss, grade: $('#exp-grade').value, dither: $('#exp-dither').value,
       sourceKind: isMezz ? 'mezzanine' : 'external',
     });
     const r = await watchJob(job);
@@ -753,6 +767,14 @@ window.doExport = async () => {
          <table>${r.validation.checks.map(c =>
            `<tr><td class="${c.ok ? 'ok-x' : 'bad-x'}">${c.ok ? '✓' : '✗'}</td><td>${c.label}</td><td class="meta">${c.got ?? ''}</td></tr>`).join('')}</table>
          <span class="chip">real bitrate ${r.validation.bitrateKbps} kbps</span></div>
+       <div class="card"><h3>COLOR PIPELINE</h3>` +
+        `<span class="chip ${r.color.lut ? 'ok' : ''}">${r.color.lut ? 'LUT ' + r.color.lut : 'sem LUT'}</span>` +
+        (r.color.interp ? `<span class="chip">interp ${r.color.interp}</span>` : '') +
+        `<span class="chip">${r.color.route}</span>` +
+        `<span class="chip ${r.color.dither === 'none' ? 'wn' : 'ok'}">${r.color.ditherKind}</span>` +
+        `<span class="chip ${r.color.captions ? 'ok' : ''}">${r.color.captions ? 'legenda pós-LUT' : 'sem legenda'}</span>` +
+        (r.color.precisionNote ? `<span class="chip wn">${r.color.precisionNote}</span>` : '') +
+        `</div>
        <div class="card"><h3>VMAF — ${r.vmaf.model || 'n/a'}${r.vmaf.neg === false ? ' (padrão, não-NEG)' : ''}</h3>` +
         (r.vmaf.available === false || r.vmaf.skipped
           ? `<span class="chip wn" title="${r.vmaf.install || ''}">indisponível — ${r.vmaf.reason || ''}</span>`
@@ -761,7 +783,8 @@ window.doExport = async () => {
             `<span class="chip">min ${r.vmaf.min}</span>` +
             `<span class="chip ${r.vmaf.p1 >= (r.vmaf.target - 5) ? 'ok' : 'wn'}">p1 ${r.vmaf.p1}</span>` +
             `<span class="chip">alvo ${r.vmaf.target}</span>` +
-            `<span class="chip">${r.vmaf.frames} frames</span>`) +
+            `<span class="chip">${r.vmaf.frames} frames</span>` +
+            (r.vmaf.refFiltered ? `<span class="chip">referência com grade+legenda</span>` : '')) +
         `</div>
        <video controls src="/files/${encodeURIComponent(r.output)}"></video>
        <p class="sub" style="margin-top:10px;font-size:11px">command: <span style="color:#888;word-break:break-all">${r.command}</span></p>`;

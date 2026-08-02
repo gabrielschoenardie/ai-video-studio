@@ -196,9 +196,11 @@ const server = http.createServer(async (req, res) => {
           workDir: dir, output: out,
           captions: b.captions !== false, captionStyle: b.captionStyle || 'impact',
           whisperModel: b.whisperModel || 'base', language: b.language || null,
+          burnCaptions: b.burnCaptions === true,
           onLog: s => jlog(job, s), onStage: (st, l) => jstage(job, st, l),
         });
-        return { ...r, output: path.relative(ROOT, r.output) };
+        return { ...r, output: path.relative(ROOT, r.output),
+                 ass: r.ass ? path.relative(ROOT, path.resolve(r.ass)) : null };
       });
       return send(res, 200, { job: job.id });
     }
@@ -268,6 +270,9 @@ const server = http.createServer(async (req, res) => {
           denoise: b.denoise || null,
           x264: b.x264 || {},
           fit: b.fit || 'blur',
+          captions: b.captions ? resolveInput(b.captions) : null,
+          grade: b.grade === 'none' ? 'none' : 'plate',
+          dither: typeof b.dither === 'string' ? b.dither : 'random',
           sourceKind: b.sourceKind === 'mezzanine' ? 'mezzanine' : 'external',
           reference: b.reference ? resolveInput(b.reference) : null,
           onLog: s => jlog(job, s),
