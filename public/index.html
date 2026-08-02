@@ -733,7 +733,7 @@ window.doExport = async () => {
     if ($('#exp-psyrd').value.trim()) x264.psyRd = $('#exp-psyrd').value.trim();
     if ($('#exp-deblock').value.trim()) x264.deblock = $('#exp-deblock').value.trim();
     const input = $('#exp-input').value;
-    const isMezz = /(^|\/)assembled-[a-f0-9]+\.mp4$/.test(input);
+    const isMezz = /(^|[\\/])assembled-[a-f0-9]+\.mp4$/.test(input);
     const { job } = await api('/api/export', {
       input, lut: $('#exp-lut').value || null, fit: $('#exp-fit').value, x264,
       sourceKind: isMezz ? 'mezzanine' : 'external',
