@@ -2,6 +2,11 @@
 /jobs/
 /output/
 
+## Ad-hoc test media dropped in repo root during manual testing — not versioned
+/*.mov
+/*.MOV
+/*.mp4
+
 ## Local LUT library — keep the folder, but the .cube files are the user's own
 ## (potentially large/licensed) assets, handled like other local media
 /luts/*.cube

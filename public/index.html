@@ -341,7 +341,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
         <div><label for="asm-cap">CAPTIONS</label>
           <select id="asm-cap"><option value="1">word-by-word (impact)</option><option value="clean">word-by-word (clean)</option><option value="0">off</option></select></div>
         <div><label for="asm-model">WHISPER MODEL</label>
-          <select id="asm-model"><option>tiny</option><option selected>base</option><option>small</option><option>medium</option></select></div>
+          <select id="asm-model"><option>tiny</option><option selected>base</option><option>small</option><option>medium</option><option>large</option></select></div>
         <div><label for="asm-lang">LANGUAGE (BLANK = AUTO)</label><input type="text" id="asm-lang" placeholder="pt / en / …"></div>
       </div>
       <button class="btn" onclick="doAssemble()">ASSEMBLE MP4</button>
@@ -434,7 +434,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
       <div class="row">
         <div><label for="clip-reframe">9:16 REFRAME</label><select id="clip-reframe"><option value="1">moving crop (subject-follow)</option><option value="0">off</option></select></div>
         <div><label for="clip-cap">CAPTIONS</label><select id="clip-cap"><option value="1">word-by-word</option><option value="0">off</option></select></div>
-        <div><label for="clip-model">WHISPER</label><select id="clip-model"><option>tiny</option><option selected>base</option><option>small</option></select></div>
+        <div><label for="clip-model">WHISPER</label><select id="clip-model"><option>tiny</option><option selected>base</option><option>small</option><option>large</option></select></div>
       </div>
       <button class="btn" onclick="doClip()">RUN CLIPPER</button>
       <div id="clip-out"></div>
