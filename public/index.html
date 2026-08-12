@@ -334,6 +334,25 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-pop .row2 button{all:unset; flex:1; text-align:center; cursor:pointer; font:500 10px var(--sans);
   color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:6px}
 .bt-pop .row2 button.primary{background:var(--go); border-color:var(--go); color:#191100; font-weight:700}
+.bt-video-wrap{position:relative}
+.bt-video-wrap canvas{position:absolute; inset:0; width:100%; height:100%}
+.bt-clip{position:absolute; top:5px; bottom:5px; border-radius:5px; cursor:grab;
+  display:flex; align-items:center; gap:6px; padding:0 8px; overflow:hidden;
+  border:1px solid var(--line); background:var(--panel2)}
+.bt-clip.broll{border-left:3px solid var(--go)}
+.bt-clip.music{border-left:3px solid var(--warn)}
+.bt-clip.selected{outline:2px solid var(--go); outline-offset:-2px}
+.bt-clip.dragging{opacity:.45; cursor:grabbing}
+.bt-clip .nm{font:600 9.5px var(--sans); color:var(--ink); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; flex:1}
+.bt-clip-vol{width:46px; flex:0 0 auto}
+.bt-handle.left{left:-2px}
+.bt-asset-list{display:flex; flex-direction:column; gap:3px; max-height:180px; overflow:auto;
+  margin-bottom:8px}
+.bt-asset-opt{all:unset; cursor:pointer; font:500 10px var(--sans); color:var(--dim);
+  border:1px solid var(--line); border-radius:4px; padding:6px 8px; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis}
+.bt-asset-opt:hover{color:var(--go); border-color:rgba(251,191,36,.5)}
 </style>
 </head>
 <body>
@@ -872,9 +891,14 @@ window.sendToClipper = (p) => {
 
   let DURATION = 0;
   let BEATS = [];
+  let BROLL = []; // {path, name, start, dur}
+  let MUSIC = []; // {path, name, start, dur, volume}
   let selected = -1;
+  let selectedClip = null; // {track:'broll'|'music', index} | null
   let hist = [], histPos = -1;
   let hiddenTracks = {}, lockedTracks = {};
+  let trilhaMuted = false, trilhaSolo = false;
+  const mediaCache = new Map(); // path -> {video?, audio?} — elementos ocultos pro compositor
   let inPoint = null, outPoint = null;
   let currentPath = null;
   let words = []; // {start,end,text} parsed from the .ass
@@ -901,23 +925,45 @@ window.sendToClipper = (p) => {
   function xToTime(x) { return Math.max(0, Math.min(DURATION, x / PX_PER_SEC)); }
   function contentWidth() { return Math.max(200, Math.ceil(DURATION * PX_PER_SEC)); }
 
-  /* ---------------- undo/redo (BEATS snapshots only) */
+  /* ---------------- undo/redo (BEATS + BROLL + MUSIC snapshots) */
   function snapshot() {
     hist = hist.slice(0, histPos + 1);
-    hist.push(JSON.parse(JSON.stringify(BEATS)));
+    hist.push(JSON.parse(JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC })));
     histPos = hist.length - 1;
+  }
+  function applyHistEntry(entry) {
+    BEATS = JSON.parse(JSON.stringify(entry.beats));
+    BROLL = JSON.parse(JSON.stringify(entry.broll || []));
+    MUSIC = JSON.parse(JSON.stringify(entry.music || []));
+    if (selected >= BEATS.length) selected = BEATS.length - 1;
+    selectedClip = null;
+    pruneMediaCache();
   }
   function undo() {
     if (histPos <= 0) return;
-    histPos--; BEATS = JSON.parse(JSON.stringify(hist[histPos]));
-    if (selected >= BEATS.length) selected = BEATS.length - 1;
+    histPos--; applyHistEntry(hist[histPos]);
     renderTracks();
   }
   function redo() {
     if (histPos >= hist.length - 1) return;
-    histPos++; BEATS = JSON.parse(JSON.stringify(hist[histPos]));
-    if (selected >= BEATS.length) selected = BEATS.length - 1;
+    histPos++; applyHistEntry(hist[histPos]);
     renderTracks();
+  }
+  function pruneMediaCache() {
+    for (const [path, entry] of mediaCache) {
+      const stillBroll = BROLL.some(c => c.path === path);
+      const stillMusic = MUSIC.some(c => c.path === path);
+      if (!stillBroll && entry.video) { entry.video.pause(); entry.video.remove(); entry.video = null; }
+      if (!stillMusic && entry.audio) { entry.audio.pause(); entry.audio.remove(); entry.audio = null; }
+      if (!entry.video && !entry.audio) mediaCache.delete(path);
+    }
+  }
+  function clearMediaCache() {
+    for (const entry of mediaCache.values()) {
+      if (entry.video) { entry.video.pause(); entry.video.remove(); }
+      if (entry.audio) { entry.audio.pause(); entry.audio.remove(); }
+    }
+    mediaCache.clear();
   }
 
   /* ---------------- snapping */
@@ -1051,6 +1097,8 @@ window.sendToClipper = (p) => {
       const r = await api('/api/beats', {
         video: currentPath, duration: DURATION,
         beats: BEATS.map((b, i) => ({ label: b.label, start: beatStart(i), dur: b.dur })),
+        broll: BROLL.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur })),
+        music: MUSIC.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume })),
       });
       stage('beats salvos: ' + r.path);
     } catch (e) { stage(e.message, true); }
@@ -1058,7 +1106,10 @@ window.sendToClipper = (p) => {
   function applySavedBeats(saved) {
     if (!saved || !Array.isArray(saved.beats) || !saved.beats.length) return false;
     BEATS = saved.beats.map((b, i) => ({ label: b.label, dur: b.dur, color: colorFor(i) }));
-    selected = -1;
+    BROLL = Array.isArray(saved.broll) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur })) : [];
+    MUSIC = Array.isArray(saved.music) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1 })) : [];
+    selected = -1; selectedClip = null;
+    pruneMediaCache();
     snapshot();
     renderTracks();
     return true;
@@ -1092,7 +1143,7 @@ window.sendToClipper = (p) => {
         <button class="bt-toggle" id="bt-save">SALVAR BEATS</button>
       </div>
       <div class="bt-preview">
-        <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video></div>
+        <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video><canvas id="bt-canvas"></canvas></div>
         <div class="bt-legend" id="bt-legend-list"></div>
       </div>
       <div class="bt-scroll" id="bt-scroll">
@@ -1118,6 +1169,22 @@ window.sendToClipper = (p) => {
                 <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
               <div class="bt-track-content" id="bt-track-legend"></div>
             </div>
+            <div class="bt-track-row" data-track="broll">
+              <div class="bt-track-label"><span class="ic">▭</span><span class="nm">B-ROLL</span>
+                <button class="bt-tctl" data-act="add" title="adicionar clipe">+</button>
+                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+              <div class="bt-track-content" id="bt-track-broll"></div>
+            </div>
+            <div class="bt-track-row" data-track="music">
+              <div class="bt-track-label"><span class="ic">♫</span><span class="nm">TRILHA</span>
+                <button class="bt-tctl" data-act="add" title="adicionar clipe">+</button>
+                <button class="bt-tctl" data-act="mute" title="mudo">M</button>
+                <button class="bt-tctl" data-act="solo" title="solo">S</button>
+                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+              <div class="bt-track-content" id="bt-track-music"></div>
+            </div>
           </div>
           <div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div></div>
           <div class="bt-inout" id="bt-inout" style="display:none"></div>
@@ -1126,6 +1193,7 @@ window.sendToClipper = (p) => {
     video = $q('#bt-video');
     wireTransport();
     wireTracks();
+    requestAnimationFrame(compositeTick);
   }
 
   /* ---------------- render ---------------- */
@@ -1189,6 +1257,181 @@ window.sendToClipper = (p) => {
       row.onclick = () => { selected = +row.dataset.idx; seekTo(beatStart(selected)); renderTracks(); };
     });
   }
+
+  /* ---------------- B-ROLL / TRILHA: dados + render ---------------- */
+  function clipsFor(track) { return track === 'broll' ? BROLL : MUSIC; }
+  function findGapAt(track, t, wantDur) {
+    const arr = clipsFor(track).slice().sort((a, b) => a.start - b.start);
+    let gapStart = 0, gapEnd = DURATION;
+    for (const c of arr) {
+      if (c.start >= t) { gapEnd = Math.min(gapEnd, c.start); break; }
+      gapStart = Math.max(gapStart, c.start + c.dur);
+    }
+    const from = Math.max(gapStart, t);
+    const avail = gapEnd - from;
+    if (avail <= MIN_BEAT_DUR) return null;
+    return { start: from, dur: Math.min(wantDur, avail) };
+  }
+  function addClipAt(track, asset) {
+    const t = snapTime(video.currentTime);
+    let start = t, dur;
+    if (track === 'broll') {
+      const gap = findGapAt('broll', t, 3);
+      if (!gap) { stage('sem espaço livre no B-ROLL nesse ponto — mova o playhead', true); return; }
+      start = gap.start; dur = gap.dur;
+    } else {
+      dur = Math.min(3, DURATION - t);
+      if (dur <= MIN_BEAT_DUR) { stage('sem espaço até o fim da timeline', true); return; }
+    }
+    const clip = track === 'broll'
+      ? { path: asset.path, name: asset.name, start, dur }
+      : { path: asset.path, name: asset.name, start, dur, volume: 1 };
+    clipsFor(track).push(clip);
+    selectedClip = { track, index: clipsFor(track).length - 1 };
+    snapshot();
+    renderTracks();
+  }
+  function renderClipTrack(track, hostId) {
+    const host = $q('#' + hostId);
+    if (!host) return;
+    host.style.width = contentWidth() + 'px';
+    const arr = clipsFor(track);
+    host.innerHTML = arr.map((c, i) => {
+      const sel = selectedClip && selectedClip.track === track && selectedClip.index === i ? ' selected' : '';
+      const vol = track === 'music'
+        ? `<input type="range" class="bt-clip-vol" min="0" max="1" step="0.05" value="${c.volume}" data-idx="${i}">`
+        : '';
+      return `<div class="bt-clip ${track}${sel}" data-track="${track}" data-idx="${i}"
+          style="left:${timeToX(c.start)}px;width:${Math.max(4, timeToX(c.dur))}px">
+          <div class="bt-handle left" data-track="${track}" data-idx="${i}" data-side="left"></div>
+          <span class="nm">${escapeHtml(c.name)}</span>${vol}
+          <div class="bt-handle right" data-track="${track}" data-idx="${i}" data-side="right"></div>
+        </div>`;
+    }).join('');
+    if (track === 'music') {
+      host.querySelectorAll('.bt-clip-vol').forEach(inp => {
+        inp.addEventListener('mousedown', e => e.stopPropagation());
+        inp.addEventListener('input', () => { MUSIC[+inp.dataset.idx].volume = +inp.value; });
+        inp.addEventListener('change', () => snapshot());
+      });
+    }
+  }
+  function renderBrollTrack() { renderClipTrack('broll', 'bt-track-broll'); }
+  function renderMusicTrack() { renderClipTrack('music', 'bt-track-music'); }
+  function openAddClipPopover(track, anchorEl) {
+    closePopover();
+    const kind = track === 'broll' ? 'video' : 'audio';
+    const list = assets.filter(a => a.kind === kind && a.path !== currentPath);
+    const rect = anchorEl.getBoundingClientRect();
+    popEl = document.createElement('div');
+    popEl.className = 'bt-pop';
+    popEl.style.left = Math.max(6, Math.min(window.innerWidth - 226, rect.left)) + 'px';
+    popEl.style.top = (rect.bottom + 6) + 'px';
+    popEl.innerHTML = `<div class="t">ADICIONAR ${track === 'broll' ? 'B-ROLL' : 'TRILHA'}</div>
+      <div class="bt-asset-list">${list.length
+        ? list.map(a => `<button class="bt-asset-opt" data-path="${escapeHtml(a.path)}">${escapeHtml(a.name)}</button>`).join('')
+        : '<div class="empty" style="padding:6px 0">Nenhum asset disponível — suba um arquivo em VISUALS ou VOICE.</div>'}</div>
+      <div class="row2"><button id="bt-pop-cancel">FECHAR</button></div>`;
+    document.body.appendChild(popEl);
+    popEl.querySelectorAll('.bt-asset-opt').forEach(btn => {
+      btn.onclick = () => {
+        const asset = list.find(a => a.path === btn.dataset.path);
+        if (asset) addClipAt(track, asset);
+        closePopover();
+      };
+    });
+    $q('#bt-pop-cancel', popEl).onclick = closePopover;
+    setTimeout(() => document.addEventListener('mousedown', onDocClick, { capture: true }), 0);
+    function onDocClick(ev) {
+      if (popEl && !popEl.contains(ev.target) && !anchorEl.contains(ev.target)) {
+        closePopover();
+        document.removeEventListener('mousedown', onDocClick, { capture: true });
+      }
+    }
+  }
+
+  /* ---------------- compositing ao vivo (canvas + vídeos/áudios nativos em paralelo) ---------------- */
+  function getBrollVideoEl(path) {
+    let entry = mediaCache.get(path);
+    if (!entry) { entry = {}; mediaCache.set(path, entry); }
+    if (!entry.video) {
+      const v = document.createElement('video');
+      v.src = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.style.cssText = 'position:fixed; left:-9999px; top:0; width:2px; height:2px;';
+      document.body.appendChild(v);
+      entry.video = v;
+    }
+    return entry.video;
+  }
+  function getMusicAudioEl(path) {
+    let entry = mediaCache.get(path);
+    if (!entry) { entry = {}; mediaCache.set(path, entry); }
+    if (!entry.audio) {
+      const a = document.createElement('audio');
+      a.src = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
+      a.preload = 'auto';
+      document.body.appendChild(a);
+      entry.audio = a;
+    }
+    return entry.audio;
+  }
+  function activeBroll(t) {
+    if (hiddenTracks.broll) return null;
+    return BROLL.find(c => t >= c.start && t < c.start + c.dur) || null;
+  }
+  function drawFrame(canvas, sourceEl) {
+    if (!canvas || !sourceEl || sourceEl.readyState < 2) return;
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    if (!cw || !ch) return;
+    if (canvas.width !== cw) canvas.width = cw;
+    if (canvas.height !== ch) canvas.height = ch;
+    const vw = sourceEl.videoWidth, vh = sourceEl.videoHeight;
+    if (!vw || !vh) return;
+    const scale = Math.min(cw / vw, ch / vh);
+    const dw = vw * scale, dh = vh * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.drawImage(sourceEl, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+  }
+  function compositeTick() {
+    if (!built || !video) return;
+    const canvas = $q('#bt-canvas');
+    const t = video.currentTime;
+    const active = activeBroll(t);
+    for (const [path, entry] of mediaCache) {
+      if (entry.video && (!active || active.path !== path) && !entry.video.paused) entry.video.pause();
+    }
+    if (active) {
+      const bv = getBrollVideoEl(active.path);
+      const target = t - active.start;
+      if (Math.abs(bv.currentTime - target) > 0.15) bv.currentTime = target;
+      if (video.paused) { if (!bv.paused) bv.pause(); }
+      else if (bv.paused) bv.play().catch(() => {});
+      // fonte de B-ROLL ainda sem frame decodificado (ou arquivo ausente/erro de load,
+      // readyState nunca sai de 0) — cai pro vídeo principal em vez de deixar o canvas parado
+      if (bv.readyState >= 2) drawFrame(canvas, bv);
+      else drawFrame(canvas, video);
+    } else {
+      drawFrame(canvas, video);
+    }
+    MUSIC.forEach(c => {
+      const el = getMusicAudioEl(c.path);
+      const onWindow = t >= c.start && t < c.start + c.dur;
+      const shouldPlay = onWindow && !video.paused && !hiddenTracks.music;
+      el.volume = Math.max(0, Math.min(1, c.volume));
+      el.muted = trilhaMuted;
+      if (shouldPlay) {
+        const target = t - c.start;
+        if (Math.abs(el.currentTime - target) > 0.15) el.currentTime = target;
+        if (el.paused) el.play().catch(() => {});
+      } else if (!el.paused) {
+        el.pause();
+      }
+    });
+    requestAnimationFrame(compositeTick);
+  }
+
   function renderPlayhead() {
     const ph = $q('#bt-playhead');
     if (!ph) return;
@@ -1222,7 +1465,13 @@ window.sendToClipper = (p) => {
       row.classList.toggle('hidden', !!hiddenTracks[track]);
       row.classList.toggle('locked', !!lockedTracks[track]);
       row.querySelectorAll('.bt-tctl').forEach(btn => {
-        btn.classList.toggle('on', btn.dataset.act === 'hide' ? !!hiddenTracks[track] : !!lockedTracks[track]);
+        const act = btn.dataset.act;
+        let on = false;
+        if (act === 'hide') on = !!hiddenTracks[track];
+        else if (act === 'lock') on = !!lockedTracks[track];
+        else if (act === 'mute') on = trilhaMuted;
+        else if (act === 'solo') on = trilhaSolo;
+        btn.classList.toggle('on', on);
       });
     });
   }
@@ -1232,6 +1481,8 @@ window.sendToClipper = (p) => {
     drawWaveform();
     renderLegendTrack();
     renderLegendList();
+    renderBrollTrack();
+    renderMusicTrack();
     renderPlayhead();
     renderInOut();
     updateTimeDisplay();
@@ -1392,10 +1643,88 @@ window.sendToClipper = (p) => {
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }
+  function startClipMove(clipEl, e) {
+    const track = clipEl.dataset.track, i = +clipEl.dataset.idx;
+    if (lockedTracks[track]) return;
+    const arr = clipsFor(track);
+    selectedClip = { track, index: i };
+    renderClipTrack(track, track === 'broll' ? 'bt-track-broll' : 'bt-track-music');
+    const startX = e.clientX;
+    const origStart = arr[i].start, dur = arr[i].dur;
+    const el = $q(`.bt-clip[data-track="${track}"][data-idx="${i}"]`);
+    if (el) el.classList.add('dragging');
+    let lo = 0, hi = DURATION - dur;
+    if (track === 'broll') {
+      arr.forEach((c, j) => {
+        if (j === i) return;
+        if (c.start + c.dur <= origStart) lo = Math.max(lo, c.start + c.dur);
+        else if (c.start >= origStart + dur) hi = Math.min(hi, c.start - dur);
+      });
+    }
+    function onMove(ev) {
+      const dx = (ev.clientX - startX) / PX_PER_SEC;
+      arr[i].start = Math.max(lo, Math.min(hi, snapTime(origStart + dx)));
+      renderClipTrack(track, track === 'broll' ? 'bt-track-broll' : 'bt-track-music');
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      snapshot();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+  function startClipTrim(handleEl, e) {
+    const track = handleEl.dataset.track, i = +handleEl.dataset.idx, side = handleEl.dataset.side;
+    if (lockedTracks[track]) return;
+    e.stopPropagation();
+    const arr = clipsFor(track);
+    const c = arr[i];
+    const startX = e.clientX;
+    const origStart = c.start, origEnd = c.start + c.dur;
+    let lo = 0, hi = DURATION;
+    if (track === 'broll') {
+      arr.forEach((o, j) => {
+        if (j === i) return;
+        if (side === 'left' && o.start + o.dur <= origStart) lo = Math.max(lo, o.start + o.dur);
+        if (side === 'right' && o.start >= origEnd) hi = Math.min(hi, o.start);
+      });
+    }
+    function onMove(ev) {
+      const dx = (ev.clientX - startX) / PX_PER_SEC;
+      if (side === 'right') {
+        const t = Math.max(origStart + MIN_BEAT_DUR, Math.min(hi, snapTime(origEnd + dx)));
+        c.dur = t - origStart;
+      } else {
+        const t = Math.max(lo, Math.min(origEnd - MIN_BEAT_DUR, snapTime(origStart + dx)));
+        c.start = t; c.dur = origEnd - t;
+      }
+      renderClipTrack(track, track === 'broll' ? 'bt-track-broll' : 'bt-track-music');
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      snapshot();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+  function deleteSelectedClip() {
+    if (!selectedClip) return;
+    clipsFor(selectedClip.track).splice(selectedClip.index, 1);
+    selectedClip = null;
+    pruneMediaCache();
+    snapshot();
+    renderTracks();
+  }
   function onTracksMouseDown(e) {
+    if (e.target.closest('.bt-track-label')) return; // H/L/M/S/+ controls — never seek the playhead
     const handle = e.target.closest('.bt-handle');
+    const clipEl = e.target.closest('.bt-clip');
     const beatEl = e.target.closest('.bt-beat');
+    if (handle && handle.dataset.side) { startClipTrim(handle, e); return; }
     if (handle) { startTrim(handle, e); return; }
+    if (clipEl) { startClipMove(clipEl, e); return; }
     if (beatEl) { startBeatDrag(beatEl, e); return; }
     const t = snapTime(pageXToTime(e.clientX));
     seekTo(t);
@@ -1424,6 +1753,9 @@ window.sendToClipper = (p) => {
           const act = btn.dataset.act;
           if (act === 'hide') hiddenTracks[track] = !hiddenTracks[track];
           if (act === 'lock') lockedTracks[track] = !lockedTracks[track];
+          if (act === 'add') { openAddClipPopover(track, btn); return; }
+          if (act === 'mute') trilhaMuted = !trilhaMuted;
+          if (act === 'solo') { trilhaSolo = !trilhaSolo; if (video) video.muted = trilhaSolo; }
           applyTrackVisibility();
         };
       });
@@ -1468,13 +1800,17 @@ window.sendToClipper = (p) => {
     try { info = await api('/api/probe', { input: path }); }
     catch (e) { $('#bt-root').innerHTML = '<div class="empty">Falha ao carregar: ' + escapeHtml(e.message) + '</div>'; return; }
     DURATION = info.duration || 0;
-    selected = -1; inPoint = null; outPoint = null; hiddenTracks = {}; lockedTracks = {};
+    selected = -1; selectedClip = null; inPoint = null; outPoint = null;
+    hiddenTracks = {}; lockedTracks = {}; trilhaMuted = false; trilhaSolo = false;
+    clearMediaCache();
     const saved = await fetchBeats(path);
     if (saved && Array.isArray(saved.beats) && saved.beats.length) {
       BEATS = saved.beats.map((b, i) => ({ label: b.label, dur: b.dur, color: colorFor(i) }));
     } else {
       BEATS = [{ label: 'CORTE', dur: DURATION, color: colorFor(0) }];
     }
+    BROLL = (saved && Array.isArray(saved.broll)) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur })) : [];
+    MUSIC = (saved && Array.isArray(saved.music)) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1 })) : [];
     hist = []; histPos = -1; snapshot();
     buildDom();
     built = true;
@@ -1509,6 +1845,9 @@ window.sendToClipper = (p) => {
       case 's': case 'S': e.preventDefault(); splitBeatAt(snapTime(video.currentTime)); break;
       case 'm': case 'M': e.preventDefault(); if (selected >= 0) mergeWithNext(selected); break;
       case 'r': case 'R': e.preventDefault(); if (selected >= 0) openPopover(selected); break;
+      case 'Delete': case 'Backspace':
+        if (selectedClip) { e.preventDefault(); deleteSelectedClip(); }
+        break;
     }
   });
 

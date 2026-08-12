@@ -193,8 +193,9 @@ const server = http.createServer(async (req, res) => {
       if (!b.video || !Array.isArray(b.beats))
         return send(res, 400, { error: 'missing video or beats[]' });
       const sidecar = beatsSidecar(b.video);
-      const payload = { version: 1, video: b.video, duration: b.duration || null,
-        beats: b.beats, updatedAt: new Date().toISOString() };
+      const payload = { version: 2, video: b.video, duration: b.duration || null,
+        beats: b.beats, broll: Array.isArray(b.broll) ? b.broll : [],
+        music: Array.isArray(b.music) ? b.music : [], updatedAt: new Date().toISOString() };
       fs.writeFileSync(sidecar, JSON.stringify(payload, null, 2), 'utf8');
       return send(res, 200, { ok: true, path: path.relative(ROOT, sidecar) });
     }
