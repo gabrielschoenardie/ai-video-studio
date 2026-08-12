@@ -170,6 +170,35 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { luts: files });
     }
 
+    // Beats sidecar — rótulo manual de segmentos narrativos ao lado do vídeo.
+    // Não usa o job bus: leitura/escrita síncrona de um JSON pequeno.
+    function beatsSidecar(videoPath) {
+      const abs = resolveInput(videoPath);
+      const sidecar = path.join(path.dirname(abs),
+        path.basename(abs, path.extname(abs)) + '.beats.json');
+      if (!insideRoot(sidecar)) throw new Error('invalid beats path');
+      return sidecar;
+    }
+    if (req.method === 'GET' && p === '/api/beats') {
+      try {
+        const video = url.searchParams.get('video');
+        if (!video) return send(res, 400, { error: 'missing video' });
+        const sidecar = beatsSidecar(video);
+        if (!fs.existsSync(sidecar)) return send(res, 200, { beats: null });
+        return send(res, 200, { beats: JSON.parse(fs.readFileSync(sidecar, 'utf8')) });
+      } catch (e) { return send(res, 400, { error: String(e.message || e) }); }
+    }
+    if (req.method === 'POST' && p === '/api/beats') {
+      const b = await readJson(req);
+      if (!b.video || !Array.isArray(b.beats))
+        return send(res, 400, { error: 'missing video or beats[]' });
+      const sidecar = beatsSidecar(b.video);
+      const payload = { version: 1, video: b.video, duration: b.duration || null,
+        beats: b.beats, updatedAt: new Date().toISOString() };
+      fs.writeFileSync(sidecar, JSON.stringify(payload, null, 2), 'utf8');
+      return send(res, 200, { ok: true, path: path.relative(ROOT, sidecar) });
+    }
+
     // Step 4 — voiceover
     if (req.method === 'POST' && p === '/api/voiceover') {
       const { script, refVoice, voice } = await readJson(req);

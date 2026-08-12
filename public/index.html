@@ -235,6 +235,105 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   nav button.done::after{position:static; margin-left:4px}
   aside{border-left:none; border-top:1px solid var(--line-soft); max-height:280px}
 }
+.step.wide{max-width:none}
+
+/* ---------------- BEATS timeline ---------------- */
+#bt-root{display:flex; flex-direction:column; gap:14px; margin-top:8px}
+.bt-transport{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
+  padding:9px 12px}
+.bt-tbtn{all:unset; cursor:pointer; min-width:30px; height:28px; padding:0 8px;
+  display:flex; align-items:center; justify-content:center; font:600 11px var(--mono);
+  color:var(--dim); border:1px solid var(--line); border-radius:6px; text-align:center}
+.bt-tbtn:hover:not([disabled]){color:var(--go); border-color:rgba(251,191,36,.5)}
+.bt-tbtn[disabled]{opacity:.3; cursor:default}
+.bt-tsep{width:1px; height:18px; background:var(--line)}
+.bt-time{font:400 13px var(--mono); color:var(--ink)}
+.bt-time .d{color:var(--faint); margin:0 3px}
+.bt-spacer{flex:1}
+.bt-toggle{all:unset; cursor:pointer; font:500 10.5px var(--sans); color:var(--dim);
+  border:1px solid var(--line); border-radius:6px; padding:5px 10px}
+.bt-toggle.on{color:var(--go); border-color:rgba(251,191,36,.5); background:var(--go-dim)}
+
+.bt-preview{display:flex; gap:14px}
+.bt-video-wrap{width:220px; flex:0 0 auto; background:#000; border:1px solid var(--line);
+  border-radius:var(--radius-sm); overflow:hidden; aspect-ratio:9/16}
+.bt-video-wrap video{width:100%; height:100%; object-fit:contain; background:#000}
+.bt-legend{flex:1; display:flex; flex-direction:column; gap:6px; min-width:200px}
+.bt-legend-row{display:flex; align-items:center; gap:8px; font:400 12px var(--mono);
+  color:var(--dim); cursor:pointer; padding:4px 6px; border-radius:6px}
+.bt-legend-row:hover{background:rgba(129,140,248,.06)}
+.bt-legend-row .dot{width:9px; height:9px; border-radius:2px; flex:0 0 auto}
+.bt-legend-row .n{color:var(--ink); flex:1}
+.bt-legend-row .d{color:var(--faint)}
+
+.bt-scroll{overflow:auto; border:1px solid var(--line); border-radius:var(--radius-sm);
+  background:var(--bg2); position:relative}
+.bt-inner{position:relative}
+.bt-ruler{position:sticky; top:0; z-index:5; height:22px; margin-left:120px;
+  background:var(--panel); border-bottom:1px solid var(--line)}
+.bt-ruler-corner{position:absolute; left:-120px; top:0; width:120px; height:22px;
+  background:var(--panel); border-right:1px solid var(--line); border-bottom:1px solid var(--line); z-index:6}
+.bt-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--line-soft)}
+.bt-tick.major{border-left:1px solid rgba(129,140,248,.28)}
+.bt-tick span{position:absolute; top:3px; left:4px; font-size:9px; color:var(--faint)}
+.bt-tick.major span{color:var(--dim)}
+.bt-tracks{position:relative; padding-bottom:12px}
+.bt-track-row{display:flex; border-bottom:1px solid var(--line-soft)}
+.bt-track-label{position:sticky; left:0; z-index:4; width:120px; flex:0 0 auto;
+  display:flex; align-items:center; gap:6px; padding:0 9px; background:var(--panel);
+  border-right:1px solid var(--line); font:600 9.5px var(--sans); letter-spacing:.08em; color:var(--dim)}
+.bt-track-label .ic{color:var(--go); width:11px; text-align:center; flex:0 0 auto}
+.bt-track-label .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.bt-tctl{all:unset; cursor:pointer; color:var(--faint); font:700 8.5px var(--mono);
+  width:15px; height:15px; border-radius:3px; display:flex; align-items:center; justify-content:center}
+.bt-tctl:hover{color:var(--ink)}
+.bt-tctl.on{color:var(--go); background:var(--go-dim)}
+.bt-track-content{position:relative; background:rgba(10,11,26,.5)}
+.bt-track-row.hidden .bt-track-content{opacity:.2; pointer-events:none}
+.bt-track-row.locked .bt-track-content{cursor:not-allowed}
+
+.bt-beat{position:absolute; top:5px; bottom:5px; border-radius:5px; cursor:grab;
+  display:flex; flex-direction:column; justify-content:center; padding:0 8px; overflow:hidden;
+  border:1px solid rgba(0,0,0,.25)}
+.bt-beat.selected{outline:2px solid var(--go); outline-offset:-2px}
+.bt-beat.dragging{opacity:.45; cursor:grabbing}
+.bt-beat .lbl{font:700 9.5px var(--sans); letter-spacing:.04em; color:#0a0a14; white-space:nowrap}
+.bt-beat .dur{font:400 8.5px var(--mono); color:rgba(10,10,20,.6)}
+.bt-handle{position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize; z-index:2}
+.bt-handle.right{right:-2px}
+.bt-handle:hover::after{content:''; position:absolute; top:22%; bottom:22%; left:3px;
+  width:2px; background:rgba(255,255,255,.55); border-radius:2px}
+
+.bt-word{position:absolute; top:4px; bottom:4px; border-radius:3px; background:var(--panel2);
+  border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+  font:400 9.5px var(--mono); color:var(--dim); padding:0 3px; white-space:nowrap; overflow:hidden}
+.bt-word.active{background:var(--go-dim); border-color:var(--go); color:var(--go)}
+
+.bt-playhead{position:absolute; top:0; bottom:0; width:1px; background:var(--go); z-index:7;
+  pointer-events:none; box-shadow:0 0 6px rgba(251,191,36,.7)}
+.bt-playhead-flag{position:absolute; top:0; left:-6px; width:13px; height:13px; background:var(--go);
+  clip-path:polygon(0 0,100% 0,100% 60%,50% 100%,0 60%); pointer-events:auto; cursor:ew-resize}
+.bt-snap-guide{position:absolute; width:1px; background:var(--warn); z-index:8; pointer-events:none;
+  box-shadow:0 0 5px rgba(255,179,71,.7)}
+.bt-drop-marker{position:absolute; width:2px; background:var(--go); z-index:8; pointer-events:none}
+.bt-inout{position:absolute; z-index:1; pointer-events:none; background:rgba(251,191,36,.06);
+  border-left:1.5px solid var(--go); border-right:1.5px solid var(--go)}
+
+.bt-pop{position:fixed; z-index:50; background:var(--panel2); border:1px solid var(--line);
+  border-radius:var(--radius-sm); padding:10px; box-shadow:0 10px 30px rgba(0,0,0,.6); width:210px}
+.bt-pop .t{font:600 9px var(--sans); letter-spacing:.1em; color:var(--dim); margin-bottom:7px}
+.bt-role-grid{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; max-height:130px; overflow:auto}
+.bt-role-opt{all:unset; cursor:pointer; font:500 9px var(--sans); color:var(--dim);
+  border:1px solid var(--line); border-radius:4px; padding:4px 7px}
+.bt-role-opt:hover{color:var(--go); border-color:rgba(251,191,36,.5)}
+.bt-role-opt.cur{color:var(--go); border-color:rgba(251,191,36,.5); background:var(--go-dim)}
+.bt-pop input{width:100%; background:var(--bg2); border:1px solid var(--line); border-radius:6px;
+  color:var(--ink); font:400 12px var(--mono); padding:7px 9px}
+.bt-pop .row2{display:flex; gap:6px; margin-top:7px}
+.bt-pop .row2 button{all:unset; flex:1; text-align:center; cursor:pointer; font:500 10px var(--sans);
+  color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:6px}
+.bt-pop .row2 button.primary{background:var(--go); border-color:var(--go); color:#191100; font-weight:700}
 </style>
 </head>
 <body>
@@ -254,7 +353,8 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   <button data-step="visuals" class="on" aria-current="step"><span class="n" aria-hidden="true">01</span>VISUALS</button>
   <button data-step="voice"><span class="n" aria-hidden="true">02</span>VOICE</button>
   <button data-step="assemble"><span class="n" aria-hidden="true">03</span>ASSEMBLE</button>
-  <button data-step="export"><span class="n" aria-hidden="true">04</span>EXPORT</button>
+  <button data-step="beats"><span class="n" aria-hidden="true">04</span>BEATS</button>
+  <button data-step="export"><span class="n" aria-hidden="true">05</span>EXPORT</button>
   <hr>
   <div class="lbl">TOOLS</div>
   <button data-step="clipper">
@@ -332,9 +432,24 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
     </div>
   </section>
 
-  <!-- 04 EXPORT -->
+  <!-- 04 BEATS -->
+  <section class="step wide" id="step-beats">
+    <h2>04 / <em>BEATS</em></h2>
+    <p class="sub">Divida o corte em papéis narrativos (HOOK, CONTEXTO, CTA…),
+      ajuste as bordas arrastando, funda ou separe beats, e salve o rótulo ao
+      lado do vídeo. Isso não altera o arquivo — é metadado para revisão e
+      para alimentar um moment-picker mais tarde.</p>
+    <div class="row">
+      <div><label for="bt-visual">VÍDEO</label><select id="bt-visual"></select></div>
+      <div><label for="bt-load">BEATS SALVOS</label>
+        <button class="btn ghost sm" id="bt-load-btn" style="margin-top:0">CARREGAR</button></div>
+    </div>
+    <div id="bt-root"><div class="empty">Escolha um vídeo acima.</div></div>
+  </section>
+
+  <!-- 05 EXPORT -->
   <section class="step" id="step-export">
-    <h2>04 / <em>EXPORT</em></h2>
+    <h2>05 / <em>EXPORT</em></h2>
     <p class="sub">Instagram delivery encode — Metodologia Gabriel. VBV profile auto-selected from measured duration, premium x264 stack, BT.709, GOP ≤ 60, +faststart. Recompression risk scored before encode; full compliance validation after.</p>
     <div class="card">
       <div class="row">
@@ -460,7 +575,7 @@ window.goStep = step => {
 $$('nav button').forEach(b => b.onclick = () => goStep(b.dataset.step));
 
 /* next/prev footers on pipeline steps — guides first-time users through the flow */
-const STEP_ORDER = ['visuals', 'voice', 'assemble', 'export'];
+const STEP_ORDER = ['visuals', 'voice', 'assemble', 'beats', 'export'];
 STEP_ORDER.forEach((s, i) => {
   const prev = STEP_ORDER[i - 1], next = STEP_ORDER[i + 1];
   const d = document.createElement('div'); d.className = 'stepnav';
@@ -504,6 +619,7 @@ function renderAssets() {
   $('#assets-all').innerHTML = assets.map(rowHtml).join('') || '<div class="empty">Empty session — everything you upload or produce lands here.</div>';
   const opt = a => `<option value="${a.path}">${a.name}</option>`;
   $('#asm-visual').innerHTML = vids.map(opt).join('');
+  $('#bt-visual').innerHTML = vids.map(opt).join('');
   $('#asm-vo').innerHTML = '<option value="">— none —</option>' + auds.map(opt).join('');
   $('#exp-input').innerHTML = vids.map(opt).join('');
   $('#exp-lut').innerHTML = '<option value="">— none —</option>' + luts.map(opt).join('');
@@ -743,6 +859,678 @@ window.sendToClipper = (p) => {
   goStep('clipper');
   $('#clip-file').value = p;
 };
+
+/* ---------------- BEATS timeline ---------------- */
+(function () {
+  const ROLES = ['HOOK', 'QUEM', 'CONTEXTO', 'CONTRASTE', 'TENSAO', 'VIRADA', 'SOLUCAO',
+    'TESE', 'PROVA', 'URGENCIA', 'OFERTA', 'BENEFICIO', 'CTA'];
+  const BEAT_COLORS = ['#fbbf24', '#8b8cf8', '#ffb347', '#fb7185', '#34d399', '#60a5fa',
+    '#f472b6', '#a3e635', '#22d3ee', '#fb923c'];
+  const PX_PER_SEC = 60;
+  const MIN_BEAT_DUR = 0.15;
+  const SNAP_PX = 8;
+
+  let DURATION = 0;
+  let BEATS = [];
+  let selected = -1;
+  let hist = [], histPos = -1;
+  let hiddenTracks = {}, lockedTracks = {};
+  let inPoint = null, outPoint = null;
+  let currentPath = null;
+  let words = []; // {start,end,text} parsed from the .ass
+  let peaks = null; // Float32Array of waveform peaks
+  let jklLevel = 0; // signed shuttle speed: <0 reverse, >0 forward, 0 stopped
+  let revTimer = null;
+  let built = false;
+  let video = null;
+  let popEl = null;
+
+  function $q(sel, ctx) { return (ctx || document).querySelector(sel); }
+  function $$q(sel, ctx) { return [...(ctx || document).querySelectorAll(sel)]; }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function colorFor(i) { return BEAT_COLORS[i % BEAT_COLORS.length]; }
+  function beatStart(i) { let s = 0; for (let k = 0; k < i; k++) s += BEATS[k].dur; return s; }
+  function fmt(t) {
+    if (!isFinite(t) || t < 0) t = 0;
+    const m = Math.floor(t / 60), s = t - m * 60;
+    return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0');
+  }
+  function timeToX(t) { return t * PX_PER_SEC; }
+  function xToTime(x) { return Math.max(0, Math.min(DURATION, x / PX_PER_SEC)); }
+  function contentWidth() { return Math.max(200, Math.ceil(DURATION * PX_PER_SEC)); }
+
+  /* ---------------- undo/redo (BEATS snapshots only) */
+  function snapshot() {
+    hist = hist.slice(0, histPos + 1);
+    hist.push(JSON.parse(JSON.stringify(BEATS)));
+    histPos = hist.length - 1;
+  }
+  function undo() {
+    if (histPos <= 0) return;
+    histPos--; BEATS = JSON.parse(JSON.stringify(hist[histPos]));
+    if (selected >= BEATS.length) selected = BEATS.length - 1;
+    renderTracks();
+  }
+  function redo() {
+    if (histPos >= hist.length - 1) return;
+    histPos++; BEATS = JSON.parse(JSON.stringify(hist[histPos]));
+    if (selected >= BEATS.length) selected = BEATS.length - 1;
+    renderTracks();
+  }
+
+  /* ---------------- snapping */
+  function snapTargets() {
+    const t = [0, DURATION];
+    for (let i = 0; i <= BEATS.length; i++) t.push(beatStart(i));
+    if (inPoint != null) t.push(inPoint);
+    if (outPoint != null) t.push(outPoint);
+    return t;
+  }
+  function snapTime(t) {
+    const thr = SNAP_PX / PX_PER_SEC;
+    let best = t, bestD = thr;
+    snapTargets().forEach(c => { const d = Math.abs(c - t); if (d < bestD) { bestD = d; best = c; } });
+    return Math.max(0, Math.min(DURATION, best));
+  }
+
+  /* ---------------- beat operations */
+  function doBeatTrim(i, newBoundary) {
+    if (i < 0 || i >= BEATS.length - 1) return;
+    const segStart = beatStart(i);
+    const segEnd = beatStart(i + 2); // end of beat i+1
+    const lo = segStart + MIN_BEAT_DUR, hi = segEnd - MIN_BEAT_DUR;
+    const b = Math.max(lo, Math.min(hi, newBoundary));
+    BEATS[i].dur = b - segStart;
+    BEATS[i + 1].dur = segEnd - b;
+  }
+  function splitBeatAt(t) {
+    const idx = BEATS.findIndex((b, i) => t > beatStart(i) + MIN_BEAT_DUR && t < beatStart(i) + b.dur - MIN_BEAT_DUR);
+    if (idx < 0) return;
+    const s = beatStart(idx), b = BEATS[idx];
+    const d1 = t - s, d2 = b.dur - d1;
+    BEATS.splice(idx, 1,
+      { label: b.label, dur: d1, color: b.color },
+      { label: b.label, dur: d2, color: colorFor(idx + 1) });
+    selected = idx;
+    snapshot(); renderTracks();
+  }
+  function mergeWithNext(i) {
+    if (i < 0 || i >= BEATS.length - 1) return;
+    BEATS[i].dur += BEATS[i + 1].dur;
+    BEATS.splice(i + 1, 1);
+    selected = i;
+    snapshot(); renderTracks();
+  }
+
+  /* ---------------- waveform (real, decoded via Web Audio) */
+  async function loadWaveform(path) {
+    peaks = null;
+    try {
+      const url = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
+      const buf = await (await fetch(url)).arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      const audioBuf = await ctx.decodeAudioData(buf.slice(0));
+      const data = audioBuf.getChannelData(0);
+      const totalPx = Math.ceil(contentWidth());
+      const cols = Math.max(1, Math.ceil(totalPx / 2)); // ~2px/coluna
+      const samplesPerCol = Math.max(1, Math.floor(data.length / cols));
+      const p = new Float32Array(cols);
+      for (let c = 0; c < cols; c++) {
+        let max = 0;
+        const start = c * samplesPerCol, end = Math.min(data.length, start + samplesPerCol);
+        for (let i = start; i < end; i++) { const v = Math.abs(data[i]); if (v > max) max = v; }
+        p[c] = max;
+      }
+      peaks = p;
+      ctx.close();
+    } catch (e) { peaks = null; }
+    drawWaveform();
+  }
+  function drawWaveform() {
+    const canvas = $q('#bt-wave');
+    if (!canvas) return;
+    const w = contentWidth(), h = 44;
+    canvas.width = w; canvas.height = h;
+    const track = $q('#bt-track-audio');
+    if (track) track.style.width = w + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    if (!peaks || !peaks.length) return;
+    ctx.fillStyle = 'rgba(129,140,248,.55)';
+    const mid = h / 2;
+    for (let x = 0; x < w; x += 2) {
+      const col = Math.min(peaks.length - 1, Math.floor((x / w) * peaks.length));
+      const v = peaks[col];
+      const barH = Math.max(1, v * (h - 6));
+      ctx.fillRect(x, mid - barH / 2, 1.5, barH);
+    }
+  }
+
+  /* ---------------- legend (real words parsed from the .ass) */
+  async function loadLegend() {
+    words = [];
+    if (!lastAss) return;
+    try {
+      const url = '/files/' + encodeURIComponent(lastAss.replace(/\\/g, '/'));
+      const text = await (await fetch(url)).text();
+      const toSec = (s) => {
+        const m = s.trim().match(/^(\d+):(\d\d):(\d\d)\.(\d\d)$/);
+        if (!m) return null;
+        return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 100;
+      };
+      text.split(/\r?\n/).forEach(line => {
+        if (!line.startsWith('Dialogue:')) return;
+        const rest = line.slice('Dialogue:'.length);
+        const parts = rest.split(',');
+        if (parts.length < 10) return;
+        const start = toSec(parts[1]), end = toSec(parts[2]);
+        const txt = parts.slice(9).join(',');
+        const m = txt.match(/\{\\c[^}]*\}([^{]*)\{\\c[^}]*\}/);
+        if (!m || start == null || end == null) return; // no highlighted word on this line — skip
+        const w = m[1].trim();
+        if (w) words.push({ start, end, text: w });
+      });
+    } catch (e) { words = []; }
+  }
+
+  /* ---------------- persistence */
+  async function fetchBeats(path) {
+    try {
+      const r = await fetch('/api/beats?video=' + encodeURIComponent(path));
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      return j.beats;
+    } catch (e) { return null; }
+  }
+  async function saveBeats() {
+    if (!currentPath) return;
+    try {
+      const r = await api('/api/beats', {
+        video: currentPath, duration: DURATION,
+        beats: BEATS.map((b, i) => ({ label: b.label, start: beatStart(i), dur: b.dur })),
+      });
+      stage('beats salvos: ' + r.path);
+    } catch (e) { stage(e.message, true); }
+  }
+  function applySavedBeats(saved) {
+    if (!saved || !Array.isArray(saved.beats) || !saved.beats.length) return false;
+    BEATS = saved.beats.map((b, i) => ({ label: b.label, dur: b.dur, color: colorFor(i) }));
+    selected = -1;
+    snapshot();
+    renderTracks();
+    return true;
+  }
+
+  /* ---------------- DOM build ---------------- */
+  function buildDom() {
+    const r = $('#bt-root');
+    r.innerHTML = `
+      <div class="bt-transport">
+        <button class="bt-tbtn" id="bt-play" title="Espaço">▶</button>
+        <div class="bt-tsep"></div>
+        <button class="bt-tbtn" id="bt-j" title="J">◀◀ J</button>
+        <button class="bt-tbtn" id="bt-k" title="K">❚❚ K</button>
+        <button class="bt-tbtn" id="bt-l" title="L">L ▶▶</button>
+        <div class="bt-tsep"></div>
+        <button class="bt-tbtn" id="bt-frameback" title=",">-1f</button>
+        <button class="bt-tbtn" id="bt-frameforward" title=".">+1f</button>
+        <div class="bt-tsep"></div>
+        <button class="bt-tbtn" id="bt-markin" title="I">IN</button>
+        <button class="bt-tbtn" id="bt-markout" title="O">OUT</button>
+        <div class="bt-tsep"></div>
+        <button class="bt-tbtn" id="bt-split" title="S">SPLIT</button>
+        <button class="bt-tbtn" id="bt-merge" title="M">MERGE</button>
+        <button class="bt-tbtn" id="bt-rename" title="R">RENAME</button>
+        <div class="bt-tsep"></div>
+        <button class="bt-tbtn" id="bt-undo" title="Ctrl+Z">UNDO</button>
+        <button class="bt-tbtn" id="bt-redo" title="Ctrl+Shift+Z">REDO</button>
+        <div class="bt-time" id="bt-time">00:00.0<span class="d">/</span>00:00.0</div>
+        <div class="bt-spacer"></div>
+        <button class="bt-toggle" id="bt-save">SALVAR BEATS</button>
+      </div>
+      <div class="bt-preview">
+        <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video></div>
+        <div class="bt-legend" id="bt-legend-list"></div>
+      </div>
+      <div class="bt-scroll" id="bt-scroll">
+        <div class="bt-inner" id="bt-inner">
+          <div class="bt-ruler-corner"></div>
+          <div class="bt-ruler" id="bt-ruler"></div>
+          <div class="bt-tracks" id="bt-tracks">
+            <div class="bt-track-row" data-track="beats">
+              <div class="bt-track-label"><span class="ic">▤</span><span class="nm">BEATS</span>
+                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+              <div class="bt-track-content" id="bt-track-beats"></div>
+            </div>
+            <div class="bt-track-row" data-track="audio">
+              <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
+                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+              <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
+            </div>
+            <div class="bt-track-row" data-track="legend">
+              <div class="bt-track-label"><span class="ic">T</span><span class="nm">LEGENDA</span>
+                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+              <div class="bt-track-content" id="bt-track-legend"></div>
+            </div>
+          </div>
+          <div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div></div>
+          <div class="bt-inout" id="bt-inout" style="display:none"></div>
+        </div>
+      </div>`;
+    video = $q('#bt-video');
+    wireTransport();
+    wireTracks();
+  }
+
+  /* ---------------- render ---------------- */
+  function renderRuler() {
+    const ruler = $q('#bt-ruler');
+    const w = contentWidth();
+    $q('#bt-inner').style.width = (120 + w) + 'px';
+    ruler.style.width = w + 'px';
+    ruler.innerHTML = '';
+    const step = DURATION > 120 ? 10 : (DURATION > 40 ? 5 : 1);
+    let n = 0;
+    for (let t = 0; t <= DURATION + 0.001; t += step, n++) {
+      const tick = document.createElement('div');
+      tick.className = 'bt-tick' + (n % 5 === 0 ? ' major' : '');
+      tick.style.left = timeToX(t) + 'px';
+      if (n % 5 === 0) tick.innerHTML = `<span>${fmt(t)}</span>`;
+      ruler.appendChild(tick);
+    }
+  }
+  function renderBeatsTrack() {
+    const host = $q('#bt-track-beats');
+    if (!host) return;
+    host.style.width = contentWidth() + 'px';
+    host.innerHTML = '';
+    BEATS.forEach((b, i) => {
+      const s = beatStart(i);
+      const el = document.createElement('div');
+      el.className = 'bt-beat' + (i === selected ? ' selected' : '');
+      el.style.left = timeToX(s) + 'px';
+      el.style.width = Math.max(4, timeToX(b.dur)) + 'px';
+      el.style.background = b.color;
+      el.dataset.idx = i;
+      el.innerHTML = `<span class="lbl">${escapeHtml(b.label)}</span><span class="dur">${b.dur.toFixed(1)}s</span>`;
+      if (i < BEATS.length - 1) {
+        const h = document.createElement('div');
+        h.className = 'bt-handle right'; h.dataset.idx = i;
+        el.appendChild(h);
+      }
+      host.appendChild(el);
+    });
+  }
+  function renderLegendTrack() {
+    const host = $q('#bt-track-legend');
+    if (!host) return;
+    host.style.width = contentWidth() + 'px';
+    if (!words.length) {
+      host.innerHTML = '<div class="empty" style="padding:8px 10px">Sem legenda nesta sessão — rode ASSEMBLE com captions ligados.</div>';
+      return;
+    }
+    host.innerHTML = words.map(w =>
+      `<div class="bt-word" data-start="${w.start}" data-end="${w.end}" style="left:${timeToX(w.start)}px;width:${Math.max(4, timeToX(w.end - w.start))}px">${escapeHtml(w.text)}</div>`
+    ).join('');
+  }
+  function renderLegendList() {
+    const host = $q('#bt-legend-list');
+    if (!host) return;
+    host.innerHTML = BEATS.map((b, i) => `<div class="bt-legend-row" data-idx="${i}">
+        <span class="dot" style="background:${b.color}"></span>
+        <span class="n">${escapeHtml(b.label)}</span><span class="d">${b.dur.toFixed(1)}s</span></div>`).join('');
+    host.querySelectorAll('.bt-legend-row').forEach(row => {
+      row.onclick = () => { selected = +row.dataset.idx; seekTo(beatStart(selected)); renderTracks(); };
+    });
+  }
+  function renderPlayhead() {
+    const ph = $q('#bt-playhead');
+    if (!ph) return;
+    ph.style.left = (120 + timeToX(video ? video.currentTime : 0)) + 'px';
+  }
+  function renderInOut() {
+    const el = $q('#bt-inout');
+    if (!el) return;
+    if (inPoint == null || outPoint == null) { el.style.display = 'none'; return; }
+    const a = Math.min(inPoint, outPoint), b = Math.max(inPoint, outPoint);
+    el.style.display = 'block';
+    el.style.left = (120 + timeToX(a)) + 'px';
+    el.style.width = timeToX(b - a) + 'px';
+    el.style.top = '22px'; el.style.bottom = '0';
+  }
+  function updateTimeDisplay() {
+    const el = $q('#bt-time');
+    if (!el) return;
+    el.innerHTML = `${fmt(video ? video.currentTime : 0)}<span class="d">/</span>${fmt(DURATION)}`;
+  }
+  function highlightActiveWord() {
+    const t = video ? video.currentTime : 0;
+    $$q('#bt-track-legend .bt-word').forEach(el => {
+      const s = +el.dataset.start, e = +el.dataset.end;
+      el.classList.toggle('active', t >= s && t < e);
+    });
+  }
+  function applyTrackVisibility() {
+    $$q('.bt-track-row').forEach(row => {
+      const track = row.dataset.track;
+      row.classList.toggle('hidden', !!hiddenTracks[track]);
+      row.classList.toggle('locked', !!lockedTracks[track]);
+      row.querySelectorAll('.bt-tctl').forEach(btn => {
+        btn.classList.toggle('on', btn.dataset.act === 'hide' ? !!hiddenTracks[track] : !!lockedTracks[track]);
+      });
+    });
+  }
+  function renderTracks() {
+    renderRuler();
+    renderBeatsTrack();
+    drawWaveform();
+    renderLegendTrack();
+    renderLegendList();
+    renderPlayhead();
+    renderInOut();
+    updateTimeDisplay();
+    highlightActiveWord();
+    applyTrackVisibility();
+  }
+
+  /* ---------------- transport / shuttle ---------------- */
+  function stopReverseTimer() { if (revTimer) { clearInterval(revTimer); revTimer = null; } }
+  function togglePlay() {
+    if (!video) return;
+    if (video.paused) { stopReverseTimer(); jklLevel = 1; video.playbackRate = 1; video.play(); }
+    else shuttleStop();
+  }
+  function shuttleForward() {
+    if (!video) return;
+    stopReverseTimer();
+    jklLevel = jklLevel > 0 ? Math.min(8, jklLevel * 2) : 1;
+    video.playbackRate = jklLevel;
+    video.play();
+  }
+  function shuttleReverse() {
+    if (!video) return;
+    jklLevel = jklLevel < 0 ? Math.max(-8, jklLevel * 2) : -1;
+    video.pause();
+    stopReverseTimer();
+    const speed = Math.abs(jklLevel);
+    revTimer = setInterval(() => {
+      let t = video.currentTime - (speed / 30);
+      if (t <= 0) { t = 0; shuttleStop(); }
+      video.currentTime = t;
+    }, 1000 / 30);
+  }
+  function shuttleStop() {
+    jklLevel = 0; stopReverseTimer();
+    if (video) { video.pause(); video.playbackRate = 1; }
+  }
+  function frameStep(dir) {
+    if (!video) return;
+    shuttleStop();
+    const t = Math.max(0, Math.min(DURATION, video.currentTime + dir / 30));
+    seekTo(t);
+  }
+  function seekTo(t) {
+    if (!video) return;
+    t = Math.max(0, Math.min(DURATION, t));
+    video.currentTime = t;
+    renderPlayhead(); updateTimeDisplay(); highlightActiveWord();
+  }
+  function markIn() { if (video) { inPoint = snapTime(video.currentTime); renderInOut(); } }
+  function markOut() { if (video) { outPoint = snapTime(video.currentTime); renderInOut(); } }
+
+  /* ---------------- rename popover ---------------- */
+  function closePopover() { if (popEl) { popEl.remove(); popEl = null; } }
+  function openPopover(idx, anchorEl) {
+    closePopover();
+    if (idx < 0 || idx >= BEATS.length) return;
+    selected = idx; renderBeatsTrack();
+    const b = BEATS[idx];
+    const anchor = anchorEl || $q(`.bt-beat[data-idx="${idx}"]`);
+    const rect = anchor ? anchor.getBoundingClientRect() : { left: 100, bottom: 100 };
+    popEl = document.createElement('div');
+    popEl.className = 'bt-pop';
+    popEl.style.left = Math.max(6, Math.min(window.innerWidth - 226, rect.left)) + 'px';
+    popEl.style.top = (rect.bottom + 6) + 'px';
+    popEl.innerHTML = `<div class="t">PAPEL NARRATIVO</div>
+      <div class="bt-role-grid">${ROLES.map(r => `<button class="bt-role-opt${r === b.label ? ' cur' : ''}" data-role="${r}">${r}</button>`).join('')}</div>
+      <input type="text" id="bt-pop-input" value="${escapeHtml(b.label)}" placeholder="rótulo livre…">
+      <div class="row2"><button id="bt-pop-cancel">CANCELAR</button><button class="primary" id="bt-pop-save">SALVAR</button></div>`;
+    document.body.appendChild(popEl);
+    popEl.querySelectorAll('.bt-role-opt').forEach(btn => {
+      btn.onclick = () => { $q('#bt-pop-input', popEl).value = btn.dataset.role; };
+    });
+    $q('#bt-pop-cancel', popEl).onclick = closePopover;
+    $q('#bt-pop-save', popEl).onclick = () => {
+      const val = $q('#bt-pop-input', popEl).value.trim();
+      if (val) { BEATS[idx].label = val; snapshot(); renderTracks(); }
+      closePopover();
+    };
+    setTimeout(() => document.addEventListener('mousedown', onDocClick, { capture: true }), 0);
+    function onDocClick(ev) {
+      if (popEl && !popEl.contains(ev.target) && !(anchor && anchor.contains(ev.target))) {
+        closePopover();
+        document.removeEventListener('mousedown', onDocClick, { capture: true });
+      }
+    }
+  }
+
+  /* ---------------- pointer interactions on the tracks area ---------------- */
+  function pageXToTime(clientX) {
+    const rulerRect = $q('#bt-ruler').getBoundingClientRect();
+    return xToTime(clientX - rulerRect.left);
+  }
+  function startTrim(handleEl, e) {
+    if (lockedTracks.beats) return;
+    e.stopPropagation();
+    const i = +handleEl.dataset.idx;
+    const startX = e.clientX;
+    const origBoundary = beatStart(i + 1);
+    const beatEl = handleEl.closest('.bt-beat');
+    if (beatEl) beatEl.classList.add('dragging');
+    function onMove(ev) {
+      const dx = ev.clientX - startX;
+      const nb = snapTime(origBoundary + dx / PX_PER_SEC);
+      doBeatTrim(i, nb);
+      renderBeatsTrack(); renderLegendList();
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (beatEl) beatEl.classList.remove('dragging');
+      snapshot();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+  function startBeatDrag(beatEl, e) {
+    if (lockedTracks.beats) return;
+    const i = +beatEl.dataset.idx;
+    selected = i; renderBeatsTrack();
+    const startX = e.clientX;
+    let moved = false, dropIdx = i;
+    beatEl.classList.add('dragging');
+    const marker = document.createElement('div');
+    marker.className = 'bt-drop-marker'; marker.style.display = 'none';
+    $q('#bt-inner').appendChild(marker);
+    function onMove(ev) {
+      if (Math.abs(ev.clientX - startX) > 4) moved = true;
+      if (!moved) return;
+      const t = pageXToTime(ev.clientX);
+      let idx = 0, acc = 0;
+      for (; idx < BEATS.length; idx++) {
+        const mid = acc + BEATS[idx].dur / 2;
+        if (t < mid) break;
+        acc += BEATS[idx].dur;
+      }
+      dropIdx = idx;
+      const beatsTrack = $q('#bt-track-beats');
+      marker.style.display = 'block';
+      marker.style.left = (120 + timeToX(acc)) + 'px';
+      marker.style.top = beatsTrack.offsetTop + 'px';
+      marker.style.height = beatsTrack.offsetHeight + 'px';
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      marker.remove();
+      beatEl.classList.remove('dragging');
+      if (moved && dropIdx !== i && dropIdx !== i + 1) {
+        const [item] = BEATS.splice(i, 1);
+        const insertAt = dropIdx > i ? dropIdx - 1 : dropIdx;
+        BEATS.splice(insertAt, 0, item);
+        selected = insertAt;
+        snapshot();
+      }
+      renderTracks();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+  function onTracksMouseDown(e) {
+    const handle = e.target.closest('.bt-handle');
+    const beatEl = e.target.closest('.bt-beat');
+    if (handle) { startTrim(handle, e); return; }
+    if (beatEl) { startBeatDrag(beatEl, e); return; }
+    const t = snapTime(pageXToTime(e.clientX));
+    seekTo(t);
+  }
+  function onTracksDblClick(e) {
+    const beatEl = e.target.closest('.bt-beat');
+    if (beatEl) openPopover(+beatEl.dataset.idx, beatEl);
+  }
+  function onRulerMouseDown(e) { seekTo(snapTime(pageXToTime(e.clientX))); }
+  function onFlagMouseDown(e) {
+    e.preventDefault();
+    function onMove(ev) { seekTo(snapTime(pageXToTime(ev.clientX))); }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function wireTracks() {
+    $$q('.bt-track-row').forEach(row => {
+      const track = row.dataset.track;
+      row.querySelectorAll('.bt-tctl').forEach(btn => {
+        btn.onclick = () => {
+          const act = btn.dataset.act;
+          if (act === 'hide') hiddenTracks[track] = !hiddenTracks[track];
+          if (act === 'lock') lockedTracks[track] = !lockedTracks[track];
+          applyTrackVisibility();
+        };
+      });
+    });
+    $q('#bt-tracks').addEventListener('mousedown', onTracksMouseDown);
+    $q('#bt-tracks').addEventListener('dblclick', onTracksDblClick);
+    $q('#bt-ruler').addEventListener('mousedown', onRulerMouseDown);
+    $q('.bt-playhead-flag').addEventListener('mousedown', onFlagMouseDown);
+  }
+  function wireTransport() {
+    $q('#bt-play').onclick = togglePlay;
+    $q('#bt-j').onclick = shuttleReverse;
+    $q('#bt-k').onclick = shuttleStop;
+    $q('#bt-l').onclick = shuttleForward;
+    $q('#bt-frameback').onclick = () => frameStep(-1);
+    $q('#bt-frameforward').onclick = () => frameStep(1);
+    $q('#bt-markin').onclick = markIn;
+    $q('#bt-markout').onclick = markOut;
+    $q('#bt-split').onclick = () => splitBeatAt(snapTime(video.currentTime));
+    $q('#bt-merge').onclick = () => { if (selected >= 0) mergeWithNext(selected); };
+    $q('#bt-rename').onclick = () => { if (selected >= 0) openPopover(selected); };
+    $q('#bt-undo').onclick = undo;
+    $q('#bt-redo').onclick = redo;
+    $q('#bt-save').onclick = saveBeats;
+    video.addEventListener('timeupdate', () => { renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); });
+    video.addEventListener('play', () => { $q('#bt-play').textContent = '❚❚'; });
+    video.addEventListener('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; });
+  }
+
+  /* ---------------- load a video into the editor ---------------- */
+  async function loadVideo(path) {
+    stopReverseTimer();
+    if (!path) {
+      $('#bt-root').innerHTML = '<div class="empty">Escolha um vídeo acima.</div>';
+      built = false; video = null;
+      return;
+    }
+    currentPath = path;
+    built = false;
+    $('#bt-root').innerHTML = '<div class="empty">Carregando…</div>';
+    let info;
+    try { info = await api('/api/probe', { input: path }); }
+    catch (e) { $('#bt-root').innerHTML = '<div class="empty">Falha ao carregar: ' + escapeHtml(e.message) + '</div>'; return; }
+    DURATION = info.duration || 0;
+    selected = -1; inPoint = null; outPoint = null; hiddenTracks = {}; lockedTracks = {};
+    const saved = await fetchBeats(path);
+    if (saved && Array.isArray(saved.beats) && saved.beats.length) {
+      BEATS = saved.beats.map((b, i) => ({ label: b.label, dur: b.dur, color: colorFor(i) }));
+    } else {
+      BEATS = [{ label: 'CORTE', dur: DURATION, color: colorFor(0) }];
+    }
+    hist = []; histPos = -1; snapshot();
+    buildDom();
+    built = true;
+    await loadWaveform(path);
+    await loadLegend();
+    renderTracks();
+  }
+
+  /* ---------------- keyboard shortcuts (scoped to #step-beats.on) ---------------- */
+  document.addEventListener('keydown', (e) => {
+    const stepEl = document.getElementById('step-beats');
+    if (!stepEl || !stepEl.classList.contains('on')) return;
+    if (!built) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') {
+      if (e.key === 'Escape') closePopover();
+      return;
+    }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redo(); return; }
+    switch (e.key) {
+      case 'j': case 'J': e.preventDefault(); shuttleReverse(); break;
+      case 'k': case 'K': e.preventDefault(); shuttleStop(); break;
+      case 'l': case 'L': e.preventDefault(); shuttleForward(); break;
+      case ' ': e.preventDefault(); togglePlay(); break;
+      case ',': e.preventDefault(); frameStep(-1); break;
+      case '.': e.preventDefault(); frameStep(1); break;
+      case 'Home': e.preventDefault(); seekTo(0); break;
+      case 'End': e.preventDefault(); seekTo(DURATION); break;
+      case 'i': case 'I': e.preventDefault(); markIn(); break;
+      case 'o': case 'O': e.preventDefault(); markOut(); break;
+      case 's': case 'S': e.preventDefault(); splitBeatAt(snapTime(video.currentTime)); break;
+      case 'm': case 'M': e.preventDefault(); if (selected >= 0) mergeWithNext(selected); break;
+      case 'r': case 'R': e.preventDefault(); if (selected >= 0) openPopover(selected); break;
+    }
+  });
+
+  /* ---------------- init: wire the static elements from the Task 2 shell ---------------- */
+  const sel = document.getElementById('bt-visual');
+  if (sel) sel.addEventListener('change', () => loadVideo(sel.value));
+  const loadBtn = document.getElementById('bt-load-btn');
+  if (loadBtn) loadBtn.onclick = async () => {
+    if (!currentPath) return;
+    const saved = await fetchBeats(currentPath);
+    if (saved) { applySavedBeats(saved); stage('beats carregados'); }
+    else stage('nenhum beats.json salvo para este vídeo', true);
+  };
+
+  /* entering the step never fires 'change' on a select whose option was set via
+     renderAssets()'s innerHTML — without this, a pre-populated dropdown loads nothing */
+  const origGoStep = window.goStep;
+  window.goStep = step => {
+    origGoStep(step);
+    if (step === 'beats' && sel && sel.value && sel.value !== currentPath) loadVideo(sel.value);
+  };
+})();
 </script>
 </body>
 </html>
