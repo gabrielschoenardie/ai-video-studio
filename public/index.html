@@ -251,12 +251,10 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 
 <nav aria-label="Pipeline steps">
   <div class="lbl">PIPELINE</div>
-  <button data-step="brief" class="on" aria-current="step"><span class="n" aria-hidden="true">01</span>BRIEF</button>
-  <button data-step="visuals"><span class="n" aria-hidden="true">02</span>VISUALS</button>
-  <button data-step="voice"><span class="n" aria-hidden="true">03</span>VOICE</button>
-  <button data-step="assemble"><span class="n" aria-hidden="true">04</span>ASSEMBLE</button>
-  <button data-step="score"><span class="n" aria-hidden="true">05</span>SCORE</button>
-  <button data-step="export"><span class="n" aria-hidden="true">06</span>EXPORT</button>
+  <button data-step="visuals" class="on" aria-current="step"><span class="n" aria-hidden="true">01</span>VISUALS</button>
+  <button data-step="voice"><span class="n" aria-hidden="true">02</span>VOICE</button>
+  <button data-step="assemble"><span class="n" aria-hidden="true">03</span>ASSEMBLE</button>
+  <button data-step="export"><span class="n" aria-hidden="true">04</span>EXPORT</button>
   <hr>
   <div class="lbl">TOOLS</div>
   <button data-step="clipper">
@@ -272,24 +270,9 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 
 <main>
 
-  <!-- 01 BRIEF -->
-  <section class="step on" id="step-brief">
-    <h2>01 / <em>BRIEF</em></h2>
-    <p class="sub">Decide the one idea the video sells and who it's for. The clearer the line, the cleaner everything downstream. The script written here feeds the VOICE step.</p>
-    <div class="card">
-      <label for="brief-idea">ONE-LINE IDEA</label>
-      <input type="text" id="brief-idea" placeholder="e.g. Uptime is not success — measure outcomes.">
-      <label for="brief-aud">AUDIENCE</label>
-      <input type="text" id="brief-aud" placeholder="e.g. AI & tech creators shipping reels weekly">
-      <label for="brief-script">SCRIPT (3–6 LINES)</label>
-      <textarea id="brief-script" placeholder="Line 1: the hook.&#10;Line 2–4: the payoff.&#10;Last line: the CTA."></textarea>
-      <button class="btn ghost" onclick="saveBrief()">SAVE BRIEF → FEEDS STEP 03</button>
-    </div>
-  </section>
-
-  <!-- 02 VISUALS -->
-  <section class="step" id="step-visuals">
-    <h2>02 / <em>VISUALS</em></h2>
+  <!-- 01 VISUALS -->
+  <section class="step on" id="step-visuals">
+    <h2>01 / <em>VISUALS</em></h2>
     <p class="sub">Bring the base visual. Upload footage, or render a motion-graphics composition with the bundled Remotion project. Detail rule: many small, sharp, glowing elements layered in depth — not big soft blobs.</p>
     <div class="card">
       <h3>UPLOAD FOOTAGE</h3>
@@ -313,9 +296,9 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
     <div class="card"><h3>VISUAL ASSETS</h3><div class="assets" id="assets-visual"></div></div>
   </section>
 
-  <!-- 03 VOICE -->
+  <!-- 02 VOICE -->
   <section class="step" id="step-voice">
-    <h2>03 / <em>VOICE</em></h2>
+    <h2>02 / <em>VOICE</em></h2>
     <p class="sub">Paste the script — narration is generated on this machine, free, as many takes as you want. Engine: Voicebox (MIT — start the app first). Fallbacks: piper / espeak-ng / say for scratch tracks.</p>
     <div class="card">
       <label for="vo-script">SCRIPT</label>
@@ -328,9 +311,9 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
     <div class="card"><h3>VOICE ASSETS</h3><div class="assets" id="assets-voice"></div></div>
   </section>
 
-  <!-- 04 ASSEMBLE -->
+  <!-- 03 ASSEMBLE -->
   <section class="step" id="step-assemble">
-    <h2>04 / <em>ASSEMBLE</em></h2>
+    <h2>03 / <em>ASSEMBLE</em></h2>
     <p class="sub">Stitch visual + voiceover into one MP4 with word-by-word captions timed to the beat (Whisper word timestamps). Output is a CRF-18 mezzanine — delivery encode happens in EXPORT.</p>
     <div class="card">
       <div class="row">
@@ -349,26 +332,9 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
     </div>
   </section>
 
-  <!-- 05 SCORE -->
-  <section class="step" id="step-score">
-    <h2>05 / <em>SCORE</em></h2>
-    <p class="sub">The improvement loop: render → score → fix the flagged seconds → re-score, until the curve holds. Built-in curve is a local attention <b>proxy</b> (audio energy + cut density + speech density). For brain-response scoring, install TRIBE v2 yourself — non-commercial license, never bundled.</p>
-    <div class="card">
-      <label for="score-input">VIDEO TO SCORE</label>
-      <select id="score-input"></select>
-      <button class="btn" onclick="doScore()">RUN ATTENTION CURVE</button>
-      <canvas id="curve" width="760" height="180"></canvas>
-      <div id="score-out"></div>
-    </div>
-    <div class="card">
-      <h3>TRIBE V2 — BRAIN MODEL (SELF-INSTALL)</h3>
-      <div id="tribe-info" class="sub" style="font-size:11.5px"></div>
-    </div>
-  </section>
-
-  <!-- 06 EXPORT -->
+  <!-- 04 EXPORT -->
   <section class="step" id="step-export">
-    <h2>06 / <em>EXPORT</em></h2>
+    <h2>04 / <em>EXPORT</em></h2>
     <p class="sub">Instagram delivery encode — Metodologia Gabriel. VBV profile auto-selected from measured duration, premium x264 stack, BT.709, GOP ≤ 60, +faststart. Recompression risk scored before encode; full compliance validation after.</p>
     <div class="card">
       <div class="row">
@@ -462,7 +428,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   <!-- LIBRARY -->
   <section class="step" id="step-library">
     <h2>▤ / <em>LIBRARY</em></h2>
-    <p class="sub">Everything produced or uploaded in this session. Assets flow between steps — send any of them to Assemble, Score, or Export.</p>
+    <p class="sub">Everything produced or uploaded in this session. Assets flow between steps — send any of them to Assemble or Export.</p>
     <div class="card"><div class="assets" id="assets-all"></div></div>
   </section>
 
@@ -494,7 +460,7 @@ window.goStep = step => {
 $$('nav button').forEach(b => b.onclick = () => goStep(b.dataset.step));
 
 /* next/prev footers on pipeline steps — guides first-time users through the flow */
-const STEP_ORDER = ['brief', 'visuals', 'voice', 'assemble', 'score', 'export'];
+const STEP_ORDER = ['visuals', 'voice', 'assemble', 'export'];
 STEP_ORDER.forEach((s, i) => {
   const prev = STEP_ORDER[i - 1], next = STEP_ORDER[i + 1];
   const d = document.createElement('div'); d.className = 'stepnav';
@@ -539,7 +505,6 @@ function renderAssets() {
   const opt = a => `<option value="${a.path}">${a.name}</option>`;
   $('#asm-visual').innerHTML = vids.map(opt).join('');
   $('#asm-vo').innerHTML = '<option value="">— none —</option>' + auds.map(opt).join('');
-  $('#score-input').innerHTML = vids.map(opt).join('');
   $('#exp-input').innerHTML = vids.map(opt).join('');
   $('#exp-lut').innerHTML = '<option value="">— none —</option>' + luts.map(opt).join('');
   $('#clip-file').innerHTML = '<option value="">— uploads —</option>' + vids.map(opt).join('');
@@ -598,11 +563,6 @@ async function api(path, body) {
     (d.llm.ok ? `<span class="chip ok">● LLM · ${d.llm.model || 'set'}</span>`
               : `<span class="chip wn" title="${d.llm.note}">○ LLM (offline detector active)</span>`);
 })();
-(async () => {
-  const t = await (await fetch('/api/tribe-info')).json();
-  $('#tribe-info').innerHTML = `<b>${t.name}</b><br>${t.license}<br><br>` +
-    t.install.map((s,i)=>`${i+1}. ${s}`).join('<br>');
-})();
 /* LUT library — .cube files sitting in luts/ become selectable at export */
 (async () => {
   try {
@@ -633,19 +593,6 @@ async function upload(f, after) {
 }
 wireDrop('#drop-visual', '#file-visual');
 wireDrop('#drop-clip', '#file-clip', j => { $('#clip-file').value = j.path; });
-
-/* ---------------- brief */
-window.saveBrief = () => {
-  const s = $('#brief-script').value.trim();
-  if (s) $('#vo-script').value = s;
-  localStorage.setItem('studio-brief', JSON.stringify({
-    idea: $('#brief-idea').value, aud: $('#brief-aud').value, script: s }));
-  stage('brief saved → script loaded in step 03');
-  markDone('brief');
-};
-try { const b = JSON.parse(localStorage.getItem('studio-brief') || 'null');
-  if (b) { $('#brief-idea').value = b.idea||''; $('#brief-aud').value = b.aud||'';
-    $('#brief-script').value = b.script||''; $('#vo-script').value = b.script||''; } } catch {}
 
 /* ---------------- remotion */
 window.renderRemotion = async () => {
@@ -689,55 +636,6 @@ window.doAssemble = async () => {
       `<video controls src="/files/${encodeURIComponent(r.output)}"></video>`;
   } catch (e) { stage(e.message, true); }
 };
-
-/* ---------------- score */
-window.doScore = async () => {
-  try {
-    const { job } = await api('/api/score', { input: $('#score-input').value });
-    const r = await watchJob(job);
-    drawCurve(r);
-    markDone('score');
-    $('#score-out').innerHTML =
-      `<span class="chip ${r.kind === 'tribe' ? 'ok' : 'wn'}">${r.kind === 'tribe' ? 'TRIBE v2 brain model' : 'local proxy'}</span>` +
-      (r.score != null ? ` <span class="chip ${r.score >= 60 ? 'ok' : 'wn'}">retention ${r.score}/100</span>` : '') +
-      (r.hook ? ` <span class="chip ${r.hook.weak ? 'wn' : 'ok'}" title="${r.hook.advice}">${r.hook.weak ? 'hook fraco' : 'hook forte'}</span>` : '') +
-      (r.dips && r.dips.length
-        ? `<table><tr><th>DIP</th><th>SECONDS</th><th>FIX</th></tr>` +
-          r.dips.map(d => `<tr><td class="bad-x">▼</td><td>${d.start}s–${d.end}s</td><td>${d.advice||'tighten / rewrite / add motion'}</td></tr>`).join('') + '</table>'
-        : '<p class="sub" style="margin-top:10px">no dips below threshold — the curve holds.</p>') +
-      (r.note ? `<p class="sub" style="margin-top:8px;font-size:11px">${r.note}</p>` : '');
-  } catch (e) { stage(e.message, true); }
-};
-function drawCurve(r) {
-  const cv = $('#curve'), ctx = cv.getContext('2d');
-  const W = cv.width, H = cv.height;
-  ctx.clearRect(0, 0, W, H);
-  ctx.strokeStyle = 'rgba(139,140,248,.12)';
-  for (let y = 0.25; y < 1; y += 0.25) { ctx.beginPath(); ctx.moveTo(0, H*y); ctx.lineTo(W, H*y); ctx.stroke(); }
-  const pts = r.curve || []; if (!pts.length) return;
-  const x = t => (t / Math.max(r.duration, 1)) * W;
-  const y = v => H - v * (H - 20) - 10;
-  // dip zones
-  ctx.fillStyle = 'rgba(251,113,133,.10)';
-  for (const d of r.dips || []) ctx.fillRect(x(d.start), 0, Math.max(x(d.end + 1) - x(d.start), 2), H);
-  // area under curve
-  ctx.beginPath();
-  pts.forEach((p, i) => i ? ctx.lineTo(x(p.t), y(p.v)) : ctx.moveTo(x(p.t), y(p.v)));
-  ctx.lineTo(x(pts[pts.length-1].t), H); ctx.lineTo(x(pts[0].t), H); ctx.closePath();
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, 'rgba(251,191,36,.22)'); grad.addColorStop(1, 'rgba(251,191,36,0)');
-  ctx.fillStyle = grad; ctx.fill();
-  // curve
-  ctx.beginPath(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2;
-  ctx.shadowColor = 'rgba(251,191,36,.55)'; ctx.shadowBlur = 8;
-  pts.forEach((p, i) => i ? ctx.lineTo(x(p.t), y(p.v)) : ctx.moveTo(x(p.t), y(p.v)));
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  // mean
-  ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(154,163,199,.4)';
-  ctx.beginPath(); ctx.moveTo(0, y(r.mean)); ctx.lineTo(W, y(r.mean)); ctx.stroke();
-  ctx.setLineDash([]);
-}
 
 /* ---------------- export */
 window.doExport = async () => {
