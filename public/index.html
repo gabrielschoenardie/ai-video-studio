@@ -353,6 +353,36 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   border:1px solid var(--line); border-radius:4px; padding:6px 8px; white-space:nowrap;
   overflow:hidden; text-overflow:ellipsis}
 .bt-asset-opt:hover{color:var(--go); border-color:rgba(251,191,36,.5)}
+
+@keyframes bt-pulse{0%,100%{box-shadow:0 0 6px rgba(251,191,36,.7)}50%{box-shadow:0 0 16px rgba(251,191,36,1)}}
+.bt-playhead-flag{animation:bt-pulse 1.6s ease-in-out infinite}
+
+.bt-tbtn,.bt-tctl,.bt-toggle{transition:color .15s ease,border-color .15s ease,box-shadow .15s ease}
+.bt-tbtn:focus-visible,.bt-tctl:focus-visible,.bt-toggle:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+.bt-beat{transition:transform .15s ease,filter .15s ease,box-shadow .15s ease}
+.bt-beat:hover{filter:brightness(1.15);transform:translateY(-1px);box-shadow:0 6px 16px -6px rgba(0,0,0,.6)}
+
+.bt-pop{transform-origin:top left;transition:transform .16s ease,opacity .16s ease}
+.bt-pop.enter{transform:scale(.96);opacity:0}
+.bt-role-opt{display:flex;align-items:center;gap:5px}
+.bt-role-dot{width:7px;height:7px;border-radius:2px;flex:0 0 auto}
+
+.bt-rate{font:600 10px var(--mono);color:#0a0a14;background:linear-gradient(180deg,#fde68a,#fbbf24);
+  padding:2px 8px;border-radius:999px;box-shadow:0 0 10px rgba(251,191,36,.55);letter-spacing:.04em;margin-left:8px}
+
+.bt-legend-row{position:relative;transition:background .15s ease}
+.bt-legend-row.active{background:rgba(251,191,36,.08)}
+.bt-legend-row .bar{position:absolute;left:22px;right:60px;bottom:2px;height:2px;border-radius:2px;
+  background:rgba(129,140,248,.25);overflow:hidden}
+.bt-legend-row .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--go-solid),var(--go))}
+
+.bt-preview-tag{position:absolute;top:8px;left:8px;font:600 8.5px var(--sans);letter-spacing:.08em;color:var(--go);
+  background:rgba(0,0,0,.55);border:1px solid rgba(251,191,36,.4);padding:2px 7px;border-radius:3px;z-index:3}
+.bt-preview-time{position:absolute;bottom:8px;right:8px;font:400 9.5px var(--mono);color:var(--dim);
+  background:rgba(0,0,0,.5);padding:2px 6px;border-radius:3px;z-index:3}
+.bt-cap-overlay{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:90%;text-align:center;
+  font:400 13px 'Unica One',sans-serif;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.85);z-index:3}
+.bt-cap-overlay b{color:var(--go);font-weight:400;text-shadow:0 0 10px rgba(251,191,36,.6)}
 </style>
 </head>
 <body>
@@ -1139,11 +1169,16 @@ window.sendToClipper = (p) => {
         <button class="bt-tbtn" id="bt-undo" title="Ctrl+Z">UNDO</button>
         <button class="bt-tbtn" id="bt-redo" title="Ctrl+Shift+Z">REDO</button>
         <div class="bt-time" id="bt-time">00:00.0<span class="d">/</span>00:00.0</div>
+        <span class="bt-rate" id="bt-rate" style="display:none"></span>
         <div class="bt-spacer"></div>
         <button class="bt-toggle" id="bt-save">SALVAR BEATS</button>
       </div>
       <div class="bt-preview">
-        <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video><canvas id="bt-canvas"></canvas></div>
+        <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video><canvas id="bt-canvas"></canvas>
+          <span class="bt-preview-tag">BEATS · REVISÃO</span>
+          <div class="bt-cap-overlay" id="bt-cap-overlay"></div>
+          <span class="bt-preview-time" id="bt-preview-time"></span>
+        </div>
         <div class="bt-legend" id="bt-legend-list"></div>
       </div>
       <div class="bt-scroll" id="bt-scroll">
@@ -1250,9 +1285,16 @@ window.sendToClipper = (p) => {
   function renderLegendList() {
     const host = $q('#bt-legend-list');
     if (!host) return;
-    host.innerHTML = BEATS.map((b, i) => `<div class="bt-legend-row" data-idx="${i}">
-        <span class="dot" style="background:${b.color}"></span>
-        <span class="n">${escapeHtml(b.label)}</span><span class="d">${b.dur.toFixed(1)}s</span></div>`).join('');
+    const t = video ? video.currentTime : 0;
+    host.innerHTML = BEATS.map((b, i) => {
+      const s = beatStart(i), active = t >= s && t < s + b.dur;
+      const pct = active ? Math.max(0, Math.min(100, ((t - s) / b.dur) * 100)) : 0;
+      return `<div class="bt-legend-row${active ? ' active' : ''}" data-idx="${i}">
+          <span class="dot" style="background:${b.color}${active ? `;box-shadow:0 0 8px ${b.color}` : ''}"></span>
+          <span class="n">${escapeHtml(b.label)}</span><span class="d">${b.dur.toFixed(1)}s</span>
+          ${active ? '<div class="bar"><i style="width:' + pct + '%"></i></div>' : ''}
+        </div>`;
+    }).join('');
     host.querySelectorAll('.bt-legend-row').forEach(row => {
       row.onclick = () => { selected = +row.dataset.idx; seekTo(beatStart(selected)); renderTracks(); };
     });
@@ -1333,6 +1375,8 @@ window.sendToClipper = (p) => {
         : '<div class="empty" style="padding:6px 0">Nenhum asset disponível — suba um arquivo em VISUALS ou VOICE.</div>'}</div>
       <div class="row2"><button id="bt-pop-cancel">FECHAR</button></div>`;
     document.body.appendChild(popEl);
+    popEl.classList.add('enter');
+    requestAnimationFrame(() => popEl.classList.remove('enter'));
     popEl.querySelectorAll('.bt-asset-opt').forEach(btn => {
       btn.onclick = () => {
         const asset = list.find(a => a.path === btn.dataset.path);
@@ -1459,6 +1503,16 @@ window.sendToClipper = (p) => {
       el.classList.toggle('active', t >= s && t < e);
     });
   }
+  function updatePreviewOverlay() {
+    const t = video ? video.currentTime : 0;
+    $q('#bt-preview-time').textContent = fmt(t);
+    const idx = words.findIndex(w => t >= w.start && t < w.end);
+    const el = $q('#bt-cap-overlay');
+    if (idx < 0) { el.innerHTML = ''; return; }
+    const before = words.slice(Math.max(0, idx - 2), idx).map(w => w.text).join(' ');
+    const after = words.slice(idx + 1, idx + 3).map(w => w.text).join(' ');
+    el.innerHTML = (before ? before + ' ' : '') + '<b>' + escapeHtml(words[idx].text) + '</b>' + (after ? ' ' + after : '');
+  }
   function applyTrackVisibility() {
     $$q('.bt-track-row').forEach(row => {
       const track = row.dataset.track;
@@ -1497,12 +1551,21 @@ window.sendToClipper = (p) => {
     if (video.paused) { stopReverseTimer(); jklLevel = 1; video.playbackRate = 1; video.play(); }
     else shuttleStop();
   }
+  function updateRateBadge() {
+    const el = $q('#bt-rate');
+    if (!el) return;
+    const abs = Math.abs(jklLevel);
+    if (abs <= 1) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.textContent = (jklLevel < 0 ? '◀ ' : '') + abs + '×';
+  }
   function shuttleForward() {
     if (!video) return;
     stopReverseTimer();
     jklLevel = jklLevel > 0 ? Math.min(8, jklLevel * 2) : 1;
     video.playbackRate = jklLevel;
     video.play();
+    updateRateBadge();
   }
   function shuttleReverse() {
     if (!video) return;
@@ -1515,10 +1578,12 @@ window.sendToClipper = (p) => {
       if (t <= 0) { t = 0; shuttleStop(); }
       video.currentTime = t;
     }, 1000 / 30);
+    updateRateBadge();
   }
   function shuttleStop() {
     jklLevel = 0; stopReverseTimer();
     if (video) { video.pause(); video.playbackRate = 1; }
+    updateRateBadge();
   }
   function frameStep(dir) {
     if (!video) return;
@@ -1549,10 +1614,13 @@ window.sendToClipper = (p) => {
     popEl.style.left = Math.max(6, Math.min(window.innerWidth - 226, rect.left)) + 'px';
     popEl.style.top = (rect.bottom + 6) + 'px';
     popEl.innerHTML = `<div class="t">PAPEL NARRATIVO</div>
-      <div class="bt-role-grid">${ROLES.map(r => `<button class="bt-role-opt${r === b.label ? ' cur' : ''}" data-role="${r}">${r}</button>`).join('')}</div>
+      <div class="bt-role-grid">${ROLES.map(r => `<button class="bt-role-opt${r === b.label ? ' cur' : ''}" data-role="${r}">
+    <span class="bt-role-dot" style="background:${colorFor(ROLES.indexOf(r))}"></span>${r}</button>`).join('')}</div>
       <input type="text" id="bt-pop-input" value="${escapeHtml(b.label)}" placeholder="rótulo livre…">
       <div class="row2"><button id="bt-pop-cancel">CANCELAR</button><button class="primary" id="bt-pop-save">SALVAR</button></div>`;
     document.body.appendChild(popEl);
+    popEl.classList.add('enter');
+    requestAnimationFrame(() => popEl.classList.remove('enter'));
     popEl.querySelectorAll('.bt-role-opt').forEach(btn => {
       btn.onclick = () => { $q('#bt-pop-input', popEl).value = btn.dataset.role; };
     });
@@ -1780,7 +1848,7 @@ window.sendToClipper = (p) => {
     $q('#bt-undo').onclick = undo;
     $q('#bt-redo').onclick = redo;
     $q('#bt-save').onclick = saveBeats;
-    video.addEventListener('timeupdate', () => { renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); });
+    video.addEventListener('timeupdate', () => { renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); updatePreviewOverlay(); renderLegendList(); });
     video.addEventListener('play', () => { $q('#bt-play').textContent = '❚❚'; });
     video.addEventListener('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; });
   }
