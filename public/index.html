@@ -311,7 +311,8 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 
 .bt-word{position:absolute; top:4px; bottom:4px; border-radius:3px; background:var(--panel2);
   border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
-  font:400 9.5px var(--mono); color:var(--dim); padding:0 3px; white-space:nowrap; overflow:hidden}
+  font:400 9.5px var(--mono); color:var(--dim); padding:0 3px; white-space:nowrap; overflow:hidden;
+  cursor:pointer}
 .bt-word.active{background:var(--go-dim); border-color:var(--go); color:var(--go)}
 
 .bt-playhead{position:absolute; top:0; bottom:0; width:1px; background:var(--go); z-index:7;
@@ -1089,30 +1090,16 @@ window.sendToClipper = (p) => {
     }
   }
 
-  /* ---------------- legend (real words parsed from the .ass) */
+  /* ---------------- legend (palavras reais, resolvidas no servidor a
+     partir do vídeo selecionado — não depende de lastAss de sessão) */
   async function loadLegend() {
     words = [];
-    if (!lastAss) return;
+    if (!currentPath) return;
     try {
-      const url = '/files/' + encodeURIComponent(lastAss.replace(/\\/g, '/'));
-      const text = await (await fetch(url)).text();
-      const toSec = (s) => {
-        const m = s.trim().match(/^(\d+):(\d\d):(\d\d)\.(\d\d)$/);
-        if (!m) return null;
-        return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / 100;
-      };
-      text.split(/\r?\n/).forEach(line => {
-        if (!line.startsWith('Dialogue:')) return;
-        const rest = line.slice('Dialogue:'.length);
-        const parts = rest.split(',');
-        if (parts.length < 10) return;
-        const start = toSec(parts[1]), end = toSec(parts[2]);
-        const txt = parts.slice(9).join(',');
-        const m = txt.match(/\{\\c[^}]*\}([^{]*)\{\\c[^}]*\}/);
-        if (!m || start == null || end == null) return; // no highlighted word on this line — skip
-        const w = m[1].trim();
-        if (w) words.push({ start, end, text: w });
-      });
+      const r = await fetch('/api/captions?video=' + encodeURIComponent(currentPath));
+      const j = await r.json();
+      if (!r.ok) return;
+      words = (j.words || []).map(w => ({ start: w.start, end: w.end, text: w.word }));
     } catch (e) { words = []; }
   }
 
@@ -1285,8 +1272,8 @@ window.sendToClipper = (p) => {
       host.innerHTML = '<div class="empty" style="padding:8px 10px">Sem legenda nesta sessão — rode ASSEMBLE com captions ligados.</div>';
       return;
     }
-    host.innerHTML = words.map(w =>
-      `<div class="bt-word" data-start="${w.start}" data-end="${w.end}" style="left:${timeToX(w.start)}px;width:${Math.max(4, timeToX(w.end - w.start))}px">${escapeHtml(w.text)}</div>`
+    host.innerHTML = words.map((w, i) =>
+      `<div class="bt-word" data-idx="${i}" data-start="${w.start}" data-end="${w.end}" title="Duplo-clique para corrigir" style="left:${timeToX(w.start)}px;width:${Math.max(4, timeToX(w.end - w.start))}px">${escapeHtml(w.text)}</div>`
     ).join('');
   }
   function renderLegendList() {
@@ -1645,6 +1632,59 @@ window.sendToClipper = (p) => {
       }
     }
   }
+  function openWordPopover(idx, anchorEl) {
+    closePopover();
+    if (idx < 0 || idx >= words.length) return;
+    const w = words[idx];
+    const rect = anchorEl ? anchorEl.getBoundingClientRect() : { left: 100, bottom: 100 };
+    popEl = document.createElement('div');
+    popEl.className = 'bt-pop';
+    popEl.style.left = Math.max(6, Math.min(window.innerWidth - 226, rect.left)) + 'px';
+    popEl.style.top = (rect.bottom + 6) + 'px';
+    popEl.innerHTML = `<div class="t">CORRIGIR PALAVRA</div>
+      <input type="text" id="bt-word-pop-input" value="${escapeHtml(w.text)}" placeholder="palavra correta…">
+      <div id="bt-word-pop-err" style="display:none;color:var(--bad);font:400 10px var(--sans);margin-top:5px"></div>
+      <div class="row2"><button id="bt-word-pop-cancel">CANCELAR</button><button class="primary" id="bt-word-pop-save">SALVAR</button></div>`;
+    document.body.appendChild(popEl);
+    popEl.classList.add('enter');
+    requestAnimationFrame(() => popEl.classList.remove('enter'));
+    const input = $q('#bt-word-pop-input', popEl);
+    input.focus(); input.select();
+    $q('#bt-word-pop-cancel', popEl).onclick = closePopover;
+    async function save() {
+      const val = input.value.trim();
+      const errEl = $q('#bt-word-pop-err', popEl);
+      errEl.style.display = 'none';
+      if (!val) { errEl.textContent = 'palavra não pode ficar vazia'; errEl.style.display = ''; return; }
+      const saveBtn = $q('#bt-word-pop-save', popEl);
+      saveBtn.textContent = 'SALVANDO…';
+      try {
+        const r = await fetch('/api/captions/word', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ video: currentPath, index: idx, start: w.start, newText: val }),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || String(r.status));
+        words = j.words.map(x => ({ start: x.start, end: x.end, text: x.word }));
+        renderLegendTrack();
+        updatePreviewOverlay();
+        closePopover();
+      } catch (e) {
+        errEl.textContent = String(e.message || e);
+        errEl.style.display = '';
+        saveBtn.textContent = 'SALVAR';
+      }
+    }
+    $q('#bt-word-pop-save', popEl).onclick = save;
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') save(); });
+    setTimeout(() => document.addEventListener('mousedown', onDocClick, { capture: true }), 0);
+    function onDocClick(ev) {
+      if (popEl && !popEl.contains(ev.target) && !(anchorEl && anchorEl.contains(ev.target))) {
+        closePopover();
+        document.removeEventListener('mousedown', onDocClick, { capture: true });
+      }
+    }
+  }
 
   /* ---------------- pointer interactions on the tracks area ---------------- */
   function pageXToTime(clientX) {
@@ -1805,6 +1845,8 @@ window.sendToClipper = (p) => {
     seekTo(t);
   }
   function onTracksDblClick(e) {
+    const wordEl = e.target.closest('.bt-word');
+    if (wordEl) { openWordPopover(+wordEl.dataset.idx, wordEl); return; }
     const beatEl = e.target.closest('.bt-beat');
     if (beatEl) openPopover(+beatEl.dataset.idx, beatEl);
   }

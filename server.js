@@ -18,6 +18,7 @@ const { clip } = require('./lib/clipper');
 const { encodeReel } = require('./lib/encode');
 const { score, TRIBE_INFO } = require('./lib/score');
 const { download } = require('./lib/download');
+const { writeAss } = require('./lib/captions');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT || '4870', 10);
@@ -198,6 +199,49 @@ const server = http.createServer(async (req, res) => {
         music: Array.isArray(b.music) ? b.music : [], updatedAt: new Date().toISOString() };
       fs.writeFileSync(sidecar, JSON.stringify(payload, null, 2), 'utf8');
       return send(res, 200, { ok: true, path: path.relative(ROOT, sidecar) });
+    }
+
+    // Captions — resolve o job dir de um vídeo montado (mesma convenção
+    // de nome já usada por /api/assemble: output/assembled-<id>.mp4 ↔
+    // jobs/<id>/). Usado pra ler/corrigir o transcript.json que alimenta
+    // o .ass, sem depender de estado de sessão no cliente.
+    function jobDirForVideo(videoRelPath) {
+      const m = path.basename(String(videoRelPath || '')).match(/^assembled-([a-f0-9]+)\.mp4$/);
+      if (!m) return null;
+      const dir = path.join(JOBS_DIR, m[1]);
+      return fs.existsSync(path.join(dir, 'transcript.json')) ? dir : null;
+    }
+    function captionStyleOf(dir) {
+      try {
+        const assText = fs.readFileSync(path.join(dir, 'captions.ass'), 'utf8');
+        if (/Arial Black/.test(assText)) return 'impact';
+        if (/Style:\s*Word,Arial,/.test(assText)) return 'clean';
+      } catch (e) { /* fall through */ }
+      return 'impact';
+    }
+    if (req.method === 'GET' && p === '/api/captions') {
+      const video = url.searchParams.get('video') || '';
+      const dir = jobDirForVideo(video);
+      if (!dir) return send(res, 200, { words: [], style: null });
+      const words = JSON.parse(fs.readFileSync(path.join(dir, 'transcript.json'), 'utf8')).words;
+      return send(res, 200, { words, style: captionStyleOf(dir) });
+    }
+    if (req.method === 'POST' && p === '/api/captions/word') {
+      const b = await readJson(req);
+      const dir = jobDirForVideo(b.video);
+      if (!dir) return send(res, 404, { error: 'sem legenda para este vídeo' });
+      const txPath = path.join(dir, 'transcript.json');
+      const tx = JSON.parse(fs.readFileSync(txPath, 'utf8'));
+      const w = tx.words[b.index];
+      if (!w || Math.abs(w.start - b.start) > 0.01) {
+        return send(res, 409, { error: 'legenda mudou desde que a página carregou — recarregue' });
+      }
+      const newWord = String(b.newText || '').trim();
+      if (!newWord) return send(res, 400, { error: 'palavra não pode ficar vazia' });
+      w.word = newWord;
+      fs.writeFileSync(txPath, JSON.stringify(tx, null, 2));
+      writeAss(tx.words, dir, { style: captionStyleOf(dir) });
+      return send(res, 200, { words: tx.words });
     }
 
     // Step 4 — voiceover
