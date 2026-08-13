@@ -249,6 +249,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-tbtn[disabled]{opacity:.3; cursor:default}
 .bt-tsep{width:1px; height:18px; background:var(--line)}
 .bt-time{font:400 13px var(--mono); color:var(--ink)}
+.bt-zoomlevel{font:400 10.5px var(--mono); color:var(--faint); min-width:38px; text-align:center}
 .bt-time .d{color:var(--faint); margin:0 3px}
 .bt-spacer{flex:1}
 .bt-toggle{all:unset; cursor:pointer; font:500 10.5px var(--sans); color:var(--dim);
@@ -281,7 +282,9 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-tick span{position:absolute; top:3px; left:4px; font-size:9px; color:var(--faint)}
 .bt-tick.major span{color:var(--dim)}
 .bt-tracks{position:relative; padding-bottom:12px}
-.bt-track-row{display:flex; min-height:44px; border-bottom:1px solid var(--line-soft)}
+.bt-track-row{display:flex; min-height:44px; border-bottom:1px solid var(--line-soft); position:relative}
+.bt-row-resize{position:absolute; left:0; right:0; bottom:-3px; height:6px; cursor:row-resize; z-index:3}
+.bt-row-resize:hover{background:var(--go-dim)}
 .bt-track-label{position:sticky; left:0; z-index:4; width:192px; flex:0 0 auto;
   display:flex; align-items:center; gap:6px; padding:0 9px; background:var(--panel);
   border-right:1px solid var(--line); font:600 9.5px var(--sans); letter-spacing:.08em; color:var(--dim)}
@@ -920,7 +923,10 @@ window.sendToClipper = (p) => {
     'TESE', 'PROVA', 'URGENCIA', 'OFERTA', 'BENEFICIO', 'CTA'];
   const BEAT_COLORS = ['#fbbf24', '#8b8cf8', '#ffb347', '#fb7185', '#34d399', '#60a5fa',
     '#f472b6', '#a3e635', '#22d3ee', '#fb923c'];
-  const PX_PER_SEC = 60;
+  let PX_PER_SEC = 60;
+  const PX_PER_SEC_MIN = 4;
+  const PX_PER_SEC_MAX = 400;
+  const ZOOM_STEP = Math.SQRT2;
   const MIN_BEAT_DUR = 0.15;
   const SNAP_PX = 8;
 
@@ -932,6 +938,9 @@ window.sendToClipper = (p) => {
   let selectedClip = null; // {track:'broll'|'music', index} | null
   let hist = [], histPos = -1;
   let hiddenTracks = {}, lockedTracks = {};
+  const TRACK_MIN_H = 44;
+  const TRACK_MAX_H = 240;
+  let trackHeights = { beats: 44, audio: 44, legend: 44, broll: 44, music: 44 };
   let trilhaMuted = false, trilhaSolo = false;
   const mediaCache = new Map(); // path -> {video?, audio?} — elementos ocultos pro compositor
   let inPoint = null, outPoint = null;
@@ -959,6 +968,31 @@ window.sendToClipper = (p) => {
   function timeToX(t) { return t * PX_PER_SEC; }
   function xToTime(x) { return Math.max(0, Math.min(DURATION, x / PX_PER_SEC)); }
   function contentWidth() { return Math.max(200, Math.ceil(DURATION * PX_PER_SEC)); }
+
+  function clampPx(v) { return Math.max(PX_PER_SEC_MIN, Math.min(PX_PER_SEC_MAX, v)); }
+  function updateZoomReadout() {
+    const el = $q('#bt-zoomlevel');
+    if (el) el.textContent = Math.round(PX_PER_SEC / 60 * 100) + '%';
+  }
+  function zoomAt(newPx, clientX) {
+    const scrollEl = $q('#bt-scroll');
+    if (!scrollEl) { PX_PER_SEC = clampPx(newPx); return; }
+    const rect = scrollEl.getBoundingClientRect();
+    const t = pageXToTime(clientX);
+    PX_PER_SEC = clampPx(newPx);
+    renderTracks();
+    scrollEl.scrollLeft = (192 + timeToX(t)) - (clientX - rect.left);
+    updateZoomReadout();
+  }
+  function zoomAtCenter(newPx) {
+    const rect = $q('#bt-scroll').getBoundingClientRect();
+    zoomAt(newPx, rect.left + rect.width / 2);
+  }
+  function fitToWindow() {
+    const scrollEl = $q('#bt-scroll');
+    const avail = scrollEl.clientWidth - 192;
+    if (DURATION > 0 && avail > 0) zoomAtCenter(avail / DURATION);
+  }
 
   /* ---------------- undo/redo (BEATS + BROLL + MUSIC snapshots) */
   function snapshot() {
@@ -1055,7 +1089,7 @@ window.sendToClipper = (p) => {
       const ctx = new AC();
       const audioBuf = await ctx.decodeAudioData(buf.slice(0));
       const data = audioBuf.getChannelData(0);
-      const totalPx = Math.ceil(contentWidth());
+      const totalPx = Math.ceil(DURATION * PX_PER_SEC_MAX);
       const cols = Math.max(1, Math.ceil(totalPx / 2)); // ~2px/coluna
       const samplesPerCol = Math.max(1, Math.floor(data.length / cols));
       const p = new Float32Array(cols);
@@ -1073,7 +1107,7 @@ window.sendToClipper = (p) => {
   function drawWaveform() {
     const canvas = $q('#bt-wave');
     if (!canvas) return;
-    const w = contentWidth(), h = 44;
+    const w = contentWidth(), h = trackHeights.audio;
     canvas.width = w; canvas.height = h;
     const track = $q('#bt-track-audio');
     if (track) track.style.width = w + 'px';
@@ -1159,6 +1193,11 @@ window.sendToClipper = (p) => {
         <div class="bt-tsep"></div>
         <button class="bt-tbtn" id="bt-undo" title="Ctrl+Z">UNDO</button>
         <button class="bt-tbtn" id="bt-redo" title="Ctrl+Shift+Z">REDO</button>
+        <div class="bt-tsep"></div>
+        <button class="bt-tbtn" id="bt-zoomout" title="-">−</button>
+        <span class="bt-zoomlevel" id="bt-zoomlevel">100%</span>
+        <button class="bt-tbtn" id="bt-zoomin" title="+">+</button>
+        <button class="bt-tbtn" id="bt-zoomfit" title="\">FIT</button>
         <div class="bt-time" id="bt-time">00:00.0<span class="d">/</span>00:00.0</div>
         <span class="bt-rate" id="bt-rate" style="display:none"></span>
         <div class="bt-spacer"></div>
@@ -1185,18 +1224,21 @@ window.sendToClipper = (p) => {
                 <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
                 <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
               <div class="bt-track-content" id="bt-track-beats"></div>
+              <div class="bt-row-resize" data-track="beats"></div>
             </div>
             <div class="bt-track-row" data-track="audio">
               <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
                 <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
                 <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
               <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
+              <div class="bt-row-resize" data-track="audio"></div>
             </div>
             <div class="bt-track-row" data-track="legend">
               <div class="bt-track-label"><span class="ic">T</span><span class="nm">LEGENDA</span>
                 <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
                 <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
               <div class="bt-track-content" id="bt-track-legend"></div>
+              <div class="bt-row-resize" data-track="legend"></div>
             </div>
             <div class="bt-track-row" data-track="broll">
               <div class="bt-track-label"><span class="ic">▭</span><span class="nm">B-ROLL</span>
@@ -1204,6 +1246,7 @@ window.sendToClipper = (p) => {
                 <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
                 <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
               <div class="bt-track-content" id="bt-track-broll"></div>
+              <div class="bt-row-resize" data-track="broll"></div>
             </div>
             <div class="bt-track-row" data-track="music">
               <div class="bt-track-label"><span class="ic">♫</span><span class="nm">TRILHA</span>
@@ -1213,6 +1256,7 @@ window.sendToClipper = (p) => {
                 <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
                 <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
               <div class="bt-track-content" id="bt-track-music"></div>
+              <div class="bt-row-resize" data-track="music"></div>
             </div>
           </div>
           <div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div></div>
@@ -1226,13 +1270,18 @@ window.sendToClipper = (p) => {
   }
 
   /* ---------------- render ---------------- */
+  const TICK_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900];
+  function pickTickStep(targetPx = 60) {
+    for (const s of TICK_STEPS) if (s * PX_PER_SEC >= targetPx) return s;
+    return TICK_STEPS[TICK_STEPS.length - 1];
+  }
   function renderRuler() {
     const ruler = $q('#bt-ruler');
     const w = contentWidth();
     $q('#bt-inner').style.width = (192 + w) + 'px';
     ruler.style.width = w + 'px';
     ruler.innerHTML = '';
-    const step = DURATION > 120 ? 10 : (DURATION > 40 ? 5 : 1);
+    const step = pickTickStep();
     let n = 0;
     for (let t = 0; t <= DURATION + 0.001; t += step, n++) {
       const tick = document.createElement('div');
@@ -1691,6 +1740,27 @@ window.sendToClipper = (p) => {
     const rulerRect = $q('#bt-ruler').getBoundingClientRect();
     return xToTime(clientX - rulerRect.left);
   }
+  function startRowResize(handleEl, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const track = handleEl.dataset.track;
+    const row = handleEl.closest('.bt-track-row');
+    const startY = e.clientY, startH = row.getBoundingClientRect().height;
+    function onMove(ev) {
+      const h = Math.max(TRACK_MIN_H, Math.min(TRACK_MAX_H, startH + (ev.clientY - startY)));
+      trackHeights[track] = h;
+      row.style.height = h + 'px';
+      if (track === 'audio') drawWaveform();
+      if (track === 'broll') renderBrollTrack();
+      if (track === 'music') renderMusicTrack();
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
   function startTrim(handleEl, e) {
     if (lockedTracks.beats) return;
     e.stopPropagation();
@@ -1865,6 +1935,7 @@ window.sendToClipper = (p) => {
   function wireTracks() {
     $$q('.bt-track-row').forEach(row => {
       const track = row.dataset.track;
+      row.style.height = (trackHeights[track] || TRACK_MIN_H) + 'px';
       row.querySelectorAll('.bt-tctl').forEach(btn => {
         btn.onclick = () => {
           const act = btn.dataset.act;
@@ -1876,6 +1947,8 @@ window.sendToClipper = (p) => {
           applyTrackVisibility();
         };
       });
+      const resizeHandle = row.querySelector('.bt-row-resize');
+      if (resizeHandle) resizeHandle.addEventListener('mousedown', e => startRowResize(resizeHandle, e));
     });
     $q('#bt-tracks').addEventListener('mousedown', onTracksMouseDown);
     $q('#bt-tracks').addEventListener('dblclick', onTracksDblClick);
@@ -1897,6 +1970,15 @@ window.sendToClipper = (p) => {
     $q('#bt-undo').onclick = undo;
     $q('#bt-redo').onclick = redo;
     $q('#bt-save').onclick = saveBeats;
+    $q('#bt-zoomin').onclick = () => zoomAtCenter(PX_PER_SEC * ZOOM_STEP);
+    $q('#bt-zoomout').onclick = () => zoomAtCenter(PX_PER_SEC / ZOOM_STEP);
+    $q('#bt-zoomfit').onclick = fitToWindow;
+    $q('#bt-scroll').addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      zoomAt(PX_PER_SEC * (e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), e.clientX);
+    }, { passive: false });
+    updateZoomReadout();
     video.addEventListener('timeupdate', () => { renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); updatePreviewOverlay(); renderLegendList(); });
     video.addEventListener('play', () => { $q('#bt-play').textContent = '❚❚'; });
     video.addEventListener('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; });
@@ -1919,6 +2001,8 @@ window.sendToClipper = (p) => {
     DURATION = info.duration || 0;
     selected = -1; selectedClip = null; inPoint = null; outPoint = null;
     hiddenTracks = {}; lockedTracks = {}; trilhaMuted = false; trilhaSolo = false;
+    trackHeights = { beats: 44, audio: 44, legend: 44, broll: 44, music: 44 };
+    PX_PER_SEC = 60; updateZoomReadout();
     clearMediaCache();
     const saved = await fetchBeats(path);
     if (saved && Array.isArray(saved.beats) && saved.beats.length) {
@@ -1962,6 +2046,9 @@ window.sendToClipper = (p) => {
       case 's': case 'S': e.preventDefault(); splitBeatAt(snapTime(video.currentTime)); break;
       case 'm': case 'M': e.preventDefault(); if (selected >= 0) mergeWithNext(selected); break;
       case 'r': case 'R': e.preventDefault(); if (selected >= 0) openPopover(selected); break;
+      case '+': case '=': e.preventDefault(); zoomAtCenter(PX_PER_SEC * ZOOM_STEP); break;
+      case '-': e.preventDefault(); zoomAtCenter(PX_PER_SEC / ZOOM_STEP); break;
+      case '\\': e.preventDefault(); fitToWindow(); break;
       case 'Delete': case 'Backspace':
         if (selectedClip) { e.preventDefault(); deleteSelectedClip(); }
         break;
