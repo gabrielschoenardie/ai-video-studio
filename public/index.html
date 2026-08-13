@@ -351,9 +351,11 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-clip.music{border-left:3px solid var(--warn)}
 .bt-clip.selected{outline:2px solid var(--go); outline-offset:-2px}
 .bt-clip.dragging{opacity:.45; cursor:grabbing}
-.bt-clip .nm{font:600 9.5px var(--sans); color:var(--ink); white-space:nowrap;
-  overflow:hidden; text-overflow:ellipsis; flex:1}
-.bt-clip-vol{width:46px; flex:0 0 auto}
+.bt-clip .nm{position:relative; z-index:1; font:600 9.5px var(--sans); color:var(--ink); white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; flex:1; text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.bt-clip-thumb{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.55; z-index:0}
+.bt-clip-wave{position:absolute; inset:0; width:100%; height:100%; z-index:0}
+.bt-clip-vol{position:relative; z-index:1; width:46px; flex:0 0 auto}
 .bt-handle.left{left:-2px}
 .bt-asset-list{display:flex; flex-direction:column; gap:3px; max-height:180px; overflow:auto;
   margin-bottom:8px}
@@ -935,7 +937,9 @@ window.sendToClipper = (p) => {
   let BROLL = []; // {path, name, start, dur}
   let MUSIC = []; // {path, name, start, dur, volume}
   let selected = -1;
-  let selectedClip = null; // {track:'broll'|'music', index} | null
+  let selectedClip = null; // {track:'broll'|'music', index} | null — âncora/único item quando não há multi-seleção
+  let selectedClipSet = new Set(); // multi-seleção de clipes B-ROLL/TRILHA: chaves 'track:index'
+  function clipKey(track, i) { return track + ':' + i; }
   let hist = [], histPos = -1;
   let hiddenTracks = {}, lockedTracks = {};
   const TRACK_MIN_H = 44;
@@ -943,6 +947,8 @@ window.sendToClipper = (p) => {
   let trackHeights = { beats: 44, audio: 44, legend: 44, broll: 44, music: 44 };
   let trilhaMuted = false, trilhaSolo = false;
   const mediaCache = new Map(); // path -> {video?, audio?} — elementos ocultos pro compositor
+  const thumbCache = new Map();    // path -> dataURL | 'pending' | null (frame do clipe B-ROLL)
+  const miniWaveCache = new Map(); // path -> Float32Array picos | 'pending' | null (mini-waveform do clipe TRILHA)
   let inPoint = null, outPoint = null;
   let currentPath = null;
   let words = []; // {start,end,text} parsed from the .ass
@@ -1006,6 +1012,7 @@ window.sendToClipper = (p) => {
     MUSIC = JSON.parse(JSON.stringify(entry.music || []));
     if (selected >= BEATS.length) selected = BEATS.length - 1;
     selectedClip = null;
+    selectedClipSet.clear();
     pruneMediaCache();
   }
   function undo() {
@@ -1120,6 +1127,57 @@ window.sendToClipper = (p) => {
       const col = Math.min(peaks.length - 1, Math.floor((x / w) * peaks.length));
       const v = peaks[col];
       const barH = Math.max(1, v * (h - 6));
+      ctx.fillRect(x, mid - barH / 2, 1.5, barH);
+    }
+  }
+  function ensureThumbnail(path) {
+    if (thumbCache.has(path)) return;
+    thumbCache.set(path, 'pending');
+    const v = document.createElement('video');
+    v.src = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
+    v.muted = true; v.preload = 'auto';
+    v.addEventListener('loadeddata', () => { v.currentTime = Math.min(1, (v.duration || 0) / 2); });
+    v.addEventListener('seeked', () => {
+      const c = document.createElement('canvas'); c.width = 80; c.height = 45;
+      c.getContext('2d').drawImage(v, 0, 0, 80, 45);
+      thumbCache.set(path, c.toDataURL('image/jpeg', .7));
+      v.remove();
+      renderBrollTrack();
+    }, { once: true });
+    v.addEventListener('error', () => { thumbCache.set(path, null); v.remove(); });
+    document.body.appendChild(v);
+  }
+  async function ensureMiniWave(path) {
+    if (miniWaveCache.has(path)) return;
+    miniWaveCache.set(path, 'pending');
+    try {
+      const buf = await (await fetch('/files/' + encodeURIComponent(path.replace(/\\/g, '/')))).arrayBuffer();
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      const data = (await ctx.decodeAudioData(buf.slice(0))).getChannelData(0);
+      const cols = 200, spc = Math.max(1, Math.floor(data.length / cols));
+      const p = new Float32Array(cols);
+      for (let c = 0; c < cols; c++) {
+        let m = 0; const s = c * spc, e2 = Math.min(data.length, s + spc);
+        for (let i = s; i < e2; i++) { const a = Math.abs(data[i]); if (a > m) m = a; }
+        p[c] = m;
+      }
+      miniWaveCache.set(path, p);
+      ctx.close();
+    } catch (e) { miniWaveCache.set(path, null); }
+    renderMusicTrack();
+  }
+  function drawPeaksToCanvas(canvas, peaksArr, color) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    if (!peaksArr || !peaksArr.length) return;
+    ctx.fillStyle = color;
+    const mid = h / 2;
+    for (let x = 0; x < w; x += 2) {
+      const col = Math.min(peaksArr.length - 1, Math.floor((x / w) * peaksArr.length));
+      const barH = Math.max(1, peaksArr[col] * (h - 6));
       ctx.fillRect(x, mid - barH / 2, 1.5, barH);
     }
   }
@@ -1382,12 +1440,23 @@ window.sendToClipper = (p) => {
     host.style.width = contentWidth() + 'px';
     const arr = clipsFor(track);
     host.innerHTML = arr.map((c, i) => {
-      const sel = selectedClip && selectedClip.track === track && selectedClip.index === i ? ' selected' : '';
+      const sel = (selectedClip && selectedClip.track === track && selectedClip.index === i) || selectedClipSet.has(clipKey(track, i)) ? ' selected' : '';
       const vol = track === 'music'
         ? `<input type="range" class="bt-clip-vol" min="0" max="1" step="0.05" value="${c.volume}" data-idx="${i}">`
         : '';
+      let media = '';
+      if (track === 'broll') {
+        ensureThumbnail(c.path);
+        const t = thumbCache.get(c.path);
+        if (t) media = `<img class="bt-clip-thumb" src="${t}">`;
+      }
+      if (track === 'music') {
+        ensureMiniWave(c.path);
+        if (miniWaveCache.get(c.path) instanceof Float32Array) media = `<canvas class="bt-clip-wave" data-idx="${i}"></canvas>`;
+      }
       return `<div class="bt-clip ${track}${sel}" data-track="${track}" data-idx="${i}"
           style="left:${timeToX(c.start)}px;width:${Math.max(4, timeToX(c.dur))}px">
+          ${media}
           <div class="bt-handle left" data-track="${track}" data-idx="${i}" data-side="left"></div>
           <span class="nm">${escapeHtml(c.name)}</span>${vol}
           <div class="bt-handle right" data-track="${track}" data-idx="${i}" data-side="right"></div>
@@ -1398,6 +1467,10 @@ window.sendToClipper = (p) => {
         inp.addEventListener('mousedown', e => e.stopPropagation());
         inp.addEventListener('input', () => { MUSIC[+inp.dataset.idx].volume = +inp.value; });
         inp.addEventListener('change', () => snapshot());
+      });
+      host.querySelectorAll('.bt-clip-wave').forEach(cv => {
+        const peaksArr = miniWaveCache.get(arr[+cv.dataset.idx].path);
+        if (peaksArr instanceof Float32Array) drawPeaksToCanvas(cv, peaksArr, 'rgba(255,179,71,.6)');
       });
     }
   }
@@ -1902,6 +1975,50 @@ window.sendToClipper = (p) => {
     snapshot();
     renderTracks();
   }
+  function clearMultiSelection() { selectedClipSet.clear(); }
+  function toggleClipMulti(track, i) {
+    if (!selectedClipSet.size && selectedClip) selectedClipSet.add(clipKey(selectedClip.track, selectedClip.index));
+    const key = clipKey(track, i);
+    if (selectedClipSet.has(key)) selectedClipSet.delete(key); else selectedClipSet.add(key);
+    selectedClip = selectedClipSet.size ? { track, index: i } : null;
+  }
+  function deleteSelection() {
+    if (selectedClipSet.size) {
+      const byTrack = { broll: [], music: [] };
+      selectedClipSet.forEach(k => { const [t, i] = k.split(':'); byTrack[t].push(+i); });
+      ['broll', 'music'].forEach(t => byTrack[t].sort((a, b) => b - a).forEach(i => clipsFor(t).splice(i, 1)));
+      clearMultiSelection();
+      selectedClip = null;
+      pruneMediaCache();
+      snapshot();
+      renderTracks();
+    } else {
+      deleteSelectedClip();
+    }
+  }
+  function startClipGroupMove(track0, i0, e) {
+    const keys = selectedClipSet.size ? [...selectedClipSet] : [clipKey(track0, i0)];
+    const items = keys.map(k => { const [track, i] = k.split(':'); return { track, index: +i, clip: clipsFor(track)[+i] }; })
+      .filter(it => it.clip && !lockedTracks[it.track]);
+    if (!items.length) return;
+    const origins = items.map(it => it.clip.start);
+    const startX = e.clientX;
+    function onMove(ev) {
+      const dt = (ev.clientX - startX) / PX_PER_SEC;
+      items.forEach((it, k) => {
+        it.clip.start = Math.max(0, Math.min(DURATION - it.clip.dur, origins[k] + dt));
+      });
+      renderBrollTrack(); renderMusicTrack();
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      snapshot();
+      renderTracks();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
   function onTracksMouseDown(e) {
     if (e.target.closest('.bt-track-label')) return; // H/L/M/S/+ controls — never seek the playhead
     const handle = e.target.closest('.bt-handle');
@@ -1909,7 +2026,18 @@ window.sendToClipper = (p) => {
     const beatEl = e.target.closest('.bt-beat');
     if (handle && handle.dataset.side) { startClipTrim(handle, e); return; }
     if (handle) { startTrim(handle, e); return; }
-    if (clipEl) { startClipMove(clipEl, e); return; }
+    if (clipEl) {
+      const track = clipEl.dataset.track, i = +clipEl.dataset.idx;
+      if (e.shiftKey) {
+        toggleClipMulti(track, i);
+        renderBrollTrack(); renderMusicTrack();
+        return;
+      }
+      if (selectedClipSet.has(clipKey(track, i))) { startClipGroupMove(track, i, e); return; }
+      clearMultiSelection();
+      startClipMove(clipEl, e);
+      return;
+    }
     if (beatEl) { startBeatDrag(beatEl, e); return; }
     const t = snapTime(pageXToTime(e.clientX));
     seekTo(t);
@@ -1999,7 +2127,7 @@ window.sendToClipper = (p) => {
     try { info = await api('/api/probe', { input: path }); }
     catch (e) { $('#bt-root').innerHTML = '<div class="empty">Falha ao carregar: ' + escapeHtml(e.message) + '</div>'; return; }
     DURATION = info.duration || 0;
-    selected = -1; selectedClip = null; inPoint = null; outPoint = null;
+    selected = -1; selectedClip = null; selectedClipSet.clear(); inPoint = null; outPoint = null;
     hiddenTracks = {}; lockedTracks = {}; trilhaMuted = false; trilhaSolo = false;
     trackHeights = { beats: 44, audio: 44, legend: 44, broll: 44, music: 44 };
     PX_PER_SEC = 60; updateZoomReadout();
@@ -2050,7 +2178,7 @@ window.sendToClipper = (p) => {
       case '-': e.preventDefault(); zoomAtCenter(PX_PER_SEC / ZOOM_STEP); break;
       case '\\': e.preventDefault(); fitToWindow(); break;
       case 'Delete': case 'Backspace':
-        if (selectedClip) { e.preventDefault(); deleteSelectedClip(); }
+        if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); }
         break;
     }
   });

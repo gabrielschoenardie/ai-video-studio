@@ -459,3 +459,104 @@ junto, preenchendo a pílula.
 ## Status
 
 _(propriedade do Executor)_
+
+**Execução concluída em 2026-08-12.** Todas as 8 tasks foram aplicadas em
+`public/index.html`, localizadas pelo conteúdo exato (não pelos números de
+linha estimados do plano, que já haviam se deslocado ligeiramente por causa
+do plano anterior) e substituídas literalmente pelo texto novo do plano,
+sem decisões de escopo adicionais.
+
+Arquivos tocados:
+- `C:\Users\Usuario\Documents\GitHub\ai-video-studio\public\index.html` (único arquivo modificado)
+
+Tasks aplicadas 1–8: estado de multi-seleção (`selectedClipSet`/`clipKey`),
+caches `thumbCache`/`miniWaveCache`, `clearMultiSelection`/`toggleClipMulti`/
+`deleteSelection`/`startClipGroupMove`, `onTracksMouseDown` com shift-clique
+e clique-para-arrastar-grupo, `Delete`/`Backspace` + `applyHistEntry` +
+`loadVideo` cientes de multi-seleção, `ensureThumbnail`/`ensureMiniWave`/
+`drawPeaksToCanvas`, CSS `.bt-clip-thumb`/`.bt-clip-wave`/`.bt-clip .nm`
+atualizado, e `renderClipTrack()` completa com injeção de thumbnail/mini-
+waveform e reconhecimento de `selectedClipSet` no destaque `.selected`.
+
+**Critérios de aceite gerais — verificados estaticamente:**
+
+1. `node --check server.js` → exit 0 (`SERVER_OK`). Confirma que `server.js`
+   não foi tocado e continua válido.
+2. `git diff --stat` → só `public/index.html` (1 file changed, 135
+   insertions(+), 7 deletions(-)). Nenhum outro arquivo modificado.
+3. Nenhuma classe fora do prefixo `bt-` foi criada/alterada — extraí todas
+   as classes de linhas `+` do diff (`bt-clip-thumb`, `bt-clip-wave`; as
+   demais linhas `+` de CSS/HTML só reusam classes `bt-` já existentes) e
+   conferi visualmente o diff completo linha a linha.
+4. Beats continuam intocados: `git diff public/index.html | grep -E
+   'startBeatDrag|doBeatTrim|splitBeatAt|mergeWithNext|openPopover'` não
+   retornou nenhuma linha — confirma zero mudança nessas funções.
+5. Adicionalmente rodei um `new Function(...)` sobre cada bloco `<script>`
+   extraído de `index.html` (via Node, fora do DOM) para garantir que o
+   JavaScript embutido continua sintaticamente válido após as 8 edições —
+   resultado `ALL_SCRIPTS_OK`.
+6. Revisei o diff completo (`git diff public/index.html`) linha a linha e
+   confirmo que bate byte-a-byte com o texto "novo" de cada uma das 8 tasks
+   do plano (nenhuma edição adicional, nenhuma reformulação).
+
+**Pendente de checagem visual/funcional ao vivo (não executada nesta
+sessão — sem browser/servidor disponível neste ambiente de execução):**
+
+- Shift-clique em clipes B-ROLL/TRILHA (misturando as duas tracks) de fato
+  seleciona múltiplos visualmente (outline `.selected` aplicado nos itens
+  certos).
+- `Delete`/`Backspace` com seleção múltipla ativa de fato remove todos os
+  itens de uma vez, sem desalinhar índices, em cenário real com o servidor
+  rodando e arquivos reais carregados.
+- Arrastar um clipe que já faz parte da seleção múltipla move o grupo
+  inteiro junto, em qualquer nível de zoom (herdado do plano anterior).
+- Clique simples (sem shift) fora da seleção atual volta ao comportamento
+  de seleção única de sempre — comportamento visual/interativo não testado
+  ao vivo.
+- Thumbnails de B-ROLL (frame real do vídeo via `<video>` oculto +
+  `canvas`) e mini-waveforms de TRILHA (via `AudioContext.decodeAudioData`)
+  de fato aparecem com arquivos reais servidos por `/files/` — depende do
+  servidor local rodando e de assets reais; não verificado nesta sessão.
+- Cache por path funcionando de fato em uso real (thumbnail/mini-waveform
+  não regenerados ao trocar seleção ou re-renderizar) — a lógica estática
+  do `thumbCache.has(path)`/`miniWaveCache.has(path)` está correta por
+  inspeção, mas não foi exercitada em runtime.
+
+Recomendação para o Orquestrador: abrir o app (`node server.js`), carregar
+um vídeo com clipes B-ROLL/TRILHA existentes (ou adicionar via popover "+"),
+e validar visualmente os 6 itens acima antes de considerar a rodada
+encerrada.
+
+## Verificação ao vivo (Orquestrador, pós-execução)
+
+Todos os 6 itens pendentes acima foram testados ao vivo no navegador, com
+vídeo real e clipes B-ROLL/TRILHA reais adicionados via o popover "+" já
+existente:
+
+- Shift-clique seleciona múltiplos (confirmado via `.bt-clip.broll.selected`
+  count e captura visual — outline âmbar nos dois clipes).
+- Bulk delete via tecla `Delete` removeu os 2 clipes selecionados numa
+  única chamada, sem desalinhar índices.
+- Arrastar um clipe do grupo move todos junto, respeitando o clamp
+  individual `[0, DURATION-dur]` de cada um (um falso-positivo de bug foi
+  investigado e descartado — o clipe "que não se moveu" num teste inicial
+  já estava encostado no fim da timeline, sem espaço pra ir além; um
+  segundo teste arrastando na direção oposta, com espaço livre, confirmou
+  os dois clipes se movendo pelo mesmo delta).
+- Thumbnail real (frame do vídeo) e mini-waveform real (do áudio)
+  confirmados renderizando dentro das pílulas de B-ROLL/TRILHA
+  respectivamente, com arquivos reais servidos via `/files/`.
+
+**Bug real encontrado e corrigido nesta verificação (fora do escopo das
+8 tasks originais, adicionado como correção pontual):** o overlay
+`.bt-clip-wave`/`.bt-clip-thumb` (`position:absolute; inset:0; z-index:0`,
+Task 7) cobria o slider de volume `.bt-clip-vol` da TRILHA — como o
+slider não tinha `position`/`z-index` próprio, o canvas posicionado
+pintava por cima dele no stacking order, tornando o controle de volume
+impossível de clicar sempre que a mini-waveform já tivesse carregado
+(achado originalmente pelo Validador na revisão do diff, depois
+confirmado ao vivo via `document.elementFromPoint` retornando o canvas em
+vez do slider). Corrigido adicionando `position:relative; z-index:1` à
+regra `.bt-clip-vol` (mesmo padrão já usado em `.bt-clip .nm`). Reconfirmado
+ao vivo pós-fix: `document.elementFromPoint` no centro do slider agora
+retorna o próprio `.bt-clip-vol`.
