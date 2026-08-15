@@ -393,6 +393,10 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-cap-overlay{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:90%;text-align:center;
   font:400 13px 'Unica One',sans-serif;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.85);z-index:3}
 .bt-cap-overlay b{color:var(--go);font-weight:400;text-shadow:0 0 10px rgba(251,191,36,.6)}
+.bt-preview-error{position:absolute; inset:0; display:flex; align-items:center;
+  justify-content:center; text-align:center; padding:16px; font:400 11.5px var(--sans);
+  color:var(--warn); background:rgba(7,7,15,.92); line-height:1.5}
+.bt-preview-error[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -953,6 +957,7 @@ window.sendToClipper = (p) => {
   let currentPath = null;
   let words = []; // {start,end,text} parsed from the .ass
   let peaks = null; // Float32Array of waveform peaks
+  let waveError = false; // true when decodeAudioData failed (codec não suportado pelo browser)
   let jklLevel = 0; // signed shuttle speed: <0 reverse, >0 forward, 0 stopped
   let revTimer = null;
   let built = false;
@@ -1089,6 +1094,7 @@ window.sendToClipper = (p) => {
   /* ---------------- waveform (real, decoded via Web Audio) */
   async function loadWaveform(path) {
     peaks = null;
+    waveError = false;
     try {
       const url = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
       const buf = await (await fetch(url)).arrayBuffer();
@@ -1108,7 +1114,11 @@ window.sendToClipper = (p) => {
       }
       peaks = p;
       ctx.close();
-    } catch (e) { peaks = null; }
+    } catch (e) {
+      peaks = null;
+      console.warn('BEATS: waveform indisponível —', e && e.message);
+      waveError = true;
+    }
     drawWaveform();
   }
   function drawWaveform() {
@@ -1120,7 +1130,15 @@ window.sendToClipper = (p) => {
     if (track) track.style.width = w + 'px';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, w, h);
-    if (!peaks || !peaks.length) return;
+    if (!peaks || !peaks.length) {
+      if (waveError) {
+        ctx.fillStyle = 'rgba(255,179,71,.65)'; // var(--warn) em rgba, canvas não lê custom properties
+        ctx.font = '10.5px Inter, sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('forma de onda indisponível (codec não suportado)', 8, h / 2);
+      }
+      return;
+    }
     ctx.fillStyle = 'rgba(129,140,248,.55)';
     const mid = h / 2;
     for (let x = 0; x < w; x += 2) {
@@ -1264,6 +1282,11 @@ window.sendToClipper = (p) => {
       <div class="bt-preview">
         <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video><canvas id="bt-canvas"></canvas>
           <span class="bt-preview-tag">BEATS · REVISÃO</span>
+          <div class="bt-preview-error" id="bt-preview-error" hidden>
+            Prévia indisponível — este navegador não decodifica o codec do vídeo
+            (comum em .mov gravado em HEVC/iPhone). O corte e o export continuam
+            funcionando normalmente.
+          </div>
           <div class="bt-cap-overlay" id="bt-cap-overlay"></div>
           <span class="bt-preview-time" id="bt-preview-time"></span>
         </div>
@@ -1322,6 +1345,17 @@ window.sendToClipper = (p) => {
         </div>
       </div>`;
     video = $q('#bt-video');
+    const boundVideo = video;
+    boundVideo.addEventListener('error', () => {
+      // O painel BEATS pode já ter sido reconstruído para outro vídeo antes
+      // desse evento (assíncrono) chegar — se `boundVideo` não é mais o
+      // `<video>` atual, o `#bt-preview-error` do DOM pertence a outro vídeo
+      // e não deve ser tocado (senão o aviso vaza pro vídeo errado).
+      if (boundVideo !== $q('#bt-video')) return;
+      console.warn('BEATS: preview indisponível —', boundVideo.error && boundVideo.error.message);
+      const el = $q('#bt-preview-error');
+      if (el) el.hidden = false;
+    });
     wireTransport();
     wireTracks();
     requestAnimationFrame(compositeTick);
@@ -2115,6 +2149,8 @@ window.sendToClipper = (p) => {
   /* ---------------- load a video into the editor ---------------- */
   async function loadVideo(path) {
     stopReverseTimer();
+    const prevErrEl = $q('#bt-preview-error');
+    if (prevErrEl) prevErrEl.hidden = true;
     if (!path) {
       $('#bt-root').innerHTML = '<div class="empty">Escolha um vídeo acima.</div>';
       built = false; video = null;
