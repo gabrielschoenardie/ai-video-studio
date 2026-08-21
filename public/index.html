@@ -256,11 +256,12 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   border:1px solid var(--line); border-radius:6px; padding:5px 10px}
 .bt-toggle.on{color:var(--go); border-color:rgba(251,191,36,.5); background:var(--go-dim)}
 
-.bt-preview{display:flex; gap:14px}
-.bt-video-wrap{width:220px; flex:0 0 auto; background:#000; border:1px solid var(--line);
+.bt-preview{display:flex; gap:14px; flex-wrap:wrap}
+.bt-video-wrap{width:min(220px,100%); flex:0 0 auto; background:#000; border:1px solid var(--line);
   border-radius:var(--radius-sm); overflow:hidden; aspect-ratio:9/16}
 .bt-video-wrap video{width:100%; height:100%; object-fit:contain; background:#000}
-.bt-legend{flex:1; display:flex; flex-direction:column; gap:6px; min-width:200px}
+.bt-legend{flex:1 1 200px; display:flex; flex-direction:column; gap:6px;
+  min-width:200px; max-width:420px}
 .bt-legend-head{font:600 9.5px var(--sans); letter-spacing:.08em; color:var(--dim);
   padding:2px 6px 4px}
 .bt-legend-row{display:flex; align-items:center; gap:8px; font:400 12px var(--mono);
@@ -286,12 +287,14 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-row-resize{position:absolute; left:0; right:0; bottom:-3px; height:6px; cursor:row-resize; z-index:3}
 .bt-row-resize:hover{background:var(--go-dim)}
 .bt-track-label{position:sticky; left:0; z-index:4; width:192px; flex:0 0 auto;
-  display:flex; align-items:center; gap:6px; padding:0 9px; background:var(--panel);
+  display:flex; align-items:center; gap:4px; padding:0 6px; background:var(--panel);
   border-right:1px solid var(--line); font:600 9.5px var(--sans); letter-spacing:.08em; color:var(--dim)}
 .bt-track-label .ic{color:var(--go); width:11px; text-align:center; flex:0 0 auto}
 .bt-track-label .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.bt-tctl{all:unset; flex:0 0 auto; cursor:pointer; color:var(--faint); font:700 8.5px var(--mono);
-  width:15px; height:15px; border-radius:3px; display:flex; align-items:center; justify-content:center}
+.bt-tctl{all:unset; flex:0 0 auto; cursor:pointer; color:var(--faint); font:700 9px var(--mono);
+  width:24px; height:24px; border-radius:3px; display:flex; align-items:center; justify-content:center;
+  transition:color .15s ease, background .15s ease}
+.bt-tctl:focus-visible{outline:2px solid var(--go); outline-offset:1px}
 .bt-tctl:hover{color:var(--ink)}
 .bt-tctl.on{color:var(--go); background:var(--go-dim)}
 .bt-track-content{position:relative; background:rgba(10,11,26,.5)}
@@ -389,8 +392,8 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-preview-tag{position:absolute;top:8px;left:8px;font:600 8.5px var(--sans);letter-spacing:.08em;color:var(--go);
   background:rgba(0,0,0,.55);border:1px solid rgba(251,191,36,.4);padding:2px 7px;border-radius:3px;z-index:3}
 .bt-preview-time{position:absolute;bottom:8px;right:8px;font:400 9.5px var(--mono);color:var(--dim);
-  background:rgba(0,0,0,.5);padding:2px 6px;border-radius:3px;z-index:3}
-.bt-cap-overlay{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);width:90%;text-align:center;
+  background:rgba(0,0,0,.5);padding:2px 6px;border-radius:3px;z-index:4}
+.bt-cap-overlay{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);width:90%;text-align:center;
   font:400 13px 'Unica One',sans-serif;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.85);z-index:3}
 .bt-cap-overlay b{color:var(--go);font-weight:400;text-shadow:0 0 10px rgba(251,191,36,.6)}
 .bt-preview-error{position:absolute; inset:0; display:flex; align-items:center;
@@ -1302,40 +1305,40 @@ window.sendToClipper = (p) => {
           <div class="bt-tracks" id="bt-tracks">
             <div class="bt-track-row" data-track="beats">
               <div class="bt-track-label"><span class="ic">▤</span><span class="nm">BEATS</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track BEATS">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track BEATS">L</button></div>
               <div class="bt-track-content" id="bt-track-beats"></div>
               <div class="bt-row-resize" data-track="beats"></div>
             </div>
             <div class="bt-track-row" data-track="audio">
               <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track ÁUDIO">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track ÁUDIO">L</button></div>
               <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
               <div class="bt-row-resize" data-track="audio"></div>
             </div>
             <div class="bt-track-row" data-track="legend">
               <div class="bt-track-label"><span class="ic">T</span><span class="nm">LEGENDA</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track LEGENDA">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track LEGENDA">L</button></div>
               <div class="bt-track-content" id="bt-track-legend"></div>
               <div class="bt-row-resize" data-track="legend"></div>
             </div>
             <div class="bt-track-row" data-track="broll">
               <div class="bt-track-label"><span class="ic">▭</span><span class="nm">B-ROLL</span>
-                <button class="bt-tctl" data-act="add" title="adicionar clipe">+</button>
-                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+                <button class="bt-tctl" data-act="add" title="adicionar clipe" aria-label="Adicionar clipe à track B-ROLL">+</button>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track B-ROLL">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track B-ROLL">L</button></div>
               <div class="bt-track-content" id="bt-track-broll"></div>
               <div class="bt-row-resize" data-track="broll"></div>
             </div>
             <div class="bt-track-row" data-track="music">
               <div class="bt-track-label"><span class="ic">♫</span><span class="nm">TRILHA</span>
-                <button class="bt-tctl" data-act="add" title="adicionar clipe">+</button>
-                <button class="bt-tctl" data-act="mute" title="mudo">M</button>
-                <button class="bt-tctl" data-act="solo" title="solo">S</button>
-                <button class="bt-tctl" data-act="hide" title="ocultar">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar">L</button></div>
+                <button class="bt-tctl" data-act="add" title="adicionar clipe" aria-label="Adicionar clipe à track TRILHA">+</button>
+                <button class="bt-tctl" data-act="mute" title="mudo" aria-label="Silenciar trilha TRILHA">M</button>
+                <button class="bt-tctl" data-act="solo" title="solo" aria-label="Ativar solo da trilha TRILHA">S</button>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track TRILHA">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track TRILHA">L</button></div>
               <div class="bt-track-content" id="bt-track-music"></div>
               <div class="bt-row-resize" data-track="music"></div>
             </div>
