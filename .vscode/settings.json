@@ -1,0 +1,19 @@
+{
+  "files.watcherExclude": {
+    "**/jobs/**": true,
+    "**/output/**": true,
+    "**/remotion/node_modules/**": true,
+    "**/.git/objects/**": true
+  },
+  "search.exclude": {
+    "**/jobs": true,
+    "**/output": true,
+    "**/remotion/node_modules": true,
+    "**/*.mp4": true,
+    "**/*.mov": true,
+    "**/*.MOV": true
+  },
+  "files.exclude": {
+    "**/remotion/node_modules": true
+  }
+}
