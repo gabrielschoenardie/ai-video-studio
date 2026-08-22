@@ -276,13 +276,16 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-inner{position:relative}
 .bt-ruler{position:sticky; top:0; z-index:5; height:22px; margin-left:192px;
   background:var(--panel); border-bottom:1px solid var(--line)}
-.bt-ruler-corner{position:absolute; left:-192px; top:0; width:192px; height:22px;
+.bt-ruler-corner{position:absolute; left:-192px; top:var(--bt-markers-h,0px); width:192px; height:22px;
   background:var(--panel); border-right:1px solid var(--line); border-bottom:1px solid var(--line); z-index:6}
 .bt-tick{position:absolute; top:0; bottom:0; border-left:1px solid var(--line-soft)}
 .bt-tick.major{border-left:1px solid rgba(129,140,248,.28)}
 .bt-tick span{position:absolute; top:3px; left:4px; font-size:9px; color:var(--faint)}
 .bt-tick.major span{color:var(--dim)}
 .bt-tracks{position:relative; padding-bottom:12px}
+/* Container da track MARKERS, que vive acima do ruler: sem o respiro de rodapé
+   que a pilha de tracks de baixo usa. */
+.bt-tracks-top{padding-bottom:0}
 .bt-track-row{display:flex; min-height:44px; border-bottom:1px solid var(--line-soft); position:relative}
 .bt-row-resize{position:absolute; left:0; right:0; bottom:-3px; height:6px; cursor:row-resize; z-index:3}
 .bt-row-resize:hover{background:var(--go-dim)}
@@ -323,7 +326,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 
 .bt-playhead{position:absolute; top:0; bottom:0; width:1px; background:var(--go); z-index:7;
   pointer-events:none; box-shadow:0 0 6px rgba(251,191,36,.7)}
-.bt-playhead-flag{position:absolute; top:0; left:-6px; width:13px; height:13px; background:var(--go);
+.bt-playhead-flag{position:absolute; top:var(--bt-markers-h,0px); left:-6px; width:13px; height:13px; background:var(--go);
   clip-path:polygon(0 0,100% 0,100% 60%,50% 100%,0 60%); pointer-events:auto; cursor:ew-resize}
 .bt-snap-guide{position:absolute; width:1px; background:var(--warn); z-index:8; pointer-events:none;
   box-shadow:0 0 5px rgba(255,179,71,.7)}
@@ -352,6 +355,15 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   border:1px solid var(--line); background:var(--panel2)}
 .bt-clip.broll{border-left:3px solid var(--go)}
 .bt-clip.music{border-left:3px solid var(--warn)}
+/* Clipe base da pista VÍDEO (V1). Classe própria — nunca .bt-clip — para que
+   onTracksMouseDown não o confunda com um clipe editável de B-ROLL/TRILHA. */
+.bt-clip-base{position:absolute; top:5px; bottom:5px; border-radius:5px; overflow:hidden;
+  display:flex; align-items:center; gap:6px; padding:0 8px; cursor:default;
+  border:1px solid var(--line); border-left:3px solid var(--dim); background:var(--panel2)}
+.bt-clip-base .nm{position:relative; z-index:1; font:600 9.5px var(--sans); color:var(--dim);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.bt-clip-base .tag{position:relative; z-index:1; flex:0 0 auto; font:400 8.5px var(--mono);
+  color:var(--faint); letter-spacing:.06em}
 .bt-clip.selected{outline:2px solid var(--go); outline-offset:-2px}
 .bt-clip.dragging{opacity:.45; cursor:grabbing}
 .bt-clip .nm{position:relative; z-index:1; font:600 9.5px var(--sans); color:var(--ink); white-space:nowrap;
@@ -419,7 +431,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
   <button data-step="visuals" class="on" aria-current="step"><span class="n" aria-hidden="true">01</span>VISUALS</button>
   <button data-step="voice"><span class="n" aria-hidden="true">02</span>VOICE</button>
   <button data-step="assemble"><span class="n" aria-hidden="true">03</span>ASSEMBLE</button>
-  <button data-step="beats"><span class="n" aria-hidden="true">04</span>BEATS</button>
+  <button data-step="beats"><span class="n" aria-hidden="true">04</span>TIMELINE</button>
   <button data-step="export"><span class="n" aria-hidden="true">05</span>EXPORT</button>
   <hr>
   <div class="lbl">TOOLS</div>
@@ -500,7 +512,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 
   <!-- 04 BEATS -->
   <section class="step wide" id="step-beats">
-    <h2>04 / <em>BEATS</em></h2>
+    <h2>04 / <em>TIMELINE</em></h2>
     <p class="sub">Divida o corte em papéis narrativos (HOOK, CONTEXTO, CTA…),
       ajuste as bordas arrastando, funda ou separe beats, e salve o rótulo ao
       lado do vídeo. Isso não altera o arquivo — é metadado para revisão e
@@ -642,12 +654,16 @@ $$('nav button').forEach(b => b.onclick = () => goStep(b.dataset.step));
 
 /* next/prev footers on pipeline steps — guides first-time users through the flow */
 const STEP_ORDER = ['visuals', 'voice', 'assemble', 'beats', 'export'];
+/* O id interno do passo 04 continua 'beats' (rota /api/beats, sidecar .beats.json,
+   #step-beats), mas o nome exibido é TIMELINE — daí o mapa em vez de toUpperCase(). */
+const STEP_LABELS = { visuals: 'VISUALS', voice: 'VOICE', assemble: 'ASSEMBLE', beats: 'TIMELINE', export: 'EXPORT' };
+const stepLabel = s => STEP_LABELS[s] || s.toUpperCase();
 STEP_ORDER.forEach((s, i) => {
   const prev = STEP_ORDER[i - 1], next = STEP_ORDER[i + 1];
   const d = document.createElement('div'); d.className = 'stepnav';
   d.innerHTML =
-    (prev ? `<button class="btn ghost sm" onclick="goStep('${prev}')">← ${String(i).padStart(2,'0')} ${prev.toUpperCase()}</button>` : '<span></span>') +
-    (next ? `<button class="btn sm" onclick="goStep('${next}')">${String(i + 2).padStart(2,'0')} ${next.toUpperCase()} →</button>` : '<span></span>');
+    (prev ? `<button class="btn ghost sm" onclick="goStep('${prev}')">← ${String(i).padStart(2,'0')} ${stepLabel(prev)}</button>` : '<span></span>') +
+    (next ? `<button class="btn sm" onclick="goStep('${next}')">${String(i + 2).padStart(2,'0')} ${stepLabel(next)} →</button>` : '<span></span>');
   $('#step-' + s).appendChild(d);
 });
 
@@ -951,7 +967,7 @@ window.sendToClipper = (p) => {
   let hiddenTracks = {}, lockedTracks = {};
   const TRACK_MIN_H = 44;
   const TRACK_MAX_H = 240;
-  let trackHeights = { beats: 44, audio: 44, legend: 44, broll: 44, music: 44 };
+  let trackHeights = { beats: 44, video: 44, audio: 44, legend: 44, broll: 44, music: 44 };
   let trilhaMuted = false, trilhaSolo = false;
   const mediaCache = new Map(); // path -> {video?, audio?} — elementos ocultos pro compositor
   const thumbCache = new Map();    // path -> dataURL | 'pending' | null (frame do clipe B-ROLL)
@@ -1164,6 +1180,7 @@ window.sendToClipper = (p) => {
       thumbCache.set(path, c.toDataURL('image/jpeg', .7));
       v.remove();
       renderBrollTrack();
+      renderVideoTrack();
     }, { once: true });
     v.addEventListener('error', () => { thumbCache.set(path, null); v.remove(); });
     document.body.appendChild(v);
@@ -1300,22 +1317,30 @@ window.sendToClipper = (p) => {
       </div>
       <div class="bt-scroll" id="bt-scroll">
         <div class="bt-inner" id="bt-inner">
-          <div class="bt-ruler-corner"></div>
-          <div class="bt-ruler" id="bt-ruler"></div>
-          <div class="bt-tracks" id="bt-tracks">
+          <div class="bt-tracks bt-tracks-top" id="bt-tracks-top">
             <div class="bt-track-row" data-track="beats">
-              <div class="bt-track-label"><span class="ic">▤</span><span class="nm">BEATS</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track BEATS">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track BEATS">L</button></div>
+              <div class="bt-track-label"><span class="ic">▤</span><span class="nm">MARKERS</span>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track MARKERS">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track MARKERS">L</button></div>
               <div class="bt-track-content" id="bt-track-beats"></div>
               <div class="bt-row-resize" data-track="beats"></div>
             </div>
-            <div class="bt-track-row" data-track="audio">
-              <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track ÁUDIO">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track ÁUDIO">L</button></div>
-              <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
-              <div class="bt-row-resize" data-track="audio"></div>
+          </div>
+          <div class="bt-ruler-corner"></div>
+          <div class="bt-ruler" id="bt-ruler"></div>
+          <div class="bt-tracks" id="bt-tracks">
+            <div class="bt-track-row" data-track="broll">
+              <div class="bt-track-label"><span class="ic">▭</span><span class="nm">B-ROLL</span>
+                <button class="bt-tctl" data-act="add" title="adicionar clipe" aria-label="Adicionar clipe à track B-ROLL">+</button>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track B-ROLL">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track B-ROLL">L</button></div>
+              <div class="bt-track-content" id="bt-track-broll"></div>
+              <div class="bt-row-resize" data-track="broll"></div>
+            </div>
+            <div class="bt-track-row" data-track="video">
+              <div class="bt-track-label"><span class="ic">▶</span><span class="nm">VÍDEO</span></div>
+              <div class="bt-track-content" id="bt-track-video"></div>
+              <div class="bt-row-resize" data-track="video"></div>
             </div>
             <div class="bt-track-row" data-track="legend">
               <div class="bt-track-label"><span class="ic">T</span><span class="nm">LEGENDA</span>
@@ -1324,13 +1349,12 @@ window.sendToClipper = (p) => {
               <div class="bt-track-content" id="bt-track-legend"></div>
               <div class="bt-row-resize" data-track="legend"></div>
             </div>
-            <div class="bt-track-row" data-track="broll">
-              <div class="bt-track-label"><span class="ic">▭</span><span class="nm">B-ROLL</span>
-                <button class="bt-tctl" data-act="add" title="adicionar clipe" aria-label="Adicionar clipe à track B-ROLL">+</button>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track B-ROLL">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track B-ROLL">L</button></div>
-              <div class="bt-track-content" id="bt-track-broll"></div>
-              <div class="bt-row-resize" data-track="broll"></div>
+            <div class="bt-track-row" data-track="audio">
+              <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
+                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track ÁUDIO">H</button>
+                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track ÁUDIO">L</button></div>
+              <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
+              <div class="bt-row-resize" data-track="audio"></div>
             </div>
             <div class="bt-track-row" data-track="music">
               <div class="bt-track-label"><span class="ic">♫</span><span class="nm">TRILHA</span>
@@ -1485,7 +1509,9 @@ window.sendToClipper = (p) => {
       if (track === 'broll') {
         ensureThumbnail(c.path);
         const t = thumbCache.get(c.path);
-        if (t) media = `<img class="bt-clip-thumb" src="${t}">`;
+        // 'pending' é truthy: sem o segundo teste, o primeiro render emite
+        // <img src="pending"> e pinta um ícone de imagem quebrada sobre o clipe.
+        if (t && t !== 'pending') media = `<img class="bt-clip-thumb" src="${t}">`;
       }
       if (track === 'music') {
         ensureMiniWave(c.path);
@@ -1513,6 +1539,26 @@ window.sendToClipper = (p) => {
   }
   function renderBrollTrack() { renderClipTrack('broll', 'bt-track-broll'); }
   function renderMusicTrack() { renderClipTrack('music', 'bt-track-music'); }
+  function baseNameOf(p) { return String(p || '').split(/[\\/]/).pop(); }
+  /* Pista V1: o vídeo principal como clipe base só-leitura, ocupando a timeline
+     inteira. Não é editável — DURATION, o <video> do preview, a régua, o playhead
+     e os beats saem dele, então mover/trimar aqui seria mexer na espinha da
+     timeline. O B-ROLL (V2) cobre trechos dele no compositor; a linha continua
+     cheia, como o V1 do Premiere. Classe .bt-clip-base (nunca .bt-clip) para que
+     onTracksMouseDown trate um clique aqui como scrub do playhead. */
+  function renderVideoTrack() {
+    const host = $q('#bt-track-video');
+    if (!host) return;
+    host.style.width = contentWidth() + 'px';
+    if (!currentPath) { host.innerHTML = ''; return; }
+    ensureThumbnail(currentPath);
+    const t = thumbCache.get(currentPath);
+    const media = (t && t !== 'pending') ? `<img class="bt-clip-thumb" src="${t}">` : '';
+    host.innerHTML = `<div class="bt-clip-base" style="left:0;width:${Math.max(4, timeToX(DURATION))}px">
+        ${media}
+        <span class="nm">${escapeHtml(baseNameOf(currentPath))}</span><span class="tag">V1 · BASE</span>
+      </div>`;
+  }
   function openAddClipPopover(track, anchorEl) {
     closePopover();
     const kind = track === 'broll' ? 'video' : 'audio';
@@ -1642,7 +1688,9 @@ window.sendToClipper = (p) => {
     el.style.display = 'block';
     el.style.left = (192 + timeToX(a)) + 'px';
     el.style.width = timeToX(b - a) + 'px';
-    el.style.top = '22px'; el.style.bottom = '0';
+    // Vai até o topo de #bt-inner: o ruler (opaco, z-index 5 > 1) mascara a
+    // própria faixa, então a banda cobre MARKERS e as tracks de baixo sem cálculo.
+    el.style.top = '0'; el.style.bottom = '0';
   }
   function updateTimeDisplay() {
     const el = $q('#bt-time');
@@ -1682,6 +1730,17 @@ window.sendToClipper = (p) => {
       });
     });
   }
+  /* A track MARKERS fica acima do ruler, então o canto do ruler e a bandeira do
+     playhead precisam descer pela altura dela — que é redimensionável (44–240px).
+     Publicamos essa altura como CSS var em #bt-inner em vez de fixá-la no CSS.
+     Altura 0 (painel oculto) é ignorada para não zerar um valor bom. */
+  function syncMarkersOffset() {
+    const inner = $q('#bt-inner');
+    const row = $q('.bt-track-row[data-track="beats"]');
+    if (!inner || !row) return;
+    const h = row.offsetHeight;
+    if (h > 0) inner.style.setProperty('--bt-markers-h', h + 'px');
+  }
   function renderTracks() {
     renderRuler();
     renderBeatsTrack();
@@ -1689,12 +1748,14 @@ window.sendToClipper = (p) => {
     renderLegendTrack();
     renderLegendList();
     renderBrollTrack();
+    renderVideoTrack();
     renderMusicTrack();
     renderPlayhead();
     renderInOut();
     updateTimeDisplay();
     highlightActiveWord();
     applyTrackVisibility();
+    syncMarkersOffset();
   }
 
   /* ---------------- transport / shuttle ---------------- */
@@ -1863,6 +1924,7 @@ window.sendToClipper = (p) => {
       if (track === 'audio') drawWaveform();
       if (track === 'broll') renderBrollTrack();
       if (track === 'music') renderMusicTrack();
+      if (track === 'beats') syncMarkersOffset();
     }
     function onUp() {
       document.removeEventListener('mousemove', onMove);
@@ -2115,8 +2177,14 @@ window.sendToClipper = (p) => {
       const resizeHandle = row.querySelector('.bt-row-resize');
       if (resizeHandle) resizeHandle.addEventListener('mousedown', e => startRowResize(resizeHandle, e));
     });
-    $q('#bt-tracks').addEventListener('mousedown', onTracksMouseDown);
-    $q('#bt-tracks').addEventListener('dblclick', onTracksDblClick);
+    // A track MARKERS vive em #bt-tracks-top (acima do ruler); ambos os containers
+    // precisam da mesma delegação, senão arrastar/trimar/renomear beat morre em silêncio.
+    ['#bt-tracks-top', '#bt-tracks'].forEach(sel => {
+      const host = $q(sel);
+      if (!host) return;
+      host.addEventListener('mousedown', onTracksMouseDown);
+      host.addEventListener('dblclick', onTracksDblClick);
+    });
     $q('#bt-ruler').addEventListener('mousedown', onRulerMouseDown);
     $q('.bt-playhead-flag').addEventListener('mousedown', onFlagMouseDown);
   }
@@ -2168,7 +2236,7 @@ window.sendToClipper = (p) => {
     DURATION = info.duration || 0;
     selected = -1; selectedClip = null; selectedClipSet.clear(); inPoint = null; outPoint = null;
     hiddenTracks = {}; lockedTracks = {}; trilhaMuted = false; trilhaSolo = false;
-    trackHeights = { beats: 44, audio: 44, legend: 44, broll: 44, music: 44 };
+    trackHeights = { beats: 44, video: 44, audio: 44, legend: 44, broll: 44, music: 44 };
     PX_PER_SEC = 60; updateZoomReadout();
     clearMediaCache();
     const saved = await fetchBeats(path);
