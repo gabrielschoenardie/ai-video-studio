@@ -348,6 +348,14 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-pop .row2 button{all:unset; flex:1; text-align:center; cursor:pointer; font:500 10px var(--sans);
   color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:6px}
 .bt-pop .row2 button.primary{background:var(--go); border-color:var(--go); color:#191100; font-weight:700}
+/* Menu de contexto do clipe — variação estreita do popover, reusando o mesmo
+   chrome (fundo, borda, sombra, animação de entrada) dos outros três popovers. */
+.bt-pop.bt-menu{width:174px; padding:5px}
+.bt-menu-item{all:unset; display:block; box-sizing:border-box; width:100%; cursor:pointer;
+  font:500 10px var(--sans); letter-spacing:.04em; color:var(--dim); padding:7px 9px; border-radius:5px}
+.bt-menu-item:hover:not([disabled]){color:var(--go); background:var(--go-dim)}
+.bt-menu-item[disabled]{opacity:.35; cursor:default}
+.bt-menu-item:focus-visible{outline:2px solid var(--go); outline-offset:-2px}
 .bt-video-wrap{position:relative}
 .bt-video-wrap canvas{position:absolute; inset:0; width:100%; height:100%}
 .bt-clip{position:absolute; top:5px; bottom:5px; border-radius:5px; cursor:grab;
@@ -954,11 +962,19 @@ window.sendToClipper = (p) => {
   const ZOOM_STEP = Math.SQRT2;
   const MIN_BEAT_DUR = 0.15;
   const SNAP_PX = 8;
+  // Dois alvos a menos que isso de distância contam como empate; aí a prioridade
+  // (playhead > borda de clipe > o resto) desempata. Prioridade estrita ficaria
+  // ruim na mão: uma fronteira a 1px perderia para um playhead a 7px.
+  const SNAP_TIE_PX = 2;
 
   let DURATION = 0;
   let BEATS = [];
-  let BROLL = []; // {path, name, start, dur}
-  let MUSIC = []; // {path, name, start, dur, volume}
+  // srcIn = instante dentro do arquivo de origem onde o clipe começa (default 0).
+  // Desacopla "onde está na timeline" de "de onde toca na mídia": é o que faz o
+  // trim da borda esquerda aparar a entrada em vez de só atrasar o clipe, e o que
+  // permite dividir um clipe sem que a segunda metade volte ao início da fonte.
+  let BROLL = []; // {path, name, start, dur, srcIn}
+  let MUSIC = []; // {path, name, start, dur, volume, srcIn}
   let selected = -1;
   let selectedClip = null; // {track:'broll'|'music', index} | null — âncora/único item quando não há multi-seleção
   let selectedClipSet = new Set(); // multi-seleção de clipes B-ROLL/TRILHA: chaves 'track:index'
@@ -1067,18 +1083,49 @@ window.sendToClipper = (p) => {
   }
 
   /* ---------------- snapping */
-  function snapTargets() {
-    const t = [0, DURATION];
-    for (let i = 0; i <= BEATS.length; i++) t.push(beatStart(i));
-    if (inPoint != null) t.push(inPoint);
-    if (outPoint != null) t.push(outPoint);
-    return t;
+  /* Alvos de encaixe. Sem `opts`, a lista é exatamente a de sempre — é assim que
+     régua, beats, IN/OUT e addClipAt continuam chamando, e o comportamento deles
+     não muda. Bordas de clipe e playhead são condicionais de propósito: se o
+     playhead fosse alvo global, arrastar a própria bandeira o faria grudar em si
+     mesmo e o scrub ficaria pegajoso.
+     rank = prioridade no desempate: 0 playhead, 1 borda de clipe, 2 o resto. */
+  function snapTargets(opts) {
+    const o = opts || {};
+    const out = [{ t: 0, rank: 2 }, { t: DURATION, rank: 2 }];
+    for (let i = 0; i <= BEATS.length; i++) out.push({ t: beatStart(i), rank: 2 });
+    if (inPoint != null) out.push({ t: inPoint, rank: 2 });
+    if (outPoint != null) out.push({ t: outPoint, rank: 2 });
+    if (o.clipEdges) {
+      ['broll', 'music'].forEach(track => clipsFor(track).forEach((c, i) => {
+        if (o.exclude && o.exclude.has(clipKey(track, i))) return;
+        out.push({ t: c.start, rank: 1 }, { t: c.start + c.dur, rank: 1 });
+      }));
+    }
+    if (o.playhead && video) out.push({ t: video.currentTime, rank: 0 });
+    return out;
   }
-  function snapTime(t) {
+  /* Devolve QUAL alvo pegou, não só o tempo — a guia de alinhamento precisa saber
+     onde desenhar, e o encaixe de borda dupla precisa comparar duas consultas.
+     Regra: mais próximo vence; rank menor só ganha se estiver praticamente à mesma
+     distância. Com `opts` ausente todos os ranks são 2, os dois primeiros ramos
+     nunca disparam, e sobra `d < best.d` — idêntico ao código anterior. */
+  function snapCandidate(t, opts) {
     const thr = SNAP_PX / PX_PER_SEC;
-    let best = t, bestD = thr;
-    snapTargets().forEach(c => { const d = Math.abs(c - t); if (d < bestD) { bestD = d; best = c; } });
-    return Math.max(0, Math.min(DURATION, best));
+    const tie = SNAP_TIE_PX / PX_PER_SEC;
+    let best = null;
+    snapTargets(opts).forEach(c => {
+      const d = Math.abs(c.t - t);
+      if (d >= thr) return;
+      if (!best) { best = { t: c.t, d: d, rank: c.rank }; return; }
+      if (c.rank < best.rank && d <= best.d + tie) { best = { t: c.t, d: d, rank: c.rank }; return; }
+      if (c.rank > best.rank && best.d <= d + tie) return;
+      if (d < best.d) best = { t: c.t, d: d, rank: c.rank };
+    });
+    return best;
+  }
+  function snapTime(t, opts) {
+    const s = snapCandidate(t, opts);
+    return Math.max(0, Math.min(DURATION, s ? s.t : t));
   }
 
   /* ---------------- beat operations */
@@ -1248,8 +1295,8 @@ window.sendToClipper = (p) => {
       const r = await api('/api/beats', {
         video: currentPath, duration: DURATION,
         beats: BEATS.map((b, i) => ({ label: b.label, start: beatStart(i), dur: b.dur })),
-        broll: BROLL.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur })),
-        music: MUSIC.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume })),
+        broll: BROLL.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })),
+        music: MUSIC.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume, srcIn: c.srcIn || 0 })),
       });
       stage('beats salvos: ' + r.path);
     } catch (e) { stage(e.message, true); }
@@ -1257,8 +1304,8 @@ window.sendToClipper = (p) => {
   function applySavedBeats(saved) {
     if (!saved || !Array.isArray(saved.beats) || !saved.beats.length) return false;
     BEATS = saved.beats.map((b, i) => ({ label: b.label, dur: b.dur, color: colorFor(i) }));
-    BROLL = Array.isArray(saved.broll) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur })) : [];
-    MUSIC = Array.isArray(saved.music) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1 })) : [];
+    BROLL = Array.isArray(saved.broll) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })) : [];
+    MUSIC = Array.isArray(saved.music) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
     selected = -1; selectedClip = null;
     pruneMediaCache();
     snapshot();
@@ -1488,8 +1535,8 @@ window.sendToClipper = (p) => {
       if (dur <= MIN_BEAT_DUR) { stage('sem espaço até o fim da timeline', true); return; }
     }
     const clip = track === 'broll'
-      ? { path: asset.path, name: asset.name, start, dur }
-      : { path: asset.path, name: asset.name, start, dur, volume: 1 };
+      ? { path: asset.path, name: asset.name, start, dur, srcIn: 0 }
+      : { path: asset.path, name: asset.name, start, dur, volume: 1, srcIn: 0 };
     clipsFor(track).push(clip);
     selectedClip = { track, index: clipsFor(track).length - 1 };
     snapshot();
@@ -1539,6 +1586,51 @@ window.sendToClipper = (p) => {
   }
   function renderBrollTrack() { renderClipTrack('broll', 'bt-track-broll'); }
   function renderMusicTrack() { renderClipTrack('music', 'bt-track-music'); }
+  /* Só é possível dividir com o playhead dentro do clipe e com margem para os dois
+     fragmentos — um fragmento menor que MIN_BEAT_DUR seria inarrastável. */
+  function canSplitClip(track, i, t) {
+    const c = clipsFor(track)[i];
+    return !!c && t > c.start + MIN_BEAT_DUR && t < c.start + c.dur - MIN_BEAT_DUR;
+  }
+  /* A segunda metade avança srcIn pela duração da primeira — é isso que faz o corte
+     ser contínuo em vez de saltar de volta ao início da mídia. */
+  function splitClipAt(track, i, t) {
+    if (!canSplitClip(track, i, t)) return false;
+    const arr = clipsFor(track);
+    const c = arr[i];
+    const d1 = t - c.start;
+    arr.splice(i, 1,
+      Object.assign({}, c, { dur: d1 }),
+      Object.assign({}, c, { start: t, dur: c.dur - d1, srcIn: (c.srcIn || 0) + d1 }));
+    clearMultiSelection();
+    selectedClip = { track, index: i + 1 };
+    snapshot();
+    renderTracks();
+    return true;
+  }
+  /* Onde a cópia caberia. B-ROLL não admite sobreposição, então depende de haver
+     lacuna com a duração inteira; TRILHA admite, e só precisa caber na timeline. */
+  function duplicateTargetStart(track, i) {
+    const c = clipsFor(track)[i];
+    if (!c) return null;
+    if (track === 'broll') {
+      const gap = findGapAt('broll', c.start + c.dur, c.dur);
+      return gap && gap.dur >= c.dur - 1e-9 ? gap.start : null;
+    }
+    if (c.dur > DURATION) return null;
+    return Math.max(0, Math.min(c.start + c.dur, DURATION - c.dur));
+  }
+  function duplicateClip(track, i) {
+    const c = clipsFor(track)[i];
+    const start = duplicateTargetStart(track, i);
+    if (!c || start == null) { stage('sem espaço livre para duplicar nesta pista', true); return false; }
+    clipsFor(track).push(Object.assign({}, c, { start: start }));
+    clearMultiSelection();
+    selectedClip = { track, index: clipsFor(track).length - 1 };
+    snapshot();
+    renderTracks();
+    return true;
+  }
   function baseNameOf(p) { return String(p || '').split(/[\\/]/).pop(); }
   /* Pista V1: o vídeo principal como clipe base só-leitura, ocupando a timeline
      inteira. Não é editável — DURATION, o <video> do preview, a régua, o playhead
@@ -1647,7 +1739,7 @@ window.sendToClipper = (p) => {
     }
     if (active) {
       const bv = getBrollVideoEl(active.path);
-      const target = t - active.start;
+      const target = (active.srcIn || 0) + (t - active.start);
       if (Math.abs(bv.currentTime - target) > 0.15) bv.currentTime = target;
       if (video.paused) { if (!bv.paused) bv.pause(); }
       else if (bv.paused) bv.play().catch(() => {});
@@ -1665,7 +1757,7 @@ window.sendToClipper = (p) => {
       el.volume = Math.max(0, Math.min(1, c.volume));
       el.muted = trilhaMuted;
       if (shouldPlay) {
-        const target = t - c.start;
+        const target = (c.srcIn || 0) + (t - c.start);
         if (Math.abs(el.currentTime - target) > 0.15) el.currentTime = target;
         if (el.paused) el.play().catch(() => {});
       } else if (!el.paused) {
@@ -1815,6 +1907,92 @@ window.sendToClipper = (p) => {
   function markOut() { if (video) { outPoint = snapTime(video.currentTime); renderInOut(); } }
 
   /* ---------------- rename popover ---------------- */
+  /* Guia de alinhamento. O CSS .bt-snap-guide já existia no arquivo e nunca havia
+     sido instanciado. A guia só aparece quando o encaixe sobrevive ao clamp de
+     colisão — ela nunca mente sobre onde o clipe vai realmente parar. */
+  let snapGuideEl = null;
+  function showSnapGuide(t) {
+    if (!snapGuideEl) {
+      const inner = $q('#bt-inner');
+      if (!inner) return;
+      snapGuideEl = document.createElement('div');
+      snapGuideEl.className = 'bt-snap-guide';
+      inner.appendChild(snapGuideEl);
+    }
+    snapGuideEl.style.left = (192 + timeToX(t)) + 'px';
+    snapGuideEl.style.top = '0';
+    snapGuideEl.style.bottom = '0';
+  }
+  function hideSnapGuide() {
+    if (snapGuideEl) { snapGuideEl.remove(); snapGuideEl = null; }
+  }
+  /* Testa as DUAS bordas do clipe arrastado e devolve a que estiver mais perto de
+     um alvo. É isto que faz encostar a CAUDA de um clipe na cabeça de outro
+     funcionar — antes só o início era testado, e metade dos gestos não grudava. */
+  function snapDragStart(rawStart, dur, opts) {
+    const head = snapCandidate(rawStart, opts);
+    const tail = snapCandidate(rawStart + dur, opts);
+    if (head && tail) {
+      return head.d <= tail.d
+        ? { start: head.t, guide: head.t }
+        : { start: tail.t - dur, guide: tail.t };
+    }
+    if (head) return { start: head.t, guide: head.t };
+    if (tail) return { start: tail.t - dur, guide: tail.t };
+    return null;
+  }
+  /* Menu de contexto do clipe. Reusa o chrome de .bt-pop — mesmo ciclo de vida,
+     mesma dispensa por clique fora — em vez de um componente novo com sensação
+     diferente. Itens indisponíveis ficam esmaecidos em vez de sumirem: posição
+     estável ensina o menu mais rápido do que um menu que muda de tamanho. */
+  function openClipMenu(track, i, clientX, clientY) {
+    closePopover();
+    if (lockedTracks[track]) return;
+    const t = video ? video.currentTime : 0;
+    const canSplit = canSplitClip(track, i, t);
+    const canDup = duplicateTargetStart(track, i) != null;
+    popEl = document.createElement('div');
+    popEl.className = 'bt-pop bt-menu';
+    popEl.style.left = Math.max(6, Math.min(window.innerWidth - 180, clientX)) + 'px';
+    popEl.style.top = Math.max(6, Math.min(window.innerHeight - 120, clientY)) + 'px';
+    popEl.innerHTML =
+      `<button class="bt-menu-item" id="bt-menu-split"${canSplit ? '' : ' disabled'}>DIVIDIR NO PLAYHEAD</button>` +
+      `<button class="bt-menu-item" id="bt-menu-dup"${canDup ? '' : ' disabled'}>DUPLICAR</button>` +
+      `<button class="bt-menu-item" id="bt-menu-del">DELETAR</button>`;
+    document.body.appendChild(popEl);
+    popEl.classList.add('enter');
+    // o guard `if (popEl)` evita o TypeError que os popovers antigos sofrem quando
+    // são fechados antes do próximo frame
+    requestAnimationFrame(() => { if (popEl) popEl.classList.remove('enter'); });
+    $q('#bt-menu-split', popEl).onclick = () => { if (canSplit) { closePopover(); splitClipAt(track, i, t); } };
+    $q('#bt-menu-dup', popEl).onclick = () => { if (canDup) { closePopover(); duplicateClip(track, i); } };
+    $q('#bt-menu-del', popEl).onclick = () => { closePopover(); deleteSelection(); };
+    setTimeout(() => document.addEventListener('mousedown', onDocClick, { capture: true }), 0);
+    function onDocClick(ev) {
+      if (popEl && !popEl.contains(ev.target)) {
+        closePopover();
+        document.removeEventListener('mousedown', onDocClick, { capture: true });
+      }
+    }
+  }
+  /* Regra de seleção: DELETAR reusa deleteSelection(), que age sobre a
+     multi-seleção quando ela existe. Se o clipe clicado já pertence a ela,
+     preservamos; se não pertence, limpamos — senão um botão direito num clipe
+     apagaria silenciosamente outros clipes fora de vista.
+     DIVIDIR e DUPLICAR agem sempre e só sobre o clipe clicado. */
+  function onClipContextMenu(e) {
+    const clipEl = e.target.closest('.bt-clip');
+    if (!clipEl) return; // sem preventDefault: o menu nativo do Chrome segue funcionando
+    e.preventDefault();
+    const track = clipEl.dataset.track, i = +clipEl.dataset.idx;
+    if (lockedTracks[track]) return;
+    if (!selectedClipSet.has(clipKey(track, i))) {
+      clearMultiSelection();
+      selectedClip = { track, index: i };
+      renderBrollTrack(); renderMusicTrack();
+    }
+    openClipMenu(track, i, e.clientX, e.clientY);
+  }
   function closePopover() { if (popEl) { popEl.remove(); popEl = null; } }
   function openPopover(idx, anchorEl) {
     closePopover();
@@ -2018,14 +2196,24 @@ window.sendToClipper = (p) => {
         else if (c.start >= origStart + dur) hi = Math.min(hi, c.start - dur);
       });
     }
+    const snapOpts = { clipEdges: true, playhead: true, exclude: new Set([clipKey(track, i)]) };
     function onMove(ev) {
       const dx = (ev.clientX - startX) / PX_PER_SEC;
-      arr[i].start = Math.max(lo, Math.min(hi, snapTime(origStart + dx)));
+      const raw = origStart + dx;
+      const pick = snapDragStart(raw, dur, snapOpts);
+      const want = pick ? pick.start : raw;
+      const next = Math.max(lo, Math.min(hi, want));
+      arr[i].start = next;
+      // guia só quando o encaixe realmente vingou: se o clamp de colisão puxou o
+      // clipe para outro lugar, a linha some em vez de apontar para uma mentira
+      if (pick && Math.abs(next - want) < 1e-6) showSnapGuide(pick.guide);
+      else hideSnapGuide();
       renderClipTrack(track, track === 'broll' ? 'bt-track-broll' : 'bt-track-music');
     }
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      hideSnapGuide();
       snapshot();
     }
     document.addEventListener('mousemove', onMove);
@@ -2039,6 +2227,7 @@ window.sendToClipper = (p) => {
     const c = arr[i];
     const startX = e.clientX;
     const origStart = c.start, origEnd = c.start + c.dur;
+    const origSrcIn = c.srcIn || 0;
     let lo = 0, hi = DURATION;
     if (track === 'broll') {
       arr.forEach((o, j) => {
@@ -2047,20 +2236,30 @@ window.sendToClipper = (p) => {
         if (side === 'right' && o.start >= origEnd) hi = Math.min(hi, o.start);
       });
     }
+    // não dá para esticar a cabeça para antes do começo da mídia: srcIn não pode
+    // ficar negativo. Mesma trava que qualquer NLE aplica ao trim de entrada.
+    if (side === 'left') lo = Math.max(lo, origStart - origSrcIn);
+    const trimOpts = { clipEdges: true, playhead: true, exclude: new Set([clipKey(track, i)]) };
     function onMove(ev) {
       const dx = (ev.clientX - startX) / PX_PER_SEC;
       if (side === 'right') {
-        const t = Math.max(origStart + MIN_BEAT_DUR, Math.min(hi, snapTime(origEnd + dx)));
+        const t = Math.max(origStart + MIN_BEAT_DUR, Math.min(hi, snapTime(origEnd + dx, trimOpts)));
         c.dur = t - origStart;
+        const s = snapCandidate(origEnd + dx, trimOpts);
+        if (s && Math.abs(t - s.t) < 1e-6) showSnapGuide(s.t); else hideSnapGuide();
       } else {
-        const t = Math.max(lo, Math.min(origEnd - MIN_BEAT_DUR, snapTime(origStart + dx)));
+        const t = Math.max(lo, Math.min(origEnd - MIN_BEAT_DUR, snapTime(origStart + dx, trimOpts)));
         c.start = t; c.dur = origEnd - t;
+        c.srcIn = origSrcIn + (t - origStart);
+        const s = snapCandidate(origStart + dx, trimOpts);
+        if (s && Math.abs(t - s.t) < 1e-6) showSnapGuide(s.t); else hideSnapGuide();
       }
       renderClipTrack(track, track === 'broll' ? 'bt-track-broll' : 'bt-track-music');
     }
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      hideSnapGuide();
       snapshot();
     }
     document.addEventListener('mousemove', onMove);
@@ -2102,16 +2301,38 @@ window.sendToClipper = (p) => {
     if (!items.length) return;
     const origins = items.map(it => it.clip.start);
     const startX = e.clientX;
+    // O grupo encaixa pelas bordas EXTERNAS: cabeça do clipe mais à esquerda e
+    // cauda do mais à direita. Todos os clipes do grupo saem da lista de alvos,
+    // senão o conjunto gruda em si mesmo.
+    const groupOpts = {
+      clipEdges: true, playhead: true,
+      exclude: new Set(items.map(it => clipKey(it.track, it.index))),
+    };
+    const groupHead = Math.min.apply(null, origins);
+    const groupTail = Math.max.apply(null, items.map((it, k) => origins[k] + it.clip.dur));
     function onMove(ev) {
-      const dt = (ev.clientX - startX) / PX_PER_SEC;
+      const dtRaw = (ev.clientX - startX) / PX_PER_SEC;
+      const head = snapCandidate(groupHead + dtRaw, groupOpts);
+      const tail = snapCandidate(groupTail + dtRaw, groupOpts);
+      let dt = dtRaw, guide = null;
+      if (head && (!tail || head.d <= tail.d)) { dt = head.t - groupHead; guide = head.t; }
+      else if (tail) { dt = tail.t - groupTail; guide = tail.t; }
+      let intact = true;
       items.forEach((it, k) => {
-        it.clip.start = Math.max(0, Math.min(DURATION - it.clip.dur, origins[k] + dt));
+        const want = origins[k] + dt;
+        const next = Math.max(0, Math.min(DURATION - it.clip.dur, want));
+        if (Math.abs(next - want) > 1e-6) intact = false;
+        it.clip.start = next;
       });
+      // se qualquer clipe do grupo bateu no limite, o encaixe não vingou inteiro
+      if (guide != null && intact) showSnapGuide(guide);
+      else hideSnapGuide();
       renderBrollTrack(); renderMusicTrack();
     }
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      hideSnapGuide();
       snapshot();
       renderTracks();
     }
@@ -2185,6 +2406,9 @@ window.sendToClipper = (p) => {
       host.addEventListener('mousedown', onTracksMouseDown);
       host.addEventListener('dblclick', onTracksDblClick);
     });
+    // clipes vivem só em #bt-tracks; o handler devolve sem preventDefault quando o
+    // alvo não é um clipe, então o menu nativo do navegador continua disponível
+    $q('#bt-tracks').addEventListener('contextmenu', onClipContextMenu);
     $q('#bt-ruler').addEventListener('mousedown', onRulerMouseDown);
     $q('.bt-playhead-flag').addEventListener('mousedown', onFlagMouseDown);
   }
@@ -2245,8 +2469,8 @@ window.sendToClipper = (p) => {
     } else {
       BEATS = [{ label: 'CORTE', dur: DURATION, color: colorFor(0) }];
     }
-    BROLL = (saved && Array.isArray(saved.broll)) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur })) : [];
-    MUSIC = (saved && Array.isArray(saved.music)) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1 })) : [];
+    BROLL = (saved && Array.isArray(saved.broll)) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })) : [];
+    MUSIC = (saved && Array.isArray(saved.music)) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
     hist = []; histPos = -1; snapshot();
     buildDom();
     built = true;
@@ -2284,6 +2508,7 @@ window.sendToClipper = (p) => {
       case '+': case '=': e.preventDefault(); zoomAtCenter(PX_PER_SEC * ZOOM_STEP); break;
       case '-': e.preventDefault(); zoomAtCenter(PX_PER_SEC / ZOOM_STEP); break;
       case '\\': e.preventDefault(); fitToWindow(); break;
+      case 'Escape': closePopover(); break;
       case 'Delete': case 'Backspace':
         if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); }
         break;
