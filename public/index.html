@@ -348,6 +348,7 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 .bt-pop .row2 button{all:unset; flex:1; text-align:center; cursor:pointer; font:500 10px var(--sans);
   color:var(--dim); border:1px solid var(--line); border-radius:6px; padding:6px}
 .bt-pop .row2 button.primary{background:var(--go); border-color:var(--go); color:#191100; font-weight:700}
+.bt-pop .msg{font:400 11px var(--sans); color:var(--dim); line-height:1.45}
 /* Menu de contexto do clipe — variação estreita do popover, reusando o mesmo
    chrome (fundo, borda, sombra, animação de entrada) dos outros três popovers. */
 .bt-pop.bt-menu{width:174px; padding:5px}
@@ -692,6 +693,20 @@ function addAsset(a) {
   else if (a.source === 'download') markDone('download');
 }
 function fmtInfo(i){ return i ? `${i.width}×${i.height} · ${i.duration?.toFixed(1)}s · ${i.vcodec||i.acodec||''}` : ''; }
+/* Trocar as <option> por innerHTML zera a selecao de um <select> — ele cai na
+   primeira opcao. Como addAsset() faz unshift, sem isto cada asset novo
+   sequestrava silenciosamente a selecao de TODOS os dropdowns da pagina; no
+   #bt-visual isso fazia o passo 04 recarregar outro video na proxima entrada
+   (goStep compara sel.value com currentPath) e descartar cortes, b-roll e
+   trilha do usuario. Selecao vazia continua caindo na primeira opcao de
+   proposito: e o bootstrap do primeiro asset da sessao. */
+function setOptions(sel, html) {
+  const el = $(sel);
+  if (!el) return;
+  const prev = el.value;
+  el.innerHTML = html;
+  if (prev && [...el.options].some(o => o.value === prev)) el.value = prev;
+}
 function renderAssets() {
   const vids = assets.filter(a => a.kind === 'video');
   const auds = assets.filter(a => a.kind === 'audio');
@@ -706,12 +721,12 @@ function renderAssets() {
   $('#assets-voice').innerHTML = auds.map(rowHtml).join('') || '<div class="empty">No takes yet — write a script and hit GENERATE VOICEOVER.</div>';
   $('#assets-all').innerHTML = assets.map(rowHtml).join('') || '<div class="empty">Empty session — everything you upload or produce lands here.</div>';
   const opt = a => `<option value="${a.path}">${a.name}</option>`;
-  $('#asm-visual').innerHTML = vids.map(opt).join('');
-  $('#bt-visual').innerHTML = vids.map(opt).join('');
-  $('#asm-vo').innerHTML = '<option value="">— none —</option>' + auds.map(opt).join('');
-  $('#exp-input').innerHTML = vids.map(opt).join('');
-  $('#exp-lut').innerHTML = '<option value="">— none —</option>' + luts.map(opt).join('');
-  $('#clip-file').innerHTML = '<option value="">— uploads —</option>' + vids.map(opt).join('');
+  setOptions('#asm-visual', vids.map(opt).join(''));
+  setOptions('#bt-visual', vids.map(opt).join(''));
+  setOptions('#asm-vo', '<option value="">— none —</option>' + auds.map(opt).join(''));
+  setOptions('#exp-input', vids.map(opt).join(''));
+  setOptions('#exp-lut', '<option value="">— none —</option>' + luts.map(opt).join(''));
+  setOptions('#clip-file', '<option value="">— uploads —</option>' + vids.map(opt).join(''));
 }
 window.preview = (p, kind) => {
   const el = document.createElement(kind === 'audio' ? 'audio' : 'video');
@@ -835,6 +850,10 @@ window.doAssemble = async () => {
     const r = await watchJob(job);
     addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'assemble' });
     lastAss = r.ass || null;
+    // Handoff do pipeline, agora declarado em vez de acidental: ate setOptions
+    // existir isto acontecia porque renderAssets() resetava os selects.
+    $('#exp-input').value = r.output;                       // 03 -> 05
+    if (window.btTimeline) window.btTimeline.adopt(r.output); // 03 -> 04, so se 04 estiver vazio
     $('#asm-out').innerHTML = `<span class="chip ok">${r.captionedWords} words captioned</span>` +
       (r.ass ? `<span class="chip ok">.ass pronto — queima no Export</span>` : '') +
       `<video controls src="/files/${encodeURIComponent(r.output)}"></video>`;
@@ -1113,6 +1132,17 @@ window.sendToClipper = (p) => {
     hist.push(JSON.parse(JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC, video: VIDEO })));
     histPos = hist.length - 1;
   }
+  /* "Ha edicoes nao salvas?" comparando CONTEUDO, e nao histPos: snapshot()
+     faz hist.slice(0, histPos + 1) antes do push, entao desfazer e editar de
+     novo pode voltar ao MESMO indice com conteudo diferente — um teste por
+     indice diria "limpo" na hora errada. snapshot() ja serializa exatamente
+     esta estrutura a cada edicao, entao o custo nao e novidade aqui. */
+  let savedState = null; // instantaneo serializado do ultimo save/load
+  function timelineState() {
+    return JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC, video: VIDEO });
+  }
+  function markSaved() { savedState = timelineState(); }
+  function isDirty() { return savedState !== null && timelineState() !== savedState; }
   function applyHistEntry(entry) {
     BEATS = JSON.parse(JSON.stringify(entry.beats));
     BROLL = JSON.parse(JSON.stringify(entry.broll || []));
@@ -1387,6 +1417,7 @@ window.sendToClipper = (p) => {
         music: MUSIC.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume, srcIn: c.srcIn || 0 })),
       });
       stage('beats salvos: ' + r.path);
+      markSaved();
       return true;
     } catch (e) { stage(e.message, true); return false; }
   }
@@ -1427,6 +1458,7 @@ window.sendToClipper = (p) => {
     seekTo(Math.min(playhead, DURATION));
     pruneMediaCache();
     snapshot();
+    markSaved();
     renderTracks();
     return true;
   }
@@ -2230,7 +2262,50 @@ window.sendToClipper = (p) => {
     el.classList.add('enter');
     requestAnimationFrame(() => el.classList.remove('enter'));
   }
-  function closePopover() { if (popEl) { popEl.remove(); popEl = null; } }
+  /* Callback de dispensa: roda para QUALQUER forma de fechar o popover —
+     botao, clique fora, Escape, ou outro popover abrindo por cima. So o
+     confirmDiscard usa; os outros deixam null e nao mudam de comportamento. */
+  let popOnClose = null;
+  function closePopover() {
+    if (popEl) { popEl.remove(); popEl = null; }
+    const cb = popOnClose; popOnClose = null;
+    if (cb) cb();
+  }
+  /* Confirmacao de descarte no chrome do proprio app — nao ha um unico
+     confirm()/alert() neste codebase, a linguagem visual e .bt-pop. O cancelamento
+     vai por popOnClose para valer em qualquer caminho de dispensa, e nao so no
+     botao: se o select nao voltasse ao video atual quando o usuario aperta Escape
+     ou clica fora, o dropdown passaria a mentir sobre o que esta carregado — o
+     defeito original com outra roupa. */
+  function confirmDiscard(anchorEl, onOk, onCancel) {
+    closePopover();
+    // O #bt-visual fica no topo do passo 04 e a pagina costuma estar rolada ate a
+    // timeline: sem trazer a ancora para a viewport, rect.bottom vem negativo e o
+    // position:fixed joga o aviso para fora da tela — some justo a confirmacao que
+    // existe para impedir perda de trabalho. Rolar ate o select tambem e coerente:
+    // e ele que vai reverter se o usuario cancelar.
+    anchorEl.scrollIntoView({ block: 'nearest' });
+    const rect = anchorEl.getBoundingClientRect();
+    popEl = document.createElement('div');
+    popEl.className = 'bt-pop';
+    popEl.style.left = Math.max(6, Math.min(window.innerWidth - 226, rect.left)) + 'px';
+    popEl.style.top = Math.max(6, Math.min(window.innerHeight - 132, rect.bottom + 6)) + 'px';
+    popEl.innerHTML = `<div class="t">EDIÇÕES NÃO SALVAS</div>
+      <div class="msg">Trocar de vídeo descarta os cortes de VÍDEO, o B-ROLL, a TRILHA e o histórico desta timeline.</div>
+      <div class="row2"><button id="bt-discard-cancel">CANCELAR</button><button class="primary" id="bt-discard-ok">DESCARTAR</button></div>`;
+    mountPopover(popEl);
+    popOnClose = onCancel;
+    $q('#bt-discard-cancel', popEl).onclick = closePopover;
+    $q('#bt-discard-ok', popEl).onclick = () => { popOnClose = null; closePopover(); onOk(); };
+    setTimeout(() => document.addEventListener('mousedown', onDocClick, { capture: true }), 0);
+    function onDocClick(ev) {
+      if (!popEl) { document.removeEventListener('mousedown', onDocClick, { capture: true }); return; }
+      if (!popEl.contains(ev.target)) {
+        closePopover();
+        document.removeEventListener('mousedown', onDocClick, { capture: true });
+      }
+    }
+  }
   function openPopover(idx, anchorEl) {
     closePopover();
     if (idx < 0 || idx >= BEATS.length) return;
@@ -2821,11 +2896,21 @@ window.sendToClipper = (p) => {
     BROLL = (saved && Array.isArray(saved.broll)) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })) : [];
     MUSIC = (saved && Array.isArray(saved.music)) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
     hist = []; histPos = -1; snapshot();
+    markSaved();
     buildDom();
     built = true;
     await loadWaveform(path);
     await loadLegend();
     renderTracks();
+  }
+
+  /* Unico caminho para trocar o video do passo 04. loadVideo() zera VIDEO,
+     BEATS, BROLL, MUSIC e hist — com a pista V1 editavel isso passou a custar
+     caro demais para acontecer em silencio. */
+  function requestLoadVideo(path) {
+    if (!path || path === currentPath) return;
+    if (!isDirty()) { loadVideo(path); return; }
+    confirmDiscard(sel, () => loadVideo(path), () => { if (currentPath) sel.value = currentPath; });
   }
 
   /* ---------------- keyboard shortcuts (scoped to #step-beats.on) ---------------- */
@@ -2866,7 +2951,7 @@ window.sendToClipper = (p) => {
 
   /* ---------------- init: wire the static elements from the Task 2 shell ---------------- */
   const sel = document.getElementById('bt-visual');
-  if (sel) sel.addEventListener('change', () => loadVideo(sel.value));
+  if (sel) sel.addEventListener('change', () => requestLoadVideo(sel.value));
   const loadBtn = document.getElementById('bt-load-btn');
   if (loadBtn) loadBtn.onclick = async () => {
     if (!currentPath) return;
@@ -2880,7 +2965,15 @@ window.sendToClipper = (p) => {
   const origGoStep = window.goStep;
   window.goStep = step => {
     origGoStep(step);
-    if (step === 'beats' && sel && sel.value && sel.value !== currentPath) loadVideo(sel.value);
+    if (step === 'beats' && sel && sel.value && sel.value !== currentPath) requestLoadVideo(sel.value);
+  };
+
+  /* Superficie minima para o resto da pagina. `adopt` so age com o passo 04
+     ainda vazio: trocar o video por baixo de uma timeline em edicao e
+     exatamente o bug que esta correcao remove. */
+  window.btTimeline = {
+    adopt(path) { if (!currentPath && sel) sel.value = path; },
+    isDirty,
   };
 })();
 </script>
