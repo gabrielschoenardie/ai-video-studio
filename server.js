@@ -19,6 +19,7 @@ const { encodeReel } = require('./lib/encode');
 const { score, TRIBE_INFO } = require('./lib/score');
 const { download } = require('./lib/download');
 const { writeAss } = require('./lib/captions');
+const { conform } = require('./lib/timeline');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT || '4870', 10);
@@ -194,8 +195,13 @@ const server = http.createServer(async (req, res) => {
       if (!b.video || !Array.isArray(b.beats))
         return send(res, 400, { error: 'missing video or beats[]' });
       const sidecar = beatsSidecar(b.video);
-      const payload = { version: 2, video: b.video, duration: b.duration || null,
-        beats: b.beats, broll: Array.isArray(b.broll) ? b.broll : [],
+      // v3 adds `segments`: the VÍDEO track's own cuts, as {srcIn,dur} in
+      // timeline order. Their position is implicit in the order — that is what
+      // makes a delete ripple. An absent or empty array means "the whole
+      // media, untouched", which is exactly how a v2 sidecar reads.
+      const payload = { version: 3, video: b.video, duration: b.duration || null,
+        beats: b.beats, segments: Array.isArray(b.segments) ? b.segments : [],
+        broll: Array.isArray(b.broll) ? b.broll : [],
         music: Array.isArray(b.music) ? b.music : [], updatedAt: new Date().toISOString() };
       fs.writeFileSync(sidecar, JSON.stringify(payload, null, 2), 'utf8');
       return send(res, 200, { ok: true, path: path.relative(ROOT, sidecar) });
@@ -242,6 +248,60 @@ const server = http.createServer(async (req, res) => {
       fs.writeFileSync(txPath, JSON.stringify(tx, null, 2));
       writeAss(tx.words, dir, { style: captionStyleOf(dir) });
       return send(res, 200, { words: tx.words });
+    }
+
+    // Timeline conform — flattens the step-04 sidecar (VÍDEO segment cuts,
+    // B-ROLL, TRILHA) into a real 4:4:4 CRF-12 mezzanine. This is the only
+    // path by which the timeline reaches the exported file: the browser's
+    // preview compositor is a preview, not a render. The output is meant to be
+    // fed to /api/export as `sourceKind: 'mezzanine'`.
+    if (req.method === 'POST' && p === '/api/timeline/conform') {
+      const b = await readJson(req);
+      if (!b.video) return send(res, 400, { error: 'missing video' });
+      let base, tl;
+      try {
+        base = resolveInput(b.video);
+        const sidecar = beatsSidecar(b.video);
+        if (!fs.existsSync(sidecar))
+          return send(res, 409, { error: 'sem timeline salva para este vídeo — clique SALVAR BEATS primeiro' });
+        tl = JSON.parse(fs.readFileSync(sidecar, 'utf8'));
+      } catch (e) { return send(res, 400, { error: String(e.message || e) }); }
+
+      // Every clip path in the sidecar goes back through resolveInput: the
+      // file is client-written, so it is exactly as untrusted as a request body.
+      let broll, music;
+      try {
+        const resolveClips = (arr) => (Array.isArray(arr) ? arr : []).map(c =>
+          ({ ...c, path: resolveInput(c.path) }));
+        broll = resolveClips(tl.broll);
+        music = resolveClips(tl.music);
+      } catch (e) { return send(res, 400, { error: 'clipe fora do diretório permitido: ' + String(e.message || e) }); }
+
+      // Caption words follow the cuts — lib/timeline reprojects them and
+      // writes a fresh .ass, because the pre-conform one desyncs by the cut.
+      const capDir = jobDirForVideo(b.video);
+      let words = null, captionStyle = 'impact';
+      if (capDir) {
+        try {
+          words = JSON.parse(fs.readFileSync(path.join(capDir, 'transcript.json'), 'utf8')).words;
+          captionStyle = captionStyleOf(capDir);
+        } catch (e) { words = null; }
+      }
+
+      const job = runJob('conform', async (job) => {
+        const dir = path.join(JOBS_DIR, job.id); fs.mkdirSync(dir, { recursive: true });
+        const out = path.join(OUT_DIR, `conformed-${job.id}.mp4`);
+        const r = await conform({
+          base, segments: tl.segments || [], broll, music,
+          output: out, workDir: dir, fit: b.fit || 'blur',
+          words, captionStyle,
+          onLog: s => jlog(job, s), onStage: (st, l) => jstage(job, st, l),
+          onProgress: pr => emit(job, 'progress', pr),
+        });
+        return { ...r, output: path.relative(ROOT, out),
+                 ass: r.ass ? path.relative(ROOT, path.resolve(r.ass)) : null };
+      });
+      return send(res, 200, { job: job.id });
     }
 
     // Step 4 — voiceover
