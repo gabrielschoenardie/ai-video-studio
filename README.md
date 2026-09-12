@@ -1,8 +1,8 @@
 # 🎬 AI Video Studio
 
-**One janela, tudo local.** Clip, score, anima, dubla, legenda e exporta pra Instagram Reels — $0 por uso, nada sobe pra nuvem.
+**Uma janela, tudo local.** Corta, monta, edita na timeline, dubla, legenda e exporta pra Instagram Reels — $0 por uso, nada sobe pra nuvem.
 
-Construído a partir do kit `ai-video-studio-kit` (blueprint + Metodologia Gabriel para o encode de entrega).
+Backend em Node puro (`http`, zero dependências npm), servindo uma SPA única. Todo o trabalho pesado é delegado a engines externos (ffmpeg, Whisper, yt-dlp, Voicebox) via `child_process` — cada um opcional, cada um degradando sozinho. O encode de entrega segue a **Metodologia Gabriel** (VBV obrigatório, perfil por duração medida, validação de conformidade pós-encode).
 
 ---
 
@@ -13,7 +13,13 @@ node server.js
 # abre http://localhost:4870
 ```
 
-Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um opcional, o app degrada graciosamente quando falta um).
+O servidor escuta em `127.0.0.1` — não fica exposto na rede. Node ≥ 18, sem build step, sem bundler, sem `npm install` no backend.
+
+Variáveis de ambiente opcionais vão num `.env` na raiz (lido por `lib/loadEnv.js`, nunca commitado). Copie de `.env.example`.
+
+```bash
+cp .env.example .env     # PORT, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+```
 
 ---
 
@@ -22,13 +28,14 @@ Sem dependências npm no backend — só Node ≥18 + os engines abaixo (cada um
 | Engine | Etapa | Instalação | Licença |
 | --- | --- | --- | --- |
 | **ffmpeg / ffprobe** | tudo | <https://ffmpeg.org/download.html> | LGPL/GPL |
-| **Whisper** | captions, clipper | `pip install openai-whisper` (ou compile whisper.cpp) | MIT |
-| **Voicebox** | voiceover | baixe em <https://voicebox.sh> (deixe aberto rodando) | MIT |
-| **yt-dlp** | clipper (URLs) | `pip install yt-dlp` | Unlicense |
-| **python3 + OpenCV** | clipper (reframe 9:16) | `pip install opencv-python` | BSD |
-| **Remotion** | visuals (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
-| **libvmaf** (parte do ffmpeg) | métrica de qualidade do Export | build do ffmpeg com `--enable-libvmaf` | BSD-2-Clause — builds sem esse flag só perdem a métrica, o encode continua funcionando |
-| **zscale** (parte do ffmpeg) | LUT 3D em precisão float + dither RPDF nativo no Export | build do ffmpeg com `--enable-libzimg` | BSD-2-Clause — builds sem esse flag caem para a rota `swscale` (LUT em 8-bit, dither aproximado), o encode continua funcionando |
+| **Whisper** | legendas palavra-a-palavra, clipper | `pip install openai-whisper` (ou compile whisper.cpp) | MIT |
+| **Voicebox** | voiceover (engine primário) | baixe em <https://voicebox.sh> e deixe o app aberto — API local em `127.0.0.1:17493` | MIT |
+| `piper` / `espeak-ng` / `say` | voiceover (fallback, scratch track) | opcional — o primeiro disponível vence | MIT / GPL / macOS |
+| **yt-dlp** | DOWNLOAD e clipper (URLs) | `pip install yt-dlp` | Unlicense |
+| **python3 + OpenCV** | reframe 9:16 do clipper (tracking de rosto/movimento) | `pip install opencv-python` | BSD |
+| **Remotion** | VISUALS (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
+| **libvmaf** (parte do ffmpeg) | métrica de qualidade do EXPORT | build do ffmpeg com `--enable-libvmaf` | BSD-2-Clause — sem esse flag só perde a métrica, o encode continua |
+| **zscale** (parte do ffmpeg) | LUT 3D em precisão float + dither RPDF nativo no EXPORT | build do ffmpeg com `--enable-libzimg` | BSD-2-Clause — sem esse flag cai pra rota `swscale` (LUT 8-bit, dither aproximado), o encode continua |
 
 Atalho pras dependências Python (Whisper, yt-dlp, OpenCV) de uma vez só:
 
@@ -36,47 +43,127 @@ Atalho pras dependências Python (Whisper, yt-dlp, OpenCV) de uma vez só:
 pip install -r requirements.txt
 ```
 
-ffmpeg/ffprobe e o Remotion ficam de fora do `requirements.txt` (não são pacotes PyPI) — instale conforme a tabela acima.
+ffmpeg/ffprobe, Voicebox e o Remotion ficam de fora do `requirements.txt` (não são pacotes PyPI) — instale conforme a tabela.
 
-Cheque tudo de uma vez: `node clipper/check-deps.js` (ou clique **ENGINES** no app — a barra lateral já mostra o status ao abrir).
-
----
-
-## Auto-Clipper (roda hoje, sem GUI)
-
-```bash
-cd clipper
-node check-deps.js         # uma vez
-node clip.js                # interativo — cola uma URL ou caminho de arquivo
-node clip.js --mode ai --reframe   # picking de momentos via LLM + reframe 9:16
-```
-
-Sem API key? O **hook-detector offline** entra automaticamente (regex de perguntas, contraste, números, payoff markers + densidade de energia). Pra ligar o picking via IA:
-
-Pra usar sua própria chave da Anthropic (Claude), a camada de compatibilidade OpenAI da Anthropic aceita o mesmo formato Chat Completions que o clipper já fala — não precisa mudar nada no código:
-
-```bash
-export LLM_BASE_URL="https://api.anthropic.com/v1"
-export LLM_API_KEY="sk-ant-..."          # sua API key da Anthropic
-export LLM_MODEL="claude-opus-4-8"       # ou claude-sonnet-5 / claude-haiku-4-5 (mais barato)
-```
-
-Detalhes importantes dessa camada de compatibilidade (não é a API nativa da Anthropic): é voltada pra teste/avaliação, não é a via recomendada pra produção; `temperature` fica travado entre 0–1; sem suporte a prompt caching. Pra esse uso de "escolher os melhores momentos do vídeo", `claude-haiku-4-5` costuma ser rápido e barato o suficiente.
+Cheque tudo de uma vez: `node clipper/check-deps.js` (ou veja o painel **ENGINES** na barra lateral do app, que já sonda ao abrir — mesma fonte, `GET /api/deps`).
 
 ---
 
-## Pipeline (o app automatiza isso)
+## Pipeline (5 steps)
 
 ```text
-BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT
+VISUALS → VOICE → ASSEMBLE → TIMELINE → EXPORT
 ```
 
-1. **Brief** — a ideia + roteiro (3–6 linhas), salvo localmente e injetado na etapa Voice.
-2. **Visuals** — sobe seu footage ou renderiza uma composição Remotion (`AutoKillReel`, `NeuralIntro`).
-3. **Voice** — Voicebox gera a narração no seu hardware, sem custo por palavra.
-4. **Assemble** — funde visual + voz + transcreve as legendas palavra-por-palavra (Whisper word timestamps) num mezzanine visualmente lossless (CRF 12, 4:4:4) — a legenda **não** é queimada aqui: o mezzanine carrega só vídeo + voz, e o `.ass` viaja ao lado, pronto pro Export.
-5. **Score** — curva de atenção segundo a segundo. Proxy local por padrão (energia de áudio + densidade de cortes + densidade de fala); ver seção TRIBE v2 abaixo pro modelo de resposta cerebral.
-6. **Export** — encode de entrega Instagram: perfil VBV por duração, stack x264 premium, BT.709, GOP ≤60, `validate_encode.sh`-equivalente embutido (APROVADO/REPROVADO). Aplica a LUT 3D em precisão float com dither RPDF e **só então** queima a legenda — nessa ordem porque a LUT não deve gradar gráfico/texto, só o plate. Também reporta VMAF do encode de entrega contra o mezzanine que o alimentou (modelo `vmaf_v0.6.1`).
+1. **VISUALS** — sobe seu footage (drag-and-drop) ou renderiza uma composição Remotion (`AutoKillReel`, `NeuralIntro`) em ProRes HQ.
+2. **VOICE** — cola o roteiro, a narração é gerada no seu hardware. Voicebox primeiro (com picker de vozes pt-BR); piper / espeak-ng / `say` como fallback.
+3. **ASSEMBLE** — funde visual + voz e transcreve as legendas palavra-por-palavra (Whisper word timestamps) num **mezanino visualmente lossless (CRF 12, 4:4:4)**. A legenda **não** é queimada aqui: o mezanino carrega só vídeo + voz, e o `.ass` viaja ao lado, pronto pro EXPORT queimar *depois* da LUT.
+4. **TIMELINE** — editor multi-track estilo Premiere (detalhes abaixo). Opcional: pule direto pro EXPORT se não precisa cortar.
+5. **EXPORT** — encode de entrega Instagram (Metodologia Gabriel). Perfil VBV escolhido pela duração *medida*, stack x264 premium, BT.709, GOP ≤ 60, `+faststart`. Score de risco de recompressão antes, validação de conformidade completa depois (APROVADO/REPROVADO), e VMAF do encode contra o mezanino que o alimentou.
+
+Fora da esteira, três ferramentas no mesmo rail: **AUTO-CLIPPER**, **DOWNLOAD** e **LIBRARY**.
+
+---
+
+## TIMELINE — o editor (step 04)
+
+Seis tracks, todas desenhadas sobre a mesma régua com zoom e snapping:
+
+| Track | O que faz |
+| --- | --- |
+| **MARKERS** | beats narrativos (HOOK, CONTEXTO, CTA…) — rótulo, não corte |
+| **B-ROLL** | clipes sobrepostos ao plate na janela deles (áudio do B-ROLL é descartado de propósito — o export bate com o que você ouviu na prévia) |
+| **VÍDEO** | o corte de verdade: cada segmento é `{srcIn, dur}`, arrastável e trimável. **Deletar faz ripple** — a timeline encurta |
+| **LEGENDA** | as palavras do Whisper, editáveis uma a uma (corrige o `transcript.json` e reescreve o `.ass`) |
+| **ÁUDIO** | a faixa base (voz/som direto do plate) |
+| **TRILHA** | música, com trim, ganho e delay, mixada sob a base (`amix` com `normalize=0`, pra não abaixar a voz em 1/N) |
+
+**Atalhos:** `J/K/L` shuttle · `espaço` play/pause · `,`/`.` frame a frame · `Home`/`End` · `I`/`O` mark in/out · `S` split · `M` merge · `R` rename · `Del` deleta (ripple) · `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo · `+`/`−` zoom · `\` fit.
+
+**Persistência:** tudo vai num sidecar `<video>.beats.json` (v3) ao lado do vídeo — `SALVAR BEATS`. Nada é destrutivo até você conformar.
+
+**`CONFORMAR → EXPORT`** achata a timeline num arquivo real: `lib/timeline.js` lê o sidecar, aplica os cortes do VÍDEO, sobrepõe o B-ROLL, mixa a TRILHA, **reprojeta as palavras da legenda pelo mapa de cortes** (senão a legenda dessincroniza exatamente pelo corte) e escreve um mezanino 4:4:4 CRF 12. Esse mezanino é o único caminho pelo qual a timeline chega ao arquivo exportado — o compositor do navegador é prévia, não render. O EXPORT o recebe como `sourceKind: 'mezzanine'` e o usa também como referência do VMAF.
+
+---
+
+## EXPORT — Metodologia Gabriel
+
+**Perfis VBV (selecionados pela duração medida, nunca chutada):**
+
+| Perfil | Target | Maxrate | Bufsize | vbv-init | Alvo VMAF |
+| --- | --- | --- | --- | --- | --- |
+| Maximum Quality ≤ 30s | 10000k | 11200k | 15000k | 0.90 | ≥ 93 |
+| Transition 30–40s | 9000k | 9000k | 12500k | 0.90 | ≥ 90 |
+| Safe Premium ≥ 40s | 8000k | 9000k | 12500k | 0.90 | ≥ 90 |
+
+**Controles da UI:** LUT 3D `.cube` (da pasta `luts/`), FIT pra fontes que não são 9:16 (`fundo desfocado` / `preencher e cortar` / `encaixar com barras`), GRADE (`plate` aplica a LUT / `none` pula), DITHER (`RPDF` / `error diffusion` / `none`) e campos opcionais de `psy-rd` e `deblock` (vírgula, nunca dois-pontos).
+
+**Ordem canônica do filtergraph** (não reordenar): denoise opcional → fit em 1080×1920 → `fps=30` → grade (LUT 3D, `interp=tetrahedral`) → dither → `subtitles=` → `format=yuv420p`. A legenda vem **depois** da grade por duas razões: a LUT não deve gradar gráfico/texto, só o plate; e libass é 8-bit-only, então só roda depois do dither. Isso é restrição de filtro, não estilo.
+
+**Validação:** depois do encode, o arquivo é re-sondado com `ffprobe` — codec, profile, level, `pix_fmt`, resolução, tags de cor, teto de bitrate, áudio e espaçamento de GOP. É essa checagem, não o `buildArgs()`, que diz se o encode bateu a spec.
+
+**VMAF:** modelo padrão `vmaf_v0.6.1` (**não** a variante NEG, decisão deliberada do projeto). O veredito usa a **média harmônica**, não a aritmética — ela pune um trecho ruim que uma boa média esconderia. O ramo de referência recebe o mesmo `refFilter` (grade + legenda) do encode, senão a LUT e as legendas queimadas entrariam na conta como distorção pura.
+
+Coloque suas LUTs `.cube` em `luts/` — elas aparecem sozinhas no seletor do EXPORT.
+
+---
+
+## AUTO-CLIPPER
+
+Na UI (step ✂) ou por CLI:
+
+```bash
+node clipper/check-deps.js         # uma vez
+node clipper/clip.js               # interativo — cola uma URL ou caminho de arquivo
+node clipper/clip.js --mode ai --reframe   # picking de momentos via LLM + reframe 9:16
+```
+
+Baixa (yt-dlp) → transcreve (Whisper) → escolhe os momentos → reenquadra pra 9:16 com crop móvel que segue o sujeito (tracker OpenCV, suavizado por EMA pra não tremer) → corta e queima as legendas.
+
+Sem API key? O **hook-detector offline** entra automaticamente (regex de perguntas, contraste, números, payoff markers + densidade de energia). Pra ligar o picking via IA, no `.env`:
+
+```bash
+LLM_BASE_URL="https://api.anthropic.com/v1"
+LLM_API_KEY="sk-ant-..."
+LLM_MODEL="claude-opus-5"        # ou claude-sonnet-5 / claude-haiku-4-5 (mais barato)
+```
+
+Detalhes dessa camada de compatibilidade OpenAI da Anthropic (não é a API nativa): é voltada pra teste/avaliação, não é a via recomendada pra produção; `temperature` fica travado entre 0–1; sem prompt caching. Pra "escolher os melhores momentos", `claude-haiku-4-5` costuma ser rápido e barato o suficiente. Qualquer endpoint compatível com Chat Completions serve (DeepSeek, Ollama, etc.).
+
+---
+
+## DOWNLOAD e LIBRARY
+
+**DOWNLOAD** (step ⬇) puxa uma URL na melhor resolução disponível via yt-dlp — sem o teto de 1080p do clipper, e sem cortar nada. O arquivo cai na Library, pronto pra qualquer step.
+
+**LIBRARY** (step ▤) lista tudo que foi produzido ou subido na sessão; qualquer asset pode ser mandado direto pro ASSEMBLE ou pro EXPORT.
+
+---
+
+## Como o backend funciona
+
+**Sem framework, sem router.** `server.js` é um único handler com `if`s contra `req.method` + `url.pathname`.
+
+**Job bus assíncrono.** Trabalho longo (transcrever, encodar, clipar, conformar, dublar, renderizar) roda via `runJob(kind, fn)`, que devolve um `job.id` na hora. O cliente acompanha por `GET /api/jobs/:id` ou pelo stream SSE `GET /api/jobs/:id/events` (eventos `stage`, `log`, `progress`, `done`/`error`).
+
+**Fronteira de path.** `resolveInput()` só aceita caminhos que já existem ou caem dentro de `jobs/` e `output/`, mais URLs `http(s)://` (que vão pro yt-dlp). Uploads passam por `safeName()`. Os clipes listados num `.beats.json` são reresolvidos no servidor — o sidecar é escrito pelo navegador, logo é tão não-confiável quanto um body de request.
+
+**Rotas principais:**
+
+| Rota | O que faz |
+| --- | --- |
+| `GET /api/deps` | status de todos os engines |
+| `POST /api/upload` · `POST /api/probe` | upload cru + `ffprobe` |
+| `GET /api/voices` · `GET /api/luts` | presets pt-BR do Voicebox · `.cube` em `luts/` |
+| `GET/POST /api/beats` | sidecar `.beats.json` da timeline |
+| `GET /api/captions` · `POST /api/captions/word` | lê/corrige palavras e reescreve o `.ass` |
+| `POST /api/timeline/conform` | achata a timeline num mezanino |
+| `POST /api/voiceover` · `/api/assemble` · `/api/clip` · `/api/download` · `/api/export` | os steps |
+| `POST /api/remotion/render` | renderiza uma composição |
+| `POST /api/score` · `GET /api/tribe-info` | curva de atenção (ver nota abaixo) |
+| `GET /api/jobs/:id[/events]` | estado do job / stream SSE |
+
+> **Nota sobre o SCORE.** A curva de atenção saiu da navegação (a pipeline foi reduzida de 6 pra 5 steps), mas `POST /api/score`, `GET /api/tribe-info` e `lib/score.js` continuam intactos no backend — dá pra chamar por `curl` ou reexpor na UI a qualquer momento. Nada na pipeline consumia o resultado, então a remoção foi isolada por construção.
 
 ---
 
@@ -84,11 +171,9 @@ BRIEF → VISUALS → VOICE → ASSEMBLE → SCORE → EXPORT
 
 O código do app (`server.js`, `lib/`, `public/`, `clipper/`) é seu, sem restrição adicional.
 
-Os **engines** usados são de licença permissiva (Apache-2.0, MIT, LGPL/GPL do ffmpeg) — uso comercial livre.
+Os **engines** usados são de licença permissiva (MIT, Unlicense, BSD, LGPL/GPL do ffmpeg) — uso comercial livre. O Remotion tem licença própria: confira os termos comerciais antes de vender vídeos renderizados em escala.
 
-O **TRIBE v2** (modelo de resposta cerebral, scorer "de verdade" por trás da etapa Score) é licenciado **apenas para uso não-comercial** pelo autor original. Por isso **não vem embutido** neste app. A etapa Score expõe instruções de auto-instalação (botão/painel "TRIBE V2 — BRAIN MODEL") apontando pra fonte oficial — baixe você mesmo, sob os termos dele. Sem isso, o app usa um **proxy local de atenção** (heurística honesta: energia de áudio + cortes + fala), que não é o modelo científico, só um primeiro filtro de "onde está monótono".
-
-Veja `LICENSES.md` para detalhes completos.
+O **TRIBE v2** (modelo de resposta cerebral, o scorer "de verdade" por trás da curva de atenção) é licenciado **apenas para uso não-comercial** pelos autores originais. Por isso **não vem embutido** — `lib/score.js` só o invoca se a env `STUDIO_TRIBE_CMD` apontar pra um runner local seu. Sem ele, o app usa o **proxy local** (`proxyCurve`: energia de áudio + densidade de cortes + densidade de fala), que não é o modelo científico, só um primeiro filtro honesto de "onde está monótono". Veja `tribe/README.md` e `LICENSES.md` para os detalhes.
 
 ---
 
@@ -96,12 +181,28 @@ Veja `LICENSES.md` para detalhes completos.
 
 ```text
 ai-video-studio/
-├── server.js              # backend HTTP, zero deps, job bus SSE
-├── lib/                    # deps, ffmpeg, transcribe, captions, voiceover,
-│                           # clipper, assemble, score, encode (Metodologia Gabriel)
-├── public/index.html       # UI de janela única
+├── server.js               # backend HTTP, zero deps, job bus SSE
+├── public/index.html       # UI de janela única (SPA, sem build)
+├── lib/
+│   ├── deps.js             # sonda de engines  → GET /api/deps
+│   ├── ffmpeg.js           # helpers de spawn + ffprobe
+│   ├── download.js         # yt-dlp na melhor resolução
+│   ├── clipper.js          # auto-clipper: download → transcrever → picking → reframe → cortar
+│   ├── transcribe.js       # Whisper com word timestamps
+│   ├── captions.js         # .ass palavra-a-palavra (presets impact / clean)
+│   ├── voiceover.js        # TTS com cadeia de fallback
+│   ├── assemble.js         # mezanino 4:4:4 CRF 12 + .ass ao lado
+│   ├── timeline.js         # conform: sidecar .beats.json → mezanino de verdade
+│   ├── color.js            # grade + dither (puro: sem I/O) — rota zscale ou swscale
+│   ├── encode.js           # Metodologia Gabriel: VBV, riskScore(), validate()
+│   ├── vmaf.js             # VMAF vmaf_v0.6.1, veredito por média harmônica
+│   └── score.js            # curva de atenção (TRIBE v2 opcional / proxy local)
 ├── clipper/                # CLI do auto-clipper (clip.js, check-deps.js)
-├── remotion/                # projeto Remotion (AutoKillReel, NeuralIntro)
-├── jobs/                    # scratch (uploads, transcripts, tracks) — não versionar
-└── output/                  # entregas finais
+├── remotion/               # projeto Remotion (AutoKillReel, NeuralIntro) — npm próprio
+├── luts/                   # suas LUTs .cube (aparecem sozinhas no EXPORT)
+├── tribe/                  # instruções de auto-instalação do TRIBE v2 (nunca embutido)
+├── docs/plans/             # planos de implementação (fluxo Orquestrador/Executor)
+├── .claude/                # agentes, skills e hooks do projeto
+├── jobs/                   # scratch (uploads, transcripts, tracks) — não versionar
+└── output/                 # entregas finais
 ```
