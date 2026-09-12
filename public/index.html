@@ -22,10 +22,13 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
+/* Uma coluna só: header e rail grudados no topo, main crescendo, rodapé no fim
+   do documento. O `1fr` no main é o que segura o rodapé embaixo numa página
+   curta sem precisar de position:fixed — e o deixa rolar junto numa longa. */
 body{
   background:var(--bg); color:var(--ink); font:400 13.5px/1.6 var(--sans);
-  display:grid; grid-template-columns:224px 1fr 340px; grid-template-rows:60px 1fr;
-  grid-template-areas:"head head head" "rail main side"; height:100vh; overflow:hidden;
+  display:grid; grid-template-columns:100%; grid-template-rows:60px auto 1fr auto;
+  grid-template-areas:"head" "rail" "main" "side"; min-height:100vh;
   position:relative;
 }
 /* ---- cinematic atmosphere: aurora glow, grain, scanlines, vignette ---- */
@@ -62,7 +65,7 @@ nav button:focus-visible{outline:2px solid var(--go); outline-offset:-2px}
 .drop:focus-visible{outline:2px solid var(--go); outline-offset:3px; border-color:var(--go)}
 /* ------------------------------------------------ header */
 header{grid-area:head; display:flex; align-items:center; gap:18px;
-  padding:0 20px; position:relative;
+  padding:0 20px; position:sticky; top:0; z-index:30;
   background:linear-gradient(180deg, rgba(23,24,54,.92), rgba(15,16,36,.94)); backdrop-filter:blur(12px);}
 header::after{ /* laser hairline */
   content:""; position:absolute; left:0; right:0; bottom:-1px; height:1px;
@@ -84,30 +87,39 @@ header .spacer{flex:1}
   font:400 10.5px var(--mono); letter-spacing:.12em; color:var(--dim);
   background:rgba(129,140,248,.06)}
 /* ------------------------------------------------ rail */
-nav{grid-area:rail; border-right:1px solid var(--line-soft); background:rgba(15,16,36,.85);
-  backdrop-filter:blur(12px); display:flex; flex-direction:column; padding:16px 0 14px; overflow-y:auto}
-nav .lbl{padding:8px 20px 8px; font-size:10px; letter-spacing:.26em; color:var(--faint); font-weight:600}
+/* Barra horizontal sob o header. `flex-wrap` é deliberado: com 8 itens os
+   estreitos quebram para uma segunda linha em vez de sumirem num scroll
+   horizontal que ninguém descobre. */
+nav{grid-area:rail; border-bottom:1px solid var(--line-soft); background:rgba(15,16,36,.85);
+  backdrop-filter:blur(12px); display:flex; flex-flow:row wrap; align-items:stretch;
+  gap:0 2px; padding:0 14px; position:sticky; top:60px; z-index:29}
+nav .lbl{display:none}          /* o <hr> vertical já agrupa PIPELINE de TOOLS */
 nav button{
-  all:unset; cursor:pointer; position:relative; display:flex; gap:12px; align-items:center;
-  min-height:44px; padding:0 20px; color:var(--dim); border-left:2px solid transparent;
-  font:500 12px var(--sans); letter-spacing:.1em;
+  all:unset; cursor:pointer; position:relative; display:flex; gap:9px; align-items:center;
+  min-height:42px; padding:0 13px; color:var(--dim); border-bottom:2px solid transparent;
+  font:500 12px var(--sans); letter-spacing:.1em; white-space:nowrap;
   transition:color .18s, background .18s;
 }
 nav button:hover{color:var(--ink); background:rgba(129,140,248,.07)}
-nav button.on{color:var(--go); border-left-color:var(--go);
-  background:linear-gradient(90deg, var(--go-dim), transparent 80%)}
-nav button .n{font:400 15px var(--disp); width:22px; color:var(--faint); flex:none; text-align:left}
+nav button.on{color:var(--go); border-bottom-color:var(--go);
+  background:linear-gradient(180deg, transparent, var(--go-dim))}
+nav button .n{font:400 15px var(--disp); color:var(--faint); flex:none}
 nav button.on .n{color:var(--go); text-shadow:var(--glow-go)}
 nav button svg{width:16px; height:16px; flex:none; opacity:.8}
 nav button.on svg{opacity:1; filter:drop-shadow(0 0 6px rgba(251,191,36,.5))}
 nav button.done::after{
-  content:"✓"; position:absolute; right:16px; color:var(--go); font-size:11px; font-weight:700;
+  content:"✓"; color:var(--go); font-size:11px; font-weight:700; margin-left:2px;
   text-shadow:0 0 8px rgba(251,191,36,.5);
 }
-nav hr{border:0;border-top:1px solid var(--line-soft); margin:12px 20px}
+/* separador PIPELINE | TOOLS — vertical agora que a barra é horizontal */
+nav hr{border:0; width:1px; align-self:center; height:20px; margin:0 10px;
+  background:var(--line-soft)}
 /* ------------------------------------------------ main */
-main{grid-area:main; overflow-y:auto; padding:30px 36px 70px; position:relative}
-.step{display:none; max-width:840px}
+/* sem overflow próprio: quem rola agora é a página, para o rodapé vir junto */
+main{grid-area:main; padding:30px 36px 70px; position:relative}
+/* centrado: sem as duas colunas laterais, uma coluna de 840px encostada à
+   esquerda deixava um vazio enorme à direita em tela larga */
+.step{display:none; max-width:840px; margin-inline:auto}
 .step.on{display:block; animation:rise .28s ease both}
 @keyframes rise{from{opacity:0; transform:translateY(10px)}to{opacity:1;transform:none}}
 .step h2{font:400 36px var(--disp); letter-spacing:.08em; margin-bottom:4px}
@@ -204,11 +216,34 @@ canvas{width:100%; height:180px; background:rgba(10,11,26,.7); border-radius:var
 .big{font:400 46px var(--disp); color:var(--go); text-shadow:0 0 20px rgba(251,191,36,.25)}
 .risk-min{color:var(--go)} .risk-mod{color:var(--warn)} .risk-high,.risk-guar{color:var(--bad)}
 /* ------------------------------------------------ side */
-aside{grid-area:side; border-left:1px solid var(--line-soft); background:rgba(15,16,36,.85);
-  backdrop-filter:blur(12px); display:flex; flex-direction:column; overflow:hidden}
-aside .blk{border-bottom:1px solid var(--line-soft); padding:15px 18px}
-aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom:10px; font-weight:600}
-#engines .chip{display:block; margin:0 0 6px; width:fit-content}
+/* Rodapé: as três seções lado a lado. ENGINES e ACTIVE JOB ficam com a largura
+   do conteúdo; o CONSOLE come o resto, que é onde a largura realmente serve. */
+aside{grid-area:side; border-top:1px solid var(--line-soft); background:rgba(15,16,36,.85);
+  backdrop-filter:blur(12px); display:grid; overflow:hidden; position:relative;
+  grid-template-columns:minmax(210px,26%) minmax(170px,230px) 1fr;
+  height:150px; transition:height .2s ease}
+aside .blk{border-right:1px solid var(--line-soft); padding:13px 16px; overflow-y:auto}
+aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom:9px; font-weight:600}
+/* chips em linha, quebrando — empilhados eles estouravam os 150px de altura */
+#engines{display:flex; flex-wrap:wrap; gap:5px}
+#engines .chip{display:inline-flex; margin:0}
+
+/* colapsado: sobra a faixa do ACTIVE JOB, que é o que importa durante um job */
+#side-toggle{all:unset; cursor:pointer; position:absolute; top:6px; right:12px; z-index:2;
+  padding:3px 9px; border:1px solid var(--line); border-radius:6px;
+  font:600 10px var(--mono); color:var(--dim); letter-spacing:.1em; background:var(--bg)}
+#side-toggle:hover{color:var(--go); border-color:rgba(251,191,36,.5)}
+aside.collapsed{height:44px}
+aside.collapsed .blk{border-right:none; padding:0; overflow:hidden}
+aside.collapsed h3,
+aside.collapsed #engines,
+aside.collapsed #console{display:none}
+aside.collapsed{grid-template-columns:1fr}
+aside.collapsed #blk-engines,
+aside.collapsed #blk-console{display:none}
+aside.collapsed #blk-job{display:flex; align-items:center; gap:12px; padding:0 16px}
+aside.collapsed #stage{min-height:0}
+aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 #stage{color:var(--go); font:400 12px var(--mono); min-height:18px; letter-spacing:.04em}
 #stage.run::before{content:"● "; animation:blink 1.2s steps(2) infinite}
 #stage.err{color:var(--bad)}
@@ -217,23 +252,38 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 #prog i{display:block; height:100%; width:0; border-radius:99px;
   background:linear-gradient(90deg, var(--go-solid), var(--go));
   box-shadow:0 0 10px rgba(251,191,36,.6); transition:width .4s ease}
-#console{flex:1; overflow-y:auto; padding:12px 18px; font:400 10.5px/1.55 var(--mono);
+/* o padding vem do .blk; o #console só rola dentro do que sobra */
+#blk-console{display:flex; flex-direction:column; overflow:hidden; min-width:0; padding-bottom:0}
+#console{flex:1; overflow-y:auto; padding:0 0 12px; font:400 10.5px/1.55 var(--mono);
   color:#8f96c0; white-space:pre-wrap; word-break:break-all}
 #console .t{color:var(--faint)}
 ::-webkit-scrollbar{width:8px; height:8px}
 ::-webkit-scrollbar-thumb{background:rgba(92,97,144,.55); border-radius:99px}
 ::-webkit-scrollbar-thumb:hover{background:rgba(251,191,36,.55)}
-/* ------------------------------------------------ responsive */
+/* ------------------------------------------------ responsive
+   O grid já é uma coluna em toda largura, então aqui só sobra apertar
+   espaçamento e empilhar o rodapé quando três colunas não cabem mais. */
 @media (max-width:900px){
-  body{grid-template-columns:1fr; grid-template-rows:60px auto 1fr auto;
-    grid-template-areas:"head" "rail" "main" "side"; height:auto; min-height:100vh; overflow:auto}
   main{padding:22px 18px 50px}
-  nav{flex-direction:row; overflow-x:auto; padding:8px 6px; border-right:none; border-bottom:1px solid var(--line-soft)}
-  nav .lbl,nav hr{display:none}
-  nav button{padding:0 14px; white-space:nowrap; border-left:none; border-bottom:2px solid transparent}
-  nav button.on{border-left:none; border-bottom-color:var(--go); background:none}
-  nav button.done::after{position:static; margin-left:4px}
-  aside{border-left:none; border-top:1px solid var(--line-soft); max-height:280px}
+  nav{padding:0 6px}
+  nav button{padding:0 10px; gap:7px; font-size:11.5px}
+  /* empilhado: linhas `auto` e sem overflow próprio nos blocos — com
+     `min-content` + `overflow:auto` as linhas encolhiam a zero e o rodapé
+     inteiro virava uma faixa de 1px */
+  /* `overflow:visible` é load-bearing: com `overflow:hidden` o tamanho mínimo
+     automático do item de grid vira 0, e a linha `auto` do body espreme o
+     rodapé abaixo do conteúdo (virava uma faixa de 29px) */
+  aside{grid-template-columns:1fr; grid-auto-rows:auto; height:auto; overflow:visible}
+  aside .blk{border-right:none; border-bottom:1px solid var(--line-soft); overflow:visible}
+  #blk-console{padding-bottom:13px}
+  #console{max-height:170px}
+  aside.collapsed{height:44px; overflow:hidden}
+}
+/* no celular os 8 itens iam a 3 linhas; os números são decorativos
+   (aria-hidden) — escondê-los devolve a barra a 2 linhas */
+@media (max-width:540px){
+  nav button .n{display:none}
+  nav button{padding:0 9px; letter-spacing:.06em}
 }
 .step.wide{max-width:none}
 
@@ -635,11 +685,12 @@ aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom
 </main>
 
 <aside>
-  <div class="blk"><h3>ENGINES</h3><div id="engines">probing…</div></div>
-  <div class="blk"><h3>ACTIVE JOB</h3><div id="stage" role="status" aria-live="polite">idle</div>
+  <button id="side-toggle" aria-expanded="true" aria-controls="side-panel"
+    title="Recolher o rodapé (mantém só o ACTIVE JOB)">▼ RECOLHER</button>
+  <div class="blk" id="blk-engines"><h3>ENGINES</h3><div id="engines">probing…</div></div>
+  <div class="blk" id="blk-job"><h3>ACTIVE JOB</h3><div id="stage" role="status" aria-live="polite">idle</div>
     <div id="prog" aria-hidden="true"><i></i></div></div>
-  <h3 style="padding:14px 18px 0">CONSOLE</h3>
-  <div id="console"></div>
+  <div class="blk" id="blk-console"><h3>CONSOLE</h3><div id="console"></div></div>
 </aside>
 
 <script>
@@ -655,9 +706,32 @@ window.goStep = step => {
   const b = document.querySelector(`[data-step=${step}]`);
   b.classList.add('on'); b.setAttribute('aria-current', 'step');
   $('#step-' + step).classList.add('on');
-  $('main').scrollTop = 0;
+  // a página inteira rola agora (o rodapé desce junto), então zerar o scrollTop
+  // do main seria no-op — quem sobe é a janela
+  window.scrollTo({ top: 0, behavior: 'auto' });
 };
 $$('nav button').forEach(b => b.onclick = () => goStep(b.dataset.step));
+
+/* ---------------- rodapé colapsável (conveniência por navegador; localStorage
+   pode lançar em janela privada ou com site data bloqueado, daí os try/catch) */
+(() => {
+  const side = document.querySelector('aside'), btn = $('#side-toggle');
+  if (!side || !btn) return;
+  const apply = (collapsed) => {
+    side.classList.toggle('collapsed', collapsed);
+    btn.textContent = collapsed ? '▲ EXPANDIR' : '▼ RECOLHER';
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.title = collapsed ? 'Expandir o rodapé' : 'Recolher o rodapé (mantém só o ACTIVE JOB)';
+  };
+  let start = false;
+  try { start = localStorage.getItem('studio-side-collapsed') === '1'; } catch {}
+  apply(start);
+  btn.onclick = () => {
+    const collapsed = !side.classList.contains('collapsed');
+    apply(collapsed);
+    try { localStorage.setItem('studio-side-collapsed', collapsed ? '1' : '0'); } catch {}
+  };
+})();
 
 /* next/prev footers on pipeline steps — guides first-time users through the flow */
 const STEP_ORDER = ['visuals', 'voice', 'assemble', 'beats', 'export'];
