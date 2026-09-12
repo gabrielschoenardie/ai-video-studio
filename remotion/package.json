@@ -3,16 +3,20 @@
   "private": true,
   "scripts": {
     "studio": "remotion studio",
-    "render": "remotion render"
+    "render": "remotion render",
+    "build:player": "esbuild src/player-entry.tsx --bundle --format=iife --platform=browser --target=es2020 --outfile=../public/vendor/studio-player.js --define:process.env.NODE_ENV=\\\"production\\\" --minify"
   },
   "dependencies": {
-    "@remotion/cli": "^4.0.0",
+    "@remotion/cli": "4.0.494",
+    "@remotion/player": "4.0.494",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remotion": "^4.0.0"
+    "remotion": "4.0.494"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.28.0",
     "typescript": "^5.5.0"
   }
 }

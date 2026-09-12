@@ -27,6 +27,9 @@ const JOBS_DIR = path.join(ROOT, 'jobs');
 const OUT_DIR = path.join(ROOT, 'output');
 const UP_DIR = path.join(JOBS_DIR, 'uploads');
 const LUTS_DIR = path.join(ROOT, 'luts'); // persistent 3D .cube library, picked at export
+// Build artifacts committed to the repo (the Player bundle). Not a media dir —
+// deliberately outside insideRoot(), which gates client-supplied media paths.
+const VENDOR_DIR = path.join(ROOT, 'public', 'vendor');
 for (const d of [JOBS_DIR, OUT_DIR, UP_DIR, LUTS_DIR]) fs.mkdirSync(d, { recursive: true });
 
 // ------------------------------------------------------------- job bus
@@ -109,15 +112,62 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
   '.mp4': 'video/mp4', '.wav': 'audio/wav', '.json': 'application/json',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
-function serveFile(res, file, download = false) {
+// Parse a single-range `Range: bytes=A-B` header against a known file size.
+// Returns null when there is no range to honour (absent/!bytes/multi-range —
+// serving the whole file is always a valid answer to those), or {start,end}
+// clamped into the file, or 'unsatisfiable' when the range falls outside it.
+// Suffix form (`bytes=-500` = last 500 bytes) and open-ended form
+// (`bytes=500-`) both appear in real players, so both are handled.
+function parseRange(header, size) {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m) return null;                              // multi-range or malformed
+  const [, rawStart, rawEnd] = m;
+  if (rawStart === '' && rawEnd === '') return null;
+  let start, end;
+  if (rawStart === '') {                            // bytes=-N → last N bytes
+    const n = parseInt(rawEnd, 10);
+    if (n <= 0) return 'unsatisfiable';
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = parseInt(rawStart, 10);
+    end = rawEnd === '' ? size - 1 : parseInt(rawEnd, 10);
+    if (start >= size) return 'unsatisfiable';
+    end = Math.min(end, size - 1);
+    if (end < start) return 'unsatisfiable';
+  }
+  return { start, end };
+}
+
+// Honouring Range is not a nicety here: the TIMELINE preview seeks
+// frame-accurately, and a 200-only server makes every seek refetch the file
+// from byte 0. Without a Range header the 200 path is byte-identical to before.
+function serveFile(req, res, file, download = false) {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404); return res.end('not found'); }
-    const headers = {
-      'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-      'Content-Length': st.size, 'Accept-Ranges': 'bytes',
-    };
-    if (download) headers['Content-Disposition'] = `attachment; filename="${path.basename(file)}"`;
-    res.writeHead(200, headers);
+    const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    const disposition = download
+      ? { 'Content-Disposition': `attachment; filename="${path.basename(file)}"` } : {};
+    const range = parseRange(req && req.headers && req.headers.range, st.size);
+
+    if (range === 'unsatisfiable') {
+      res.writeHead(416, { 'Content-Range': `bytes */${st.size}`, 'Accept-Ranges': 'bytes' });
+      return res.end();
+    }
+    if (range) {
+      const { start, end } = range;
+      res.writeHead(206, {
+        'Content-Type': type, 'Content-Length': end - start + 1,
+        'Content-Range': `bytes ${start}-${end}/${st.size}`,
+        'Accept-Ranges': 'bytes', ...disposition,
+      });
+      return fs.createReadStream(file, { start, end }).pipe(res);
+    }
+    res.writeHead(200, {
+      'Content-Type': type, 'Content-Length': st.size,
+      'Accept-Ranges': 'bytes', ...disposition,
+    });
     fs.createReadStream(file).pipe(res);
   });
 }
@@ -129,12 +179,23 @@ const server = http.createServer(async (req, res) => {
   try {
     // static
     if (req.method === 'GET' && (p === '/' || p === '/index.html'))
-      return serveFile(res, path.join(ROOT, 'public', 'index.html'));
+      return serveFile(req, res, path.join(ROOT, 'public', 'index.html'));
     if (req.method === 'GET' && p.startsWith('/files/')) {
       const rel = decodeURIComponent(p.slice(7));
       const abs = path.resolve(ROOT, rel);
       if (!insideRoot(abs)) { res.writeHead(403); return res.end('forbidden'); }
-      return serveFile(res, abs, url.searchParams.has('dl'));
+      return serveFile(req, res, abs, url.searchParams.has('dl'));
+    }
+
+    // Bundle do Player (artefato buildado em remotion/, commitado em public/vendor/).
+    // Allowlist por regex — não passa por resolveInput()/insideRoot(), que valem
+    // para mídia vinda do cliente. O nome casado não pode conter '/', então '..'
+    // nunca forma um segmento de traversal; o startsWith é cinto e suspensório.
+    const mVendor = /^\/vendor\/([A-Za-z0-9._-]+\.js)$/.exec(p);
+    if (req.method === 'GET' && mVendor) {
+      const abs = path.resolve(VENDOR_DIR, mVendor[1]);
+      if (!abs.startsWith(VENDOR_DIR + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
+      return serveFile(req, res, abs);
     }
 
     // engines
