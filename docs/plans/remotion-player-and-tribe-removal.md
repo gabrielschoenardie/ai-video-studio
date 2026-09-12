@@ -261,17 +261,25 @@ Logo depois da rota de `/files/`, adicionar:
 
 ```js
     // Bundle do Player (artefato buildado em remotion/, commitado em public/vendor/).
-    // Allowlist por regex — não passa por resolveInput(), que é para mídia.
+    // Allowlist por regex — não passa por resolveInput()/insideRoot().
     const mVendor = /^\/vendor\/([A-Za-z0-9._-]+\.js)$/.exec(p);
     if (req.method === 'GET' && mVendor) {
-      const abs = path.join(ROOT, 'public', 'vendor', mVendor[1]);
-      if (!insideRoot(abs)) { res.writeHead(403); return res.end('forbidden'); }
+      const abs = path.resolve(VENDOR_DIR, mVendor[1]);
+      if (!abs.startsWith(VENDOR_DIR + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
       return serveFile(req, res, abs);
     }
 ```
 
-A regex já exclui `/` e `.` de traversal (`..` não casa porque o nome precisa
-terminar em `.js` e não pode conter `/`); o `insideRoot()` é cinto e suspensório.
+com `const VENDOR_DIR = path.join(ROOT, 'public', 'vendor');` junto das outras
+constantes de diretório no topo.
+
+A regex já exclui traversal (o nome não pode conter `/`, então `..` nunca forma
+um segmento); o `startsWith` é cinto e suspensório.
+
+> ⚠️ **Correção (descoberta na execução):** uma versão anterior deste plano usava
+> `insideRoot()` aqui. Está **errado** — `insideRoot()` é "dentro de um diretório
+> de **mídia**" (`jobs/`, `output/`, `luts/`), não "dentro do repo", então ele
+> rejeita `public/vendor/` e a rota devolve 403 para o arquivo legítimo.
 
 **Aceite 1.2:**
 - `curl -s -o /dev/null -w '%{http_code}' localhost:4870/vendor/studio-player.js` → `200` depois da Task 1.4 (antes dela, `404`)
@@ -310,9 +318,16 @@ Exporta em `window.StudioPlayer`:
 | `on(ev, cb)` | `'timeupdate'`, `'play'`, `'pause'`, `'ended'` |
 | `unmount()` | desmonta e libera |
 
-`<Player>` é montado com `component={TimelinePreview}`, `compositionWidth={1080}`,
-`compositionHeight={1920}`, `fps={30}`, `controls={false}` — o transporte é a
-toolbar que já existe na TIMELINE, não a do Player.
+`<Player>` é montado com `compositionWidth={1080}`, `compositionHeight={1920}`,
+`fps={30}`, `controls={false}` — o transporte é a toolbar que já existe na
+TIMELINE, não a do Player.
+
+> ⚠️ **Correção (descoberta na execução):** uma versão anterior deste plano
+> mandava montar `component={TimelinePreview}` já aqui. É referência adiante:
+> `TimelinePreview.tsx` só nasce na Task 2.1, então a Etapa 1 não conseguiria
+> buildar. A Etapa 1 monta um placeholder (`PreviewStub`, no próprio
+> `player-entry.tsx`) e a Task 2.1 troca o import e apaga o stub. O tipo
+> `TimelineProps` já é o definitivo, então nada além do import muda.
 
 **Aceite:** depois do build, `grep -c "StudioPlayer" public/vendor/studio-player.js` → ≥ 1.
 
@@ -345,7 +360,14 @@ Player agora.
 
 ## Task 2.1 — `remotion/src/scenes/TimelinePreview.tsx` (novo)
 
-Composição que espelha o sidecar `.beats.json` v3. Props:
+Composição que espelha o sidecar `.beats.json` v3. Ao criá-la, trocar em
+`player-entry.tsx` o `component={PreviewStub}` por `component={TimelinePreview}`
+(import de `./scenes/TimelinePreview`) e **apagar o `PreviewStub`** — ele existe
+só para a Etapa 1 poder buildar. Os tipos `Segment`/`Clip`/`Word`/`TimelineProps`
+já estão em `player-entry.tsx` e devem ser reaproveitados, não redefinidos.
+Rebuildar o bundle (`npm run build:player`) e commitar o artefato novo.
+
+Props (já declaradas como `TimelineProps`):
 
 ```ts
 type Props = {
@@ -568,3 +590,72 @@ require ou no handler). A aritmética de `proxyCurve()` não foi tocada pelo dif
 
 **Assunção do plano mantida:** `proxyCurve()` e `POST /api/score` seguem vivos.
 O usuário aprovou a Etapa 0 sem derrubar essa assunção.
+
+### Etapa 1 — executada em 2026-09-12 ✅
+
+Tasks 1.1 a 1.5 aplicadas. Etapa 2 **não** foi iniciada.
+
+- **1.1 `serveFile`** — ganhou `req` como primeiro parâmetro e um helper
+  `parseRange()`. Responde `206` + `Content-Range` para `bytes=A-B`, `bytes=-N`
+  (sufixo) e `bytes=A-` (aberto); `416` + `Content-Range: bytes */size` para
+  range fora do arquivo; e o caminho `200` de antes, inalterado, quando não há
+  header `Range` ou ele é multi-range/malformado. As 3 chamadas existentes
+  passaram a receber `req`.
+- **1.2 rota `/vendor/`** — allowlist `^\/vendor\/([A-Za-z0-9._-]+\.js)$` mais
+  `VENDOR_DIR` novo no topo do arquivo.
+- **1.3 `remotion/package.json`** — `@remotion/player`, `esbuild`,
+  `@types/react-dom` e o script `build:player`.
+- **1.4 `remotion/src/player-entry.tsx`** — novo; expõe `window.StudioPlayer`
+  com `mount/update/seek/play/pause/getTime/isPlaying/on/unmount`.
+- **1.5 `.gitignore`** — nenhuma mudança necessária: `git check-ignore` confirma
+  que o bundle não casa com regra alguma.
+
+**Aceite verificado (saída real):**
+
+| Critério | Resultado |
+|---|---|
+| `Range: bytes=0-99` | `206`, `Content-Range: bytes 0-99/100000`, `Content-Length: 100` |
+| `Range: bytes=-500` | `206`, `bytes 99500-99999/100000` |
+| `Range: bytes=99990-` | `206`, `bytes 99990-99999/100000` |
+| `Range: bytes=999999999-` | `416`, `bytes */100000` |
+| sem `Range` | `200`, `Content-Length: 100000` (sem regressão) |
+| bytes do range conferem | `bytes=10-19` devolve os 10 bytes certos |
+| `GET /vendor/studio-player.js` | `200`, `text/javascript`, idêntico ao disco (`cmp`) |
+| `Range` no bundle | `206` |
+| traversal: `../../.env`, `../server.js`, `..%2f..%2f.env`, `sub/dir.js`, `.env`, `.js.map` | `404` em todos (a regex não casa) |
+| arquivo inexistente em `/vendor/` | `404` |
+| `npx tsc --noEmit` | exit 0 |
+| `npm run build:player` | 402.5 kb; `node --check` passa; `window.StudioPlayer` presente; React em modo production |
+| não-regressão: `/`, `/index.html`, `/api/deps`, `/api/luts`, `/api/voices`, `/files/…`, `POST /api/score` | `200` em todos |
+| `/files/../.env` | `404` (path-safety intacta) |
+| `GET /` byte-a-byte | 154813 = tamanho de `public/index.html` |
+
+**Desvios em relação ao plano como estava escrito (os dois viraram correção no
+texto do plano, acima):**
+
+1. **`insideRoot()` na Task 1.2 era o predicado errado.** Ele significa "dentro
+   de um diretório de mídia" (`jobs/`/`output/`/`luts/`), não "dentro do repo" —
+   a rota devolvia `403` para o bundle legítimo. Trocado por `VENDOR_DIR` +
+   `startsWith`. Pego em teste, não em leitura.
+2. **Task 1.4 tinha referência adiante.** Mandava montar
+   `component={TimelinePreview}`, arquivo que só nasce na Task 2.1 — a Etapa 1
+   não buildaria. Resolvido com o placeholder `PreviewStub`, que a Task 2.1
+   apaga.
+
+**Outros desvios menores:**
+
+3. **Versões do Remotion pinadas em `4.0.494` exato** (eram `^4.0.0`). O
+   lockfile já resolvia `remotion`/`@remotion/cli` nessa versão, e o Remotion
+   exige que todos os `@remotion/*` estejam na **mesma** versão — com caret, um
+   `npm install` futuro poderia trazer `@remotion/player` numa versão diferente
+   e quebrar em runtime. `react`/`react-dom` seguem em caret.
+4. **`esbuild` em `^0.28.0`**, não `^0.23.0` como o plano dizia — `0.23` foi
+   chute meu escrito sem consultar o registry; `0.28.2` é a estável atual.
+5. **`@types/react-dom` adicionado** — `createRoot` vem de `react-dom/client` e
+   o `tsc --noEmit` não passa sem os tipos.
+
+**Limitação de verificação:** o Player não foi exercitado num browser — este
+container não tem display, e a montagem real só acontece na Etapa 2, quando
+`public/index.html` passa a carregar o bundle. O que está provado aqui é que o
+bundle compila, carrega como script clássico, define `window.StudioPlayer` e é
+servido corretamente. Comportamento visual do Player é aceite da Etapa 2.
