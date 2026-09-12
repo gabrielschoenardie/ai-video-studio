@@ -16,7 +16,7 @@ const voiceover = require('./lib/voiceover');
 const { assemble } = require('./lib/assemble');
 const { clip } = require('./lib/clipper');
 const { encodeReel } = require('./lib/encode');
-const { score, TRIBE_INFO } = require('./lib/score');
+const { score } = require('./lib/score');
 const { download } = require('./lib/download');
 const { writeAss } = require('./lib/captions');
 const { conform } = require('./lib/timeline');
@@ -380,7 +380,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { job: job.id });
     }
 
-    // Step 6 — score
+    // Score — curva de atenção (sem UI; chamável por curl)
     if (req.method === 'POST' && p === '/api/score') {
       const b = await readJson(req);
       const job = runJob('score', async (job) => {
@@ -389,8 +389,6 @@ const server = http.createServer(async (req, res) => {
       });
       return send(res, 200, { job: job.id });
     }
-    if (req.method === 'GET' && p === '/api/tribe-info')
-      return send(res, 200, TRIBE_INFO);
 
     // Step 7 — export (Instagram delivery, Metodologia Gabriel)
     if (req.method === 'POST' && p === '/api/export') {
