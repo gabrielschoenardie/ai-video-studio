@@ -1128,9 +1128,14 @@ window.sendToClipper = (p) => {
   let offPlayer = [];        // desinscrições dos listeners do Player
   let echoGuard = false;     // evita o laço seekTo → Player → timeupdate → seekTo
   function engineReady() { return USE_RPLAYER ? !!PLAYER : !!video; }
+  // URL do plate (a mídia base). Usada pelas props do Player e pela guarda de
+  // origem do aviso de codec — as duas precisam concordar sobre o que é o plate.
+  function plateSrc() {
+    return '/files/' + encodeURIComponent(String(currentPath || '').replace(/\\/g, '/'));
+  }
   function playerProps() {
     return {
-      src: '/files/' + encodeURIComponent(String(currentPath || '').replace(/\\/g, '/')),
+      src: plateSrc(),
       segments: VIDEO.map(s => ({ srcIn: s.srcIn, dur: s.dur })),
       broll: hiddenTracks.broll ? [] : BROLL.map(c => ({ path: '/files/' + encodeURIComponent(c.path.replace(/\\/g, '/')), start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })),
       music: hiddenTracks.music ? [] : MUSIC.map(c => ({ path: '/files/' + encodeURIComponent(c.path.replace(/\\/g, '/')), start: c.start, dur: c.dur, srcIn: c.srcIn || 0, volume: c.volume })),
@@ -1698,7 +1703,38 @@ window.sendToClipper = (p) => {
       </div>`;
     if (USE_RPLAYER) {
       video = null;
-      PLAYER = window.StudioPlayer.mount($q('#bt-player'), playerProps());
+      const host = $q('#bt-player');
+      PLAYER = window.StudioPlayer.mount(host, playerProps());
+      /* Aviso de codec na rota do Player. Eventos `error` de mídia não
+         borbulham, mas passam pela fase de captura — um listener no host pega
+         qualquer <video>/<audio> que o Remotion montar, sem o app precisar
+         conhecer as entranhas da composição.
+         A guarda de origem faz aqui o papel que `boundVideo !== $q('#bt-video')`
+         faz na rota antiga, e cobre dois casos: um B-ROLL quebrado não pode
+         alegar que o vídeo principal é indecodificável, e um erro que chega
+         atrasado depois da troca de vídeo não casa mais com o plate atual. */
+      // Normaliza para comparação exata. O fragmento é obrigatório descartar:
+      // o Remotion serve cada segmento como `…/arquivo.mp4#t=0,8`, então o
+      // currentSrc nunca bate com a URL do plate sem isto. Comparar por prefixo
+      // resolveria o fragmento, mas casaria também `video.mp4.backup.mp4`.
+      const sameFile = (a, b) => {
+        try {
+          const ua = new URL(a, location.href), ub = new URL(b, location.href);
+          ua.hash = ''; ub.hash = '';
+          return ua.href === ub.href;
+        } catch (e) { return false; }
+      };
+      const onMediaError = (ev) => {
+        const el = ev.target;
+        if (!el || typeof el.currentSrc !== 'string') return;
+        const failed = el.currentSrc || el.src || '';
+        if (!failed || !sameFile(failed, plateSrc())) return;   // não é o plate
+        console.warn('BEATS: preview indisponível —', el.error && el.error.message);
+        const warn = $q('#bt-preview-error');
+        if (warn) warn.hidden = false;
+      };
+      host.addEventListener('error', onMediaError, true);
+      offPlayer.push(() => host.removeEventListener('error', onMediaError, true));
       wireTransport();   // os listeners do Player são wirados lá dentro
       wireTracks();
       return;
