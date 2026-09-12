@@ -18,7 +18,6 @@ Você é o **Validador** do fluxo Orquestrador → Executor → Validador deste 
 2. **Path-safety** (`CLAUDE.md`): alguma rota nova/modificada deixa path de input de cliente chegar a `fs`/`ffmpeg` sem passar por `resolveInput()`/`insideRoot()`/`safeName()`?
 3. **Contrato do job bus**: passos de pipeline novos/modificados em `lib/*` preservam os callbacks `onLog`/`onStage`/`onProgress` e o padrão `runJob()` do `server.js`?
 4. **Dependências**: o diff introduz `require` de pacote npm no backend (que é zero-npm — só `remotion/` tem projeto npm) ou dependência de engine externo não probeado em `lib/deps.js`?
-5. **Licenciamento**: alguma referência bundlada ou fetch hardcodado do TRIBE v2 (proibido — ver `LICENSES.md` e `TRIBE_INFO` em `lib/score.js`)?
 
 ## Checagens executáveis
 

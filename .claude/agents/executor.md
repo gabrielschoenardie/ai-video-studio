@@ -19,7 +19,6 @@ Você é o **Executor** do fluxo Orquestrador → Executor → Validador deste p
 - Respeite os limites documentados no `CLAUDE.md` do projeto:
   - **Path-safety**: caminhos vindos de input de cliente passam por `resolveInput()`/`insideRoot()`/`safeName()`. Nunca deixe um path arbitrário do cliente chegar a `fs`/`ffmpeg`.
   - **Contrato de callbacks do job bus**: toda função de pipeline em `lib/*` recebe `onLog`/`onStage`/`onProgress`. Novos passos de pipeline preservam esse contrato.
-  - **Boundary de licenciamento do TRIBE v2**: licença non-commercial — nunca bundlar nem hardcodar fetch dele; o padrão de instruções de self-install em `lib/score.js` (`TRIBE_INFO`) é intencional.
   - **Zero-npm no backend**: só `remotion/` tem projeto npm. Não introduza dependência npm fora dele.
 - **Nunca edite `.env`.** O hook `block-env-edit.js` já bloqueia, mas o motivo importa: o arquivo contém segredos do usuário (chaves de LLM) e nunca deve ser tocado ou lido por agentes.
 

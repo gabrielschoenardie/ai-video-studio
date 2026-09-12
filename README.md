@@ -160,10 +160,10 @@ Detalhes dessa camada de compatibilidade OpenAI da Anthropic (não é a API nati
 | `POST /api/timeline/conform` | achata a timeline num mezanino |
 | `POST /api/voiceover` · `/api/assemble` · `/api/clip` · `/api/download` · `/api/export` | os steps |
 | `POST /api/remotion/render` | renderiza uma composição |
-| `POST /api/score` · `GET /api/tribe-info` | curva de atenção (ver nota abaixo) |
+| `POST /api/score` | curva de atenção (ver nota abaixo) |
 | `GET /api/jobs/:id[/events]` | estado do job / stream SSE |
 
-> **Nota sobre o SCORE.** A curva de atenção saiu da navegação (a pipeline foi reduzida de 6 pra 5 steps), mas `POST /api/score`, `GET /api/tribe-info` e `lib/score.js` continuam intactos no backend — dá pra chamar por `curl` ou reexpor na UI a qualquer momento. Nada na pipeline consumia o resultado, então a remoção foi isolada por construção.
+> **Nota sobre o SCORE.** A curva de atenção saiu da navegação (a pipeline foi reduzida de 6 pra 5 steps), mas `POST /api/score` e `lib/score.js` continuam intactos no backend — dá pra chamar por `curl` ou reexpor na UI a qualquer momento. Nada na pipeline consumia o resultado, então a remoção foi isolada por construção.
 
 ---
 
@@ -173,7 +173,7 @@ O código do app (`server.js`, `lib/`, `public/`, `clipper/`) é seu, sem restri
 
 Os **engines** usados são de licença permissiva (MIT, Unlicense, BSD, LGPL/GPL do ffmpeg) — uso comercial livre. O Remotion tem licença própria: confira os termos comerciais antes de vender vídeos renderizados em escala.
 
-O **TRIBE v2** (modelo de resposta cerebral, o scorer "de verdade" por trás da curva de atenção) é licenciado **apenas para uso não-comercial** pelos autores originais. Por isso **não vem embutido** — `lib/score.js` só o invoca se a env `STUDIO_TRIBE_CMD` apontar pra um runner local seu. Sem ele, o app usa o **proxy local** (`proxyCurve`: energia de áudio + densidade de cortes + densidade de fala), que não é o modelo científico, só um primeiro filtro honesto de "onde está monótono". Veja `tribe/README.md` e `LICENSES.md` para os detalhes.
+A curva de atenção (`lib/score.js`) é heurística local escrita para este projeto — energia de áudio, densidade de cortes e densidade de fala. Sem modelo de terceiros, sem licença a confirmar. Veja `LICENSES.md` para os detalhes.
 
 ---
 
@@ -196,11 +196,10 @@ ai-video-studio/
 │   ├── color.js            # grade + dither (puro: sem I/O) — rota zscale ou swscale
 │   ├── encode.js           # Metodologia Gabriel: VBV, riskScore(), validate()
 │   ├── vmaf.js             # VMAF vmaf_v0.6.1, veredito por média harmônica
-│   └── score.js            # curva de atenção (TRIBE v2 opcional / proxy local)
+│   └── score.js            # curva de atenção (heurística local)
 ├── clipper/                # CLI do auto-clipper (clip.js, check-deps.js)
 ├── remotion/               # projeto Remotion (AutoKillReel, NeuralIntro) — npm próprio
 ├── luts/                   # suas LUTs .cube (aparecem sozinhas no EXPORT)
-├── tribe/                  # instruções de auto-instalação do TRIBE v2 (nunca embutido)
 ├── docs/plans/             # planos de implementação (fluxo Orquestrador/Executor)
 ├── .claude/                # agentes, skills e hooks do projeto
 ├── jobs/                   # scratch (uploads, transcripts, tracks) — não versionar

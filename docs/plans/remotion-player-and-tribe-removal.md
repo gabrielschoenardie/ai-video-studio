@@ -516,4 +516,55 @@ hint de instalação acionável.
 
 ## Status
 
-_(propriedade do Executor — ainda não executado)_
+_(propriedade do Executor)_
+
+### Etapa 0 — executada em 2026-09-12 ✅
+
+Tasks 0.1 a 0.7 aplicadas literalmente conforme o plano. Etapas 1 e 2 **não**
+foram iniciadas.
+
+- **0.1 `lib/score.js`** — cabeçalho reescrito; `spawn` removido do require
+  (`execFile` fica); `note` do `proxyCurve()` trocado; `TRIBE_INFO` e
+  `tribeCurve()` removidos por inteiro; `score()` virou um passthrough para
+  `proxyCurve()`; exports reduzidos a `{ score, proxyCurve }`.
+- **0.2 `server.js`** — require sem `TRIBE_INFO`; rota `GET /api/tribe-info`
+  removida; comentário `// Step 6 — score` atualizado.
+- **0.3** — `tribe/` removida via `git rm -r` (2 arquivos, 206 linhas).
+- **0.4 `LICENSES.md`** — seção 3 (TRIBE) removida, seção 4 renumerada para 3,
+  linha de resumo reescrita apontando o Remotion como único ponto de atenção.
+- **0.5 `CLAUDE.md`** — descrição de `lib/score.js` reescrita sem as duas
+  camadas; parágrafo **Licensing boundary** removido.
+- **0.6 `.claude/agents/`** — bullet do TRIBE removido do `executor.md`; item 5
+  (Licenciamento) removido do `validator.md`.
+- **0.7 `README.md`** — 5 pontos: célula da tabela de rotas, nota sobre o SCORE,
+  parágrafo de licenciamento, comentário do `score.js` na árvore, e a entrada
+  `tribe/` da árvore.
+
+**Aceite verificado (saída real, não afirmação):**
+
+| Critério | Resultado |
+|---|---|
+| `grep -ci tribe lib/score.js` | `0` |
+| `grep -c spawn lib/score.js` | `0` |
+| `grep -ci tribe server.js` | `0` |
+| `node --check lib/score.js && node --check server.js` | exit 0 |
+| `test -d tribe` | não existe |
+| `grep -ci tribe` em `LICENSES.md` / `CLAUDE.md` / `README.md` / `executor.md` / `validator.md` | `0` em todos |
+| grep global (fora de `docs/`) | nenhuma ocorrência |
+| `GET /api/tribe-info` | `404` |
+| `GET /` · `GET /api/deps` | `200` · `200` (app vivo) |
+| `POST /api/score` | `200`, devolve `{"job":"…"}` — a rota sobreviveu |
+| `require('./lib/score')` | exports `score, proxyCurve`; `TRIBE_INFO === undefined` |
+
+`git diff --stat`: exatamente os 7 arquivos do plano + os 2 deletados.
+
+**Desvio / limitação de verificação:** o critério do plano pedia
+`POST /api/score` com um MP4 real. **Não há ffmpeg/ffprobe neste container e o
+repo não tem mídia de teste**, então o score não foi exercitado ponta a ponta —
+`proxyCurve()` depende de `mediaInfo()`. O que foi verificado é que a rota
+responde 200 criando job e que o módulo exporta `score` como função sem
+referência a `TRIBE_INFO` (que era o risco real da remoção: `ReferenceError` no
+require ou no handler). A aritmética de `proxyCurve()` não foi tocada pelo diff.
+
+**Assunção do plano mantida:** `proxyCurve()` e `POST /api/score` seguem vivos.
+O usuário aprovou a Etapa 0 sem derrubar essa assunção.
