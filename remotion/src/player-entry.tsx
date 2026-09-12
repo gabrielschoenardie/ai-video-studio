@@ -7,45 +7,22 @@
 // só com a API imperativa exposta em `window.StudioPlayer` — nenhum JSX, nenhum
 // módulo, nenhum bundler do lado do app.
 //
-// ETAPA 1: a composição é o placeholder `PreviewStub` abaixo. A Etapa 2 troca o
-// import por `./scenes/TimelinePreview` e apaga o stub — o formato de
-// `TimelineProps` já é o definitivo, então nada mais aqui muda.
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Player, type PlayerRef } from '@remotion/player';
-import { AbsoluteFill } from 'remotion';
+import { TimelinePreview, EMPTY_TIMELINE, type TimelineProps } from './scenes/TimelinePreview';
+
+export type { Segment, Clip, TimelineProps } from './scenes/TimelinePreview';
 
 const FPS = 30;
 const WIDTH = 1080;
 const HEIGHT = 1920;
 
-export type Segment = { srcIn: number; dur: number };
-export type Clip = { path: string; start: number; dur: number; srcIn?: number; volume?: number };
-export type Word = { word: string; start: number; end: number };
+const EMPTY = EMPTY_TIMELINE;
 
-export type TimelineProps = {
-  src: string;
-  segments: Segment[];
-  broll: Clip[];
-  music: Clip[];
-  words: Word[] | null;
-  hidden: { broll?: boolean; music?: boolean; legend?: boolean };
-  trilhaMuted: boolean;
-};
-
-const EMPTY: TimelineProps = {
-  src: '', segments: [], broll: [], music: [], words: null, hidden: {}, trilhaMuted: false,
-};
-
-// Placeholder da Etapa 1 — ver nota no topo. Só prova que o bundle carrega e
-// que o Player monta; não desenha timeline nenhuma.
-const PreviewStub: React.FC<TimelineProps> = () => (
-  <AbsoluteFill style={{ backgroundColor: '#000' }} />
-);
-
-// A timeline é a soma dos segmentos; sem segmentos salvos o sidecar significa
-// "a mídia inteira", mas nesta etapa ainda não medimos a mídia — 1 frame é o
-// mínimo que o Player aceita e evita um crash com props vazias.
+// A timeline é a soma dos segmentos. 1 frame é o mínimo que o Player aceita e
+// evita um crash enquanto as props ainda estão vazias (antes do primeiro
+// update, ou num vídeo que falhou ao sondar).
 function durationInFrames(props: TimelineProps): number {
   const total = (props.segments || []).reduce((s, g) => s + (g.dur || 0), 0);
   return Math.max(1, Math.round(total * FPS));
@@ -57,6 +34,7 @@ type EventName = 'timeupdate' | 'play' | 'pause' | 'ended';
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 let current: TimelineProps = EMPTY;
+let rate = 1;   // shuttle J/K/L — o Player aceita negativo e toca de ré nativo
 let playerRef: PlayerRef | null = null;
 const listeners: Record<EventName, Set<Listener>> = {
   timeupdate: new Set(), play: new Set(), pause: new Set(), ended: new Set(),
@@ -86,12 +64,13 @@ function render() {
   root.render(
     <Player
       ref={bind}
-      component={PreviewStub}
+      component={TimelinePreview}
       inputProps={current}
       durationInFrames={durationInFrames(current)}
       compositionWidth={WIDTH}
       compositionHeight={HEIGHT}
       fps={FPS}
+      playbackRate={rate}
       // O transporte é a toolbar que a TIMELINE já tem (J/K/L, espaço, ,/.),
       // não os controles do Player — dois transportes competindo pelo mesmo
       // playhead é confusão garantida.
@@ -124,6 +103,15 @@ const StudioPlayer = {
   },
   play() { playerRef?.play(); },
   pause() { playerRef?.pause(); },
+  // taxa de shuttle; negativo toca de ré. Re-renderiza porque `playbackRate` é
+  // prop do <Player>, não método do ref.
+  setRate(n: number) {
+    const next = Number(n) || 1;
+    if (next === rate) return;
+    rate = next;
+    render();
+  },
+  getRate(): number { return rate; },
   getTime(): number {
     return playerRef ? playerRef.getCurrentFrame() / FPS : 0;
   },

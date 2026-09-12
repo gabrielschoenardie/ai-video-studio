@@ -659,3 +659,78 @@ container não tem display, e a montagem real só acontece na Etapa 2, quando
 `public/index.html` passa a carregar o bundle. O que está provado aqui é que o
 bundle compila, carrega como script clássico, define `window.StudioPlayer` e é
 servido corretamente. Comportamento visual do Player é aceite da Etapa 2.
+
+### Etapa 2 — executada em 2026-09-12 ✅
+
+Tasks 2.1 a 2.4 aplicadas. O compositor de canvas **não foi apagado** — virou o
+fallback, como o plano exigia.
+
+- **2.1 `TimelinePreview.tsx`** — pista VÍDEO como `<Series>` (o corte fica
+  declarativo), B-ROLL como `<Sequence>`+`<Video muted>`, TRILHA como
+  `<Sequence>`+`<Audio>` com volume. `player-entry.tsx` importa a composição, o
+  `PreviewStub` foi apagado e os tipos migraram para `TimelinePreview.tsx`
+  (o caminho inverso seria import circular).
+- **2.2** — `<script src="/vendor/studio-player.js" onerror>` no `<head>`, mais
+  `const USE_RPLAYER` dentro do módulo da TIMELINE.
+- **2.3** — markup ramificado (`#bt-player` vs `<video>`+`<canvas>`), montagem e
+  teardown no ciclo de `loadVideo`, transporte roteado, `compositeTick` com
+  guarda no topo.
+- **2.4** — `CLAUDE.md` e `README.md` atualizados.
+
+**Aceite verificado (Chromium headless, dirigindo a UI real).** Sem ffprobe no
+container, `/api/probe` e `/files/**` foram interceptados na camada de rede —
+**nenhuma linha do app foi alterada para testar**. O vídeo de teste foi gerado
+com MediaRecorder no próprio Chromium.
+
+| Critério | Resultado |
+|---|---|
+| bundle carrega, `USE_RPLAYER` verdadeiro | `typeof window.StudioPlayer === 'object'` |
+| Player monta, React renderiza | `#bt-player video` presente; `#bt-video` ausente |
+| duração e tracks | `00:00.0/00:12.0`, 6 tracks |
+| PLAY avança | `00:00.0` → `00:00.9` em ~1,2 s |
+| `Home` / frame-step `.` | `00:00.0` / `00:00.1` |
+| shuttle `L L` → badge | `2×`; `K` zera |
+| shuttle `J` (ré) | `00:12.0` → `00:11.1` |
+| `update()` na montagem | 1 chamada, payload correto |
+| edição via `renderTracks()` (split a 6 s) | beats 1→2, updates 1→2 |
+| hide B-ROLL | `hidden.broll: true` |
+| SOLO da TRILHA | `trilhaSolo: true` |
+| **fallback** (bundle renomeado) | `<video>`+`<canvas>` de volta, PLAY avança, `Home` ok |
+| `npx tsc --noEmit` | exit 0 |
+| erros de página | nenhum (só Google Fonts, sem rede no container) |
+
+**Lacunas do plano corrigidas durante a execução:**
+
+1. **`wireTransport()` teria lançado.** Ele termina com três
+   `video.addEventListener(...)`; com o Player `video` é `null`. Os listeners
+   equivalentes do Player foram wirados no mesmo lugar, atrás do branch.
+2. **O botão SOLO da TRILHA virava no-op.** Ele fazia `video.muted = trilhaSolo`
+   para ouvir só a música. Virou a prop `trilhaSolo`, que silencia o plate na
+   composição.
+3. **Hide/lock/mute/solo não sincronizavam.** Esse handler chama
+   `applyTrackVisibility()` direto, sem passar por `renderTracks()` — precisou
+   de um segundo ponto de `syncPlayer()`.
+4. **`seekTo()` precisou ser partido em dois.** O `timeupdate` do Player é por
+   frame; devolver essa posição ao Player seria realimentação (um seek por
+   frame). `applyPlayhead()` move o playhead e repinta sem tocar no motor;
+   `seekTo()` escreve no motor e chama `applyPlayhead()`.
+
+**Desvio deliberado — ré não usa `playbackRate` negativo.** O Player aceita
+taxa negativa, e a intenção era trocar o `setInterval` por isso. No teste a ré
+não andou, e o log mostrou que a mídia sintética não é *seekable* — ou seja, não
+deu para distinguir bug de artefato do arquivo de teste. Trocar um caminho que
+funciona por um não verificado é o pior dos dois, então a ré segue por seeks
+sucessivos, agora compartilhada pelas duas rotas (o `seekTo()` já fala com o
+motor certo). Se quiser a taxa nativa depois, é um teste com MP4 real.
+
+**Simplificação deliberada — legenda não entra na composição.** O plano previa
+desenhar as palavras no `TimelinePreview`. O overlay DOM (`#bt-cap-overlay`) já
+existe, é dirigido por `playhead` e continua funcionando por cima do Player.
+Manter um renderizador de legenda só evita divergência entre preview e export, e
+a Etapa 3 é quem decide a arquitetura real de legendas.
+
+**Limitação de verificação:** o roteiro manual de 7 passos do plano não foi
+exercitado com mídia real — sem ffmpeg/ffprobe no container, `CONFORMAR →
+EXPORT` e o aviso de codec HEVC não têm como rodar aqui. Ambos ficam para
+validação na máquina do usuário. O que está provado é a integração:
+montagem, transporte, sincronia de edição e fallback.
