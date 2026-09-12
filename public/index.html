@@ -6,6 +6,10 @@
 <title>AI VIDEO STUDIO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Unica+One&family=Inter:wght@400;500;600;700&family=Red+Hat+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<!-- Player da TIMELINE (bundle buildado em remotion/, commitado). Ausente ou
+     falhando, o passo 04 cai no compositor de canvas — mesmo padrão de
+     degradação graciosa dos engines. -->
+<script src="/vendor/studio-player.js" onerror="window.__playerBundleFailed=1"></script>
 <style>
 :root{
   /* Cinema noir — deep space indigo + spotlight amber */
@@ -409,6 +413,10 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 .bt-menu-item:focus-visible{outline:2px solid var(--go); outline-offset:-2px}
 .bt-video-wrap{position:relative}
 .bt-video-wrap canvas{position:absolute; inset:0; width:100%; height:100%}
+/* o Player monta seu próprio <div> aqui dentro; o overlay de legenda e o
+   relógio continuam por cima, como irmãos posicionados */
+#bt-player{width:100%; height:100%; background:#000}
+#bt-player > *{width:100%; height:100%}
 .bt-clip{position:absolute; top:5px; bottom:5px; border-radius:5px; cursor:grab;
   display:flex; align-items:center; gap:6px; padding:0 8px; overflow:hidden;
   border:1px solid var(--line); background:var(--panel2)}
@@ -1109,6 +1117,34 @@ window.sendToClipper = (p) => {
   let video = null;
   let popEl = null;
 
+  /* ---------------- motor de preview ----------------
+     Duas rotas. Com o bundle presente, o @remotion/player é o motor: o corte da
+     pista VÍDEO vira <Series> declarativo e o Remotion faz o mapa
+     timeline→fonte sozinho. Sem o bundle, segue o compositor de canvas, que
+     continua inteiro logo abaixo — nada foi apagado.
+     `PLAYER` é o sentinela da rota nova, como `video` é o da antiga. */
+  const USE_RPLAYER = !window.__playerBundleFailed && typeof window.StudioPlayer === 'object';
+  let PLAYER = null;
+  let offPlayer = [];        // desinscrições dos listeners do Player
+  let echoGuard = false;     // evita o laço seekTo → Player → timeupdate → seekTo
+  function engineReady() { return USE_RPLAYER ? !!PLAYER : !!video; }
+  function playerProps() {
+    return {
+      src: '/files/' + encodeURIComponent(String(currentPath || '').replace(/\\/g, '/')),
+      segments: VIDEO.map(s => ({ srcIn: s.srcIn, dur: s.dur })),
+      broll: hiddenTracks.broll ? [] : BROLL.map(c => ({ path: '/files/' + encodeURIComponent(c.path.replace(/\\/g, '/')), start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })),
+      music: hiddenTracks.music ? [] : MUSIC.map(c => ({ path: '/files/' + encodeURIComponent(c.path.replace(/\\/g, '/')), start: c.start, dur: c.dur, srcIn: c.srcIn || 0, volume: c.volume })),
+      hidden: { broll: !!hiddenTracks.broll, music: !!hiddenTracks.music },
+      trilhaMuted, trilhaSolo,
+    };
+  }
+  function syncPlayer() { if (PLAYER) PLAYER.update(playerProps()); }
+  function teardownPlayer() {
+    offPlayer.forEach(off => { try { off(); } catch {} });
+    offPlayer = [];
+    if (PLAYER) { try { PLAYER.unmount(); } catch {} PLAYER = null; }
+  }
+
   function $q(sel, ctx) { return (ctx || document).querySelector(sel); }
   function $$q(sel, ctx) { return [...(ctx || document).querySelectorAll(sel)]; }
   function escapeHtml(s) {
@@ -1586,7 +1622,9 @@ window.sendToClipper = (p) => {
         <button class="bt-toggle" id="bt-conform" title="Achata a timeline (cortes de V1 + B-ROLL + TRILHA) num mezanino e manda para o EXPORT">CONFORMAR → EXPORT</button>
       </div>
       <div class="bt-preview">
-        <div class="bt-video-wrap"><video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video><canvas id="bt-canvas"></canvas>
+        <div class="bt-video-wrap">${USE_RPLAYER
+          ? '<div id="bt-player"></div>'
+          : `<video id="bt-video" src="/files/${encodeURIComponent(currentPath.replace(/\\/g, '/'))}"></video><canvas id="bt-canvas"></canvas>`}
           <span class="bt-preview-tag">BEATS · REVISÃO</span>
           <div class="bt-preview-error" id="bt-preview-error" hidden>
             Prévia indisponível — este navegador não decodifica o codec do vídeo
@@ -1658,6 +1696,13 @@ window.sendToClipper = (p) => {
           <div class="bt-inout" id="bt-inout" style="display:none"></div>
         </div>
       </div>`;
+    if (USE_RPLAYER) {
+      video = null;
+      PLAYER = window.StudioPlayer.mount($q('#bt-player'), playerProps());
+      wireTransport();   // os listeners do Player são wirados lá dentro
+      wireTracks();
+      return;
+    }
     video = $q('#bt-video');
     const boundVideo = video;
     boundVideo.addEventListener('error', () => {
@@ -2019,6 +2064,10 @@ window.sendToClipper = (p) => {
     ctx.drawImage(sourceEl, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
   }
   function compositeTick() {
+    // Com o Player ativo este laço não roda: o corte vira <Series> declarativo,
+    // a posição chega por evento e o áudio/B-ROLL são do próprio Remotion.
+    // A função fica inteira porque é o fallback quando não há bundle.
+    if (USE_RPLAYER) return;
     if (!built || !video) return;
     advancePlayhead();
     const canvas = $q('#bt-canvas');
@@ -2149,14 +2198,22 @@ window.sendToClipper = (p) => {
     highlightActiveWord();
     applyTrackVisibility();
     syncMarkersOffset();
+    // ponto único de sincronia com o Player: toda edição (split, merge, delete
+    // com ripple, trim, add/remove de clipe, undo/redo, hide/lock) já passa por
+    // aqui, então o preview nunca fica atrasado em relação à timeline
+    syncPlayer();
   }
 
   /* ---------------- transport / shuttle ---------------- */
   function stopReverseTimer() { if (revTimer) { clearInterval(revTimer); revTimer = null; } }
+  function isPaused() { return USE_RPLAYER ? !PLAYER.isPlaying() : video.paused; }
   function togglePlay() {
-    if (!video) return;
-    if (video.paused) { stopReverseTimer(); jklLevel = 1; video.playbackRate = 1; video.play(); }
-    else shuttleStop();
+    if (!engineReady()) return;
+    if (isPaused()) {
+      stopReverseTimer(); jklLevel = 1;
+      if (USE_RPLAYER) { PLAYER.setRate(1); PLAYER.play(); }
+      else { video.playbackRate = 1; video.play(); }
+    } else shuttleStop();
   }
   function updateRateBadge() {
     const el = $q('#bt-rate');
@@ -2167,21 +2224,24 @@ window.sendToClipper = (p) => {
     el.textContent = (jklLevel < 0 ? '◀ ' : '') + abs + '×';
   }
   function shuttleForward() {
-    if (!video) return;
+    if (!engineReady()) return;
     stopReverseTimer();
     jklLevel = jklLevel > 0 ? Math.min(8, jklLevel * 2) : 1;
-    video.playbackRate = jklLevel;
-    video.play();
+    if (USE_RPLAYER) { PLAYER.setRate(jklLevel); PLAYER.play(); }
+    else { video.playbackRate = jklLevel; video.play(); }
     updateRateBadge();
   }
   function shuttleReverse() {
-    if (!video) return;
+    if (!engineReady()) return;
     jklLevel = jklLevel < 0 ? Math.max(-8, jklLevel * 2) : -1;
-    video.pause();
     stopReverseTimer();
+    if (USE_RPLAYER) PLAYER.pause(); else video.pause();
     const speed = Math.abs(jklLevel);
-    // ré em tempo de TIMELINE — seekTo() traduz para a fonte e atravessa as
-    // emendas de V1 de trás para frente
+    /* Ré por seeks sucessivos em tempo de TIMELINE, nas duas rotas. O Player
+       aceita playbackRate negativo, mas isso não foi possível verificar aqui
+       (o arquivo de teste sintético não é seekable), e trocar um caminho que
+       funciona por um não verificado é o pior dos dois. seekTo() já fala com o
+       motor certo, então o mesmo laço serve às duas. */
     revTimer = setInterval(() => {
       let t = playhead - (speed / 30);
       if (t <= 0) { t = 0; shuttleStop(); }
@@ -2191,25 +2251,40 @@ window.sendToClipper = (p) => {
   }
   function shuttleStop() {
     jklLevel = 0; stopReverseTimer();
-    if (video) { video.pause(); video.playbackRate = 1; }
+    if (USE_RPLAYER) { if (PLAYER) { PLAYER.pause(); PLAYER.setRate(1); } }
+    else if (video) { video.pause(); video.playbackRate = 1; }
     updateRateBadge();
   }
   function frameStep(dir) {
-    if (!video) return;
+    if (!engineReady()) return;
     shuttleStop();
     const t = Math.max(0, Math.min(DURATION, playhead + dir / 30));
     seekTo(t);
   }
-  /* Único caminho de escrita do playhead. `t` é sempre tempo de TIMELINE; o
-     <video> recebe o tempo de FONTE correspondente. */
-  function seekTo(t) {
-    if (!video) return;
-    t = Math.max(0, Math.min(DURATION, t));
-    playhead = t;
-    activeSeg = segIndexAt(t);
-    const src = tlToSrc(t);
-    if (Math.abs(video.currentTime - src) > 0.001) video.currentTime = src;
+  /* Move o playhead e repinta a UI, SEM tocar no motor de reprodução. Existe
+     separado de seekTo() porque o Player nos avisa da posição dele a cada
+     frame: mandar essa posição de volta para o Player seria um laço de
+     realimentação (e um seek por frame). */
+  function applyPlayhead(t) {
+    playhead = Math.max(0, Math.min(DURATION, t));
+    activeSeg = segIndexAt(playhead);
     renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); updatePreviewOverlay();
+  }
+  /* Único caminho de escrita do playhead vindo da UI. `t` é sempre tempo de
+     TIMELINE. No canvas o <video> recebe o tempo de FONTE correspondente; no
+     Player basta o tempo de timeline, porque o <Series> já faz esse mapa. */
+  function seekTo(t) {
+    if (!engineReady()) return;
+    t = Math.max(0, Math.min(DURATION, t));
+    if (USE_RPLAYER) {
+      echoGuard = true;
+      PLAYER.seek(t);
+      echoGuard = false;
+    } else {
+      const src = tlToSrc(t);
+      if (Math.abs(video.currentTime - src) > 0.001) video.currentTime = src;
+    }
+    applyPlayhead(t);
   }
   /* Durante a reprodução quem corre é o <video>, em tempo de fonte — o playhead
      é derivado dele a cada frame. Ao chegar no fim do segmento atual saltamos
@@ -2235,8 +2310,8 @@ window.sendToClipper = (p) => {
     if (src < seg.srcIn - 1e-3) { video.currentTime = seg.srcIn; return; }
     playhead = segStart(activeSeg) + (src - seg.srcIn);
   }
-  function markIn() { if (video) { inPoint = snapTime(playhead); renderInOut(); } }
-  function markOut() { if (video) { outPoint = snapTime(playhead); renderInOut(); } }
+  function markIn() { if (engineReady()) { inPoint = snapTime(playhead); renderInOut(); } }
+  function markOut() { if (engineReady()) { outPoint = snapTime(playhead); renderInOut(); } }
 
   /* ---------------- rename popover ---------------- */
   /* Guia de alinhamento. O CSS .bt-snap-guide já existia no arquivo e nunca havia
@@ -2883,6 +2958,9 @@ window.sendToClipper = (p) => {
           if (act === 'mute') trilhaMuted = !trilhaMuted;
           if (act === 'solo') { trilhaSolo = !trilhaSolo; if (video) video.muted = trilhaSolo; }
           applyTrackVisibility();
+          // este handler não passa por renderTracks(), então o Player precisa
+          // ser avisado aqui — senão hide/mute/solo só mudariam a UI
+          syncPlayer();
         };
       });
       const resizeHandle = row.querySelector('.bt-row-resize');
@@ -2927,6 +3005,21 @@ window.sendToClipper = (p) => {
       zoomAt(PX_PER_SEC * (e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP), e.clientX);
     }, { passive: false });
     updateZoomReadout();
+    if (USE_RPLAYER) {
+      // mesmos três sinais da rota <video>, vindos do Player. O `timeupdate`
+      // dele é por frame (o do <video> era ~4×/s), então aqui ele também move o
+      // playhead — `echoGuard` barra o eco do seek que nós mesmos mandamos.
+      offPlayer.push(PLAYER.on('timeupdate', (t) => {
+        if (echoGuard) return;
+        applyPlayhead(typeof t === 'number' ? t : PLAYER.getTime());
+        renderLegendList();
+      }));
+      offPlayer.push(PLAYER.on('play', () => { $q('#bt-play').textContent = '❚❚'; }));
+      offPlayer.push(PLAYER.on('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; updateRateBadge(); }));
+      // fim da timeline: zera o shuttle para o badge não ficar mentindo "4×"
+      offPlayer.push(PLAYER.on('ended', () => { jklLevel = 0; updateRateBadge(); }));
+      return;
+    }
     video.addEventListener('timeupdate', () => { renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); updatePreviewOverlay(); renderLegendList(); });
     video.addEventListener('play', () => { $q('#bt-play').textContent = '❚❚'; });
     video.addEventListener('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; });
@@ -2935,9 +3028,13 @@ window.sendToClipper = (p) => {
   /* ---------------- load a video into the editor ---------------- */
   async function loadVideo(path) {
     stopReverseTimer();
+    // antes de qualquer innerHTML: desmontar o React depois que o nó host já
+    // sumiu deixa o root órfão e emite warning
+    teardownPlayer();
     const prevErrEl = $q('#bt-preview-error');
     if (prevErrEl) prevErrEl.hidden = true;
     if (!path) {
+      teardownPlayer();
       $('#bt-root').innerHTML = '<div class="empty">Escolha um vídeo acima.</div>';
       built = false; video = null;
       return;

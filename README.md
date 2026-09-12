@@ -33,7 +33,7 @@ cp .env.example .env     # PORT, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 | `piper` / `espeak-ng` / `say` | voiceover (fallback, scratch track) | opcional — o primeiro disponível vence | MIT / GPL / macOS |
 | **yt-dlp** | DOWNLOAD e clipper (URLs) | `pip install yt-dlp` | Unlicense |
 | **python3 + OpenCV** | reframe 9:16 do clipper (tracking de rosto/movimento) | `pip install opencv-python` | BSD |
-| **Remotion** | VISUALS (motion graphics) | `cd remotion && npm install` | ver `remotion/` |
+| **Remotion** | VISUALS (motion graphics). O player da TIMELINE **não** precisa disto — o bundle vem commitado | `cd remotion && npm install` | ver `remotion/` |
 | **libvmaf** (parte do ffmpeg) | métrica de qualidade do EXPORT | build do ffmpeg com `--enable-libvmaf` | BSD-2-Clause — sem esse flag só perde a métrica, o encode continua |
 | **zscale** (parte do ffmpeg) | LUT 3D em precisão float + dither RPDF nativo no EXPORT | build do ffmpeg com `--enable-libzimg` | BSD-2-Clause — sem esse flag cai pra rota `swscale` (LUT 8-bit, dither aproximado), o encode continua |
 
@@ -81,6 +81,8 @@ Seis tracks, todas desenhadas sobre a mesma régua com zoom e snapping:
 **Atalhos:** `J/K/L` shuttle · `espaço` play/pause · `,`/`.` frame a frame · `Home`/`End` · `I`/`O` mark in/out · `S` split · `M` merge · `R` rename · `Del` deleta (ripple) · `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo · `+`/`−` zoom · `\` fit.
 
 **Persistência:** tudo vai num sidecar `<video>.beats.json` (v3) ao lado do vídeo — `SALVAR BEATS`. Nada é destrutivo até você conformar.
+
+**O preview** roda no `@remotion/player`: o corte da pista VÍDEO vira um `<Series>` declarativo, então o ripple e o mapa timeline→fonte saem do próprio Remotion, e B-ROLL e TRILHA entram como `<Sequence>` sincronizadas. O bundle (`public/vendor/studio-player.js`) vem commitado — nada a instalar. Se ele faltar, o passo 04 cai sozinho no compositor de canvas anterior, que segue no código: é o mesmo padrão de degradação graciosa dos engines. Para **alterar** o player: `cd remotion && npm install && npm run build:player`.
 
 **`CONFORMAR → EXPORT`** achata a timeline num arquivo real: `lib/timeline.js` lê o sidecar, aplica os cortes do VÍDEO, sobrepõe o B-ROLL, mixa a TRILHA, **reprojeta as palavras da legenda pelo mapa de cortes** (senão a legenda dessincroniza exatamente pelo corte) e escreve um mezanino 4:4:4 CRF 12. Esse mezanino é o único caminho pelo qual a timeline chega ao arquivo exportado — o compositor do navegador é prévia, não render. O EXPORT o recebe como `sourceKind: 'mezzanine'` e o usa também como referência do VMAF.
 
