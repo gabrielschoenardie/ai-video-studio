@@ -146,10 +146,10 @@ Sem API key? O **hook-detector offline** entra automaticamente (regex de pergunt
 ```bash
 LLM_BASE_URL="https://api.anthropic.com/v1"
 LLM_API_KEY="sk-ant-..."
-LLM_MODEL="claude-opus-5"        # ou claude-sonnet-5 / claude-haiku-4-5 (mais barato)
+LLM_MODEL="claude-sonnet-5"      # ou claude-opus-5 (mais capaz) / claude-haiku-4-5 (metade do preço)
 ```
 
-Detalhes dessa camada de compatibilidade OpenAI da Anthropic (não é a API nativa): é voltada pra teste/avaliação, não é a via recomendada pra produção; `temperature` fica travado entre 0–1; sem prompt caching. Pra "escolher os melhores momentos", `claude-haiku-4-5` costuma ser rápido e barato o suficiente. Qualquer endpoint compatível com Chat Completions serve (DeepSeek, Ollama, etc.).
+Detalhes dessa camada de compatibilidade OpenAI da Anthropic (não é a API nativa): é voltada pra teste/avaliação, não é a via recomendada pra produção; `temperature` fica travado entre 0–1; sem prompt caching. Preço por milhão de tokens (entrada/saída): `claude-haiku-4-5` $1/$5 — dá conta de "escolher os melhores momentos"; `claude-sonnet-5` $2/$10; `claude-opus-5` $5/$25, o mais capaz. Qualquer endpoint compatível com Chat Completions serve (DeepSeek, Ollama, etc.).
 
 ---
 

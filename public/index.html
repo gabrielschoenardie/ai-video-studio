@@ -558,7 +558,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   <!-- 03 ASSEMBLE -->
   <section class="step" id="step-assemble">
     <h2>03 / <em>ASSEMBLE</em></h2>
-    <p class="sub">Stitch visual + voiceover into one MP4 with word-by-word captions timed to the beat (Whisper word timestamps). Output is a CRF-18 mezzanine — delivery encode happens in EXPORT.</p>
+    <p class="sub">Stitch visual + voiceover into one MP4 with word-by-word captions timed to the beat (Whisper word timestamps). Output is a CRF-12 mezzanine — delivery encode happens in EXPORT.</p>
     <div class="card">
       <div class="row">
         <div><label for="asm-visual">VISUAL</label><select id="asm-visual"></select></div>
@@ -623,7 +623,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
     <div class="card">
       <h3>VBV PROFILES (AUTO BY DURATION)</h3>
       <table>
-        <tr><th>PROFILE</th><th>TARGET</th><th>MAXRATE</th><th>BUFSIZE</th><th>VBV-INIT</th><th>VMAF TARGET (NEG)</th></tr>
+        <tr><th>PROFILE</th><th>TARGET</th><th>MAXRATE</th><th>BUFSIZE</th><th>VBV-INIT</th><th>VMAF TARGET</th></tr>
         <tr><td>Maximum Quality ≤30s</td><td>10000k</td><td>11200k</td><td>15000k</td><td>0.90</td><td>≥93</td></tr>
         <tr><td>Transition 30–40s</td><td>9000k</td><td>9000k</td><td>12500k</td><td>0.90</td><td>≥90</td></tr>
         <tr><td>Safe Premium ≥40s</td><td>8000k</td><td>9000k</td><td>12500k</td><td>0.90</td><td>≥90</td></tr>
