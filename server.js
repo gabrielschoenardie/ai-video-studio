@@ -233,6 +233,22 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { luts: files });
     }
 
+    // Presets de legenda — espelha /api/luts: lê o arquivo de config e devolve
+    // o que existe. A UI monta o select a partir disto, então acrescentar um
+    // preset ao JSON o faz aparecer sem tocar código.
+    if (req.method === 'GET' && p === '/api/caption-styles') {
+      const mod = require('./lib/captions');
+      const styles = mod.styleNames().map(name => ({ name }));
+      // ?full=1 devolve os tokens inteiros — o overlay do preview precisa de
+      // cor, itálico e posição, não só dos nomes.
+      if (url.searchParams.get('full')) {
+        const byName = {};
+        for (const n of mod.styleNames()) byName[n] = mod.resolveStyle(n);
+        return send(res, 200, { styles, byName });
+      }
+      return send(res, 200, { styles });
+    }
+
     // Beats sidecar — rótulo manual de segmentos narrativos ao lado do vídeo.
     // Não usa o job bus: leitura/escrita síncrona de um JSON pequeno.
     function beatsSidecar(videoPath) {
@@ -281,6 +297,11 @@ const server = http.createServer(async (req, res) => {
     function captionStyleOf(dir) {
       try {
         const assText = fs.readFileSync(path.join(dir, 'captions.ass'), 'utf8');
+        // Marca explícita, gravada por buildAss — exata.
+        const m = /^;\s*studio-style:\s*(\S+)\s*$/m.exec(assText);
+        if (m) return m[1];
+        // Fallback para .ass gerados antes da marca existir. Heurístico por
+        // construção; não estenda para presets novos.
         if (/Arial Black/.test(assText)) return 'impact';
         if (/Style:\s*Word,Arial,/.test(assText)) return 'clean';
       } catch (e) { /* fall through */ }
@@ -303,9 +324,21 @@ const server = http.createServer(async (req, res) => {
       if (!w || Math.abs(w.start - b.start) > 0.01) {
         return send(res, 409, { error: 'legenda mudou desde que a página carregou — recarregue' });
       }
-      const newWord = String(b.newText || '').trim();
-      if (!newWord) return send(res, 400, { error: 'palavra não pode ficar vazia' });
-      w.word = newWord;
+      // Texto e destaque são edições independentes: o corpo pode trazer uma,
+      // outra, ou as duas. `newText` ausente mantém a palavra como está.
+      if (typeof b.newText === 'string') {
+        const newWord = b.newText.trim();
+        if (!newWord) return send(res, 400, { error: 'palavra não pode ficar vazia' });
+        w.word = newWord;
+      }
+      if (typeof b.hl === 'boolean') {
+        if (b.hl) w.hl = true; else delete w.hl;
+      }
+      // "uma, outra, ou as duas" — nenhuma não está previsto. Sem isto, um corpo
+      // vazio virava no-op com I/O: 200 e reescrita do .ass sem nada ter mudado.
+      if (typeof b.newText !== 'string' && typeof b.hl !== 'boolean') {
+        return send(res, 400, { error: 'nada para atualizar — informe newText e/ou hl' });
+      }
       fs.writeFileSync(txPath, JSON.stringify(tx, null, 2));
       writeAss(tx.words, dir, { style: captionStyleOf(dir) });
       return send(res, 200, { words: tx.words });

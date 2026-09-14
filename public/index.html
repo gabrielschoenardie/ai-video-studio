@@ -377,6 +377,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   font:400 9.5px var(--mono); color:var(--dim); padding:0 3px; white-space:nowrap; overflow:hidden;
   cursor:pointer}
 .bt-word.active{background:var(--go-dim); border-color:var(--go); color:var(--go)}
+.bt-word.hot{border-color:var(--cap-hot, #FF5200); color:var(--cap-hot, #FF5200); background:rgba(255,82,0,.15)}
 
 .bt-playhead{position:absolute; top:0; bottom:0; width:1px; background:var(--go); z-index:7;
   pointer-events:none; box-shadow:0 0 6px rgba(251,191,36,.7)}
@@ -472,7 +473,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   background:rgba(0,0,0,.5);padding:2px 6px;border-radius:3px;z-index:4}
 .bt-cap-overlay{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);width:90%;text-align:center;
   font:400 13px 'Unica One',sans-serif;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.85);z-index:3}
-.bt-cap-overlay b{color:var(--go);font-weight:400;text-shadow:0 0 10px rgba(251,191,36,.6)}
+.bt-cap-overlay b{color:var(--cap-hot, var(--go));font-weight:400;text-shadow:0 0 10px rgba(251,191,36,.6)}
 .bt-preview-error{position:absolute; inset:0; display:flex; align-items:center;
   justify-content:center; text-align:center; padding:16px; font:400 11.5px var(--sans);
   color:var(--warn); background:rgba(7,7,15,.92); line-height:1.5}
@@ -565,7 +566,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
       </div>
       <div class="row">
         <div><label for="asm-cap">CAPTIONS</label>
-          <select id="asm-cap"><option value="1">word-by-word (impact)</option><option value="clean">word-by-word (clean)</option><option value="0">off</option></select></div>
+          <select id="asm-cap"><option value="0">off</option></select></div>
         <div><label for="asm-model">WHISPER MODEL</label>
           <select id="asm-model"><option>tiny</option><option selected>base</option><option>small</option><option>medium</option><option>large-v3</option></select></div>
         <div><label for="asm-lang">LANGUAGE (BLANK = AUTO)</label><input type="text" id="asm-lang" placeholder="pt / en / …"></div>
@@ -872,6 +873,28 @@ async function api(path, body) {
   } catch { /* no luts folder / none present — export just shows "— none —" */ }
 })();
 
+/* Caption style presets — data-driven select, sourced from styles/captions.json */
+(async () => {
+  try {
+    const { styles } = await (await fetch('/api/caption-styles')).json();
+    const sel = $('#asm-cap');
+    sel.innerHTML = '';
+    // Montado via createElement, não innerHTML: um nome de preset com aspas
+    // ou markup não corrompe o select — .value/.textContent nunca interpretam HTML.
+    for (const s of styles) {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = 'word-by-word (' + s.name + ')';
+      sel.appendChild(opt);
+    }
+    const off = document.createElement('option');
+    off.value = '0';
+    off.textContent = 'off';
+    sel.appendChild(off);
+    sel.value = styles.some(s => s.name === 'impact') ? 'impact' : (styles[0] ? styles[0].name : '0');
+  } catch (e) { /* mantém o 'off' do markup — sem presets, sem legenda */ }
+})();
+
 /* ---------------- uploads */
 function wireDrop(dropId, fileId, after) {
   const drop = $(dropId), file = $(fileId);
@@ -927,7 +950,7 @@ window.doAssemble = async () => {
     const cap = $('#asm-cap').value;
     const { job } = await api('/api/assemble', {
       visual: $('#asm-visual').value, voiceover: $('#asm-vo').value || null,
-      captions: cap !== '0', captionStyle: cap === 'clean' ? 'clean' : 'impact',
+      captions: cap !== '0', captionStyle: cap === '0' ? 'impact' : cap,
       whisperModel: $('#asm-model').value, language: $('#asm-lang').value || null });
     const r = await watchJob(job);
     addAsset({ path: r.output, name: r.output.split('/').pop(), kind: 'video', source: 'assemble' });
@@ -1108,7 +1131,17 @@ window.sendToClipper = (p) => {
   const miniWaveCache = new Map(); // path -> Float32Array picos | 'pending' | null (mini-waveform do clipe TRILHA)
   let inPoint = null, outPoint = null;
   let currentPath = null;
-  let words = []; // {start,end,text} parsed from the .ass
+  let words = []; // {start,end,text,hl?} parsed from the .ass
+  let captionStyle = null; // nome do preset corrente, devolvido por GET /api/captions
+  // Presets de legenda inteiros (tokens de cor/itálico/posição) — carregados uma
+  // vez para o overlay do preview honrar o preset corrente.
+  let CAPTION_STYLES = {};
+  (async () => {
+    try {
+      const r = await (await fetch('/api/caption-styles?full=1')).json();
+      CAPTION_STYLES = r.byName || {};
+    } catch (e) { /* overlay cai no visual padrão */ }
+  })();
   let peaks = null; // Float32Array of waveform peaks
   let waveError = false; // true when decodeAudioData failed (codec não suportado pelo browser)
   let jklLevel = 0; // signed shuttle speed: <0 reverse, >0 forward, 0 stopped
@@ -1506,7 +1539,8 @@ window.sendToClipper = (p) => {
       const r = await fetch('/api/captions?video=' + encodeURIComponent(currentPath));
       const j = await r.json();
       if (!r.ok) return;
-      words = (j.words || []).map(w => ({ start: w.start, end: w.end, text: w.word }));
+      words = (j.words || []).map(w => ({ start: w.start, end: w.end, text: w.word, hl: !!w.hl }));
+      captionStyle = j.style || null;
     } catch (e) { words = []; }
   }
 
@@ -1826,9 +1860,16 @@ window.sendToClipper = (p) => {
       host.innerHTML = '<div class="empty" style="padding:8px 10px">Nenhuma palavra sobrou nos cortes atuais de VÍDEO.</div>';
       return;
     }
-    host.innerHTML = spans.map(s =>
-      `<div class="bt-word" data-idx="${s.i}" data-start="${s.start}" data-end="${s.end}" title="Duplo-clique para corrigir" style="left:${timeToX(s.start)}px;width:${Math.max(4, timeToX(s.end - s.start))}px">${escapeHtml(s.text)}</div>`
-    ).join('');
+    const S = CAPTION_STYLES[captionStyle] || null;
+    // O destaque semântico só é desenhado pelo .ass quando o preset usa o canal
+    // `keyword`. Em `spoken` (impact/clean) o `hl` é ignorado por buildAss, então
+    // pintar o chip prometeria ao editor algo que o arquivo entregue não cumpre.
+    const isKeyword = !!(S && S.highlight && S.highlight.channel === 'keyword');
+    const hotColor = (S && S.highlight && S.highlight.color) || '#FF5200';
+    host.innerHTML = spans.map(s => {
+      const hot = isKeyword && !!words[s.i].hl;
+      return `<div class="bt-word${hot ? ' hot' : ''}" data-idx="${s.i}" data-start="${s.start}" data-end="${s.end}" title="Duplo-clique para corrigir" style="left:${timeToX(s.start)}px;width:${Math.max(4, timeToX(s.end - s.start))}px${hot ? `;--cap-hot:${hotColor}` : ''}">${escapeHtml(s.text)}</div>`;
+    }).join('');
   }
   function renderLegendList() {
     const host = $q('#bt-legend-list');
@@ -2185,9 +2226,29 @@ window.sendToClipper = (p) => {
     const idx = words.findIndex(w => src >= w.start && src < w.end);
     const el = $q('#bt-cap-overlay');
     if (idx < 0) { el.innerHTML = ''; return; }
-    const before = words.slice(Math.max(0, idx - 2), idx).map(w => w.text).join(' ');
-    const after = words.slice(idx + 1, idx + 3).map(w => w.text).join(' ');
-    el.innerHTML = (before ? before + ' ' : '') + '<b>' + escapeHtml(words[idx].text) + '</b>' + (after ? ' ' + after : '');
+    const S = CAPTION_STYLES[captionStyle] || null;
+    const n = S && S.layout ? Math.max(0, Math.floor((S.layout.maxWords - 1) / 2)) : 2;
+    const before = words.slice(Math.max(0, idx - n), idx).map(w => w.text).join(' ');
+    const after = words.slice(idx + 1, idx + 1 + n).map(w => w.text).join(' ');
+    const cur = escapeHtml(words[idx].text);
+    const isKeyword = S && S.highlight && S.highlight.channel === 'keyword';
+    const hot = isKeyword ? !!words[idx].hl : true;
+    el.innerHTML = (before ? before + ' ' : '')
+      + (hot ? `<b>${cur}</b>` : cur)
+      + (after ? ' ' + after : '');
+    if (S) {
+      el.style.fontStyle = S.italic ? 'italic' : 'normal';
+      el.style.textTransform = (S.layout && S.layout.uppercase) ? 'uppercase' : 'none';
+      el.style.color = S.primary;
+      el.style.setProperty('--cap-hot', (S.highlight && S.highlight.color) || 'var(--go)');
+      if (S.position && S.position.y != null) {
+        el.style.top = ((S.position.y / 1920) * 100).toFixed(1) + '%';
+        el.style.bottom = 'auto';
+      } else {
+        el.style.top = '';
+        el.style.bottom = '';
+      }
+    }
   }
   function applyTrackVisibility() {
     $$q('.bt-track-row').forEach(row => {
@@ -2525,6 +2586,13 @@ window.sendToClipper = (p) => {
       }
     }
   }
+  // Alterna o destaque semântico (`hl`) de uma palavra pela rota dedicada.
+  // `next` chega já invertido de quem chama — esta função não decide, só aplica.
+  async function toggleWordHighlight(index, start, next) {
+    const r = await api('/api/captions/word', { video: currentPath, index, start, hl: next });
+    words = r.words.map(w => ({ start: w.start, end: w.end, text: w.word, hl: !!w.hl }));
+    renderLegendTrack(); renderLegendList(); updatePreviewOverlay();
+  }
   function openWordPopover(idx, anchorEl) {
     closePopover();
     if (idx < 0 || idx >= words.length) return;
@@ -2534,14 +2602,42 @@ window.sendToClipper = (p) => {
     popEl.className = 'bt-pop';
     popEl.style.left = Math.max(6, Math.min(window.innerWidth - 226, rect.left)) + 'px';
     popEl.style.top = (rect.bottom + 6) + 'px';
+    // O botão de destaque só faz sentido quando o preset corrente desenha o
+    // canal `keyword` — em `spoken` (impact/clean) buildAss ignora `hl` por
+    // completo, e o controle mentiria sobre o que o .ass entregue vai mostrar.
+    const S = CAPTION_STYLES[captionStyle] || null;
+    const isKeyword = !!(S && S.highlight && S.highlight.channel === 'keyword');
+    const hlRow = isKeyword
+      ? `<div class="row2"><button id="bt-word-pop-hl">${w.hl ? 'REMOVER DESTAQUE' : 'MARCAR DESTAQUE'}</button></div>`
+      : '';
     popEl.innerHTML = `<div class="t">CORRIGIR PALAVRA</div>
       <input type="text" id="bt-word-pop-input" value="${escapeHtml(w.text)}" placeholder="palavra correta…">
       <div id="bt-word-pop-err" style="display:none;color:var(--bad);font:400 10px var(--sans);margin-top:5px"></div>
+      ${hlRow}
       <div class="row2"><button id="bt-word-pop-cancel">CANCELAR</button><button class="primary" id="bt-word-pop-save">SALVAR</button></div>`;
     mountPopover(popEl);
     const input = $q('#bt-word-pop-input', popEl);
     input.focus(); input.select();
     $q('#bt-word-pop-cancel', popEl).onclick = closePopover;
+    // Elemento só existe quando isKeyword — sem essa guarda, presets `spoken`
+    // (o caso comum, impact é o default) lançariam ao tentar ler .onclick de null.
+    const hlBtn0 = $q('#bt-word-pop-hl', popEl);
+    if (hlBtn0) {
+      hlBtn0.onclick = async () => {
+        const errEl = $q('#bt-word-pop-err', popEl);
+        errEl.style.display = 'none';
+        const hlBtn = $q('#bt-word-pop-hl', popEl);
+        hlBtn.textContent = 'SALVANDO…';
+        try {
+          await toggleWordHighlight(idx, w.start, !w.hl);
+          closePopover();
+        } catch (e) {
+          errEl.textContent = String(e.message || e);
+          errEl.style.display = '';
+          hlBtn.textContent = w.hl ? 'REMOVER DESTAQUE' : 'MARCAR DESTAQUE';
+        }
+      };
+    }
     async function save() {
       const val = input.value.trim();
       const errEl = $q('#bt-word-pop-err', popEl);
@@ -2556,7 +2652,7 @@ window.sendToClipper = (p) => {
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || String(r.status));
-        words = j.words.map(x => ({ start: x.start, end: x.end, text: x.word }));
+        words = j.words.map(x => ({ start: x.start, end: x.end, text: x.word, hl: !!x.hl }));
         renderLegendTrack();
         updatePreviewOverlay();
         closePopover();

@@ -1,0 +1,26 @@
+{
+  "_nameNote": "Nome de preset precisa ser um token unico, sem espaco: ele viaja no comentario '; studio-style: <nome>' do .ass e server.js le com a regex /^;\\s*studio-style:\\s*(\\S+)\\s*$/m — um nome com espaco nao sobrevive ao round-trip.",
+  "impact": {
+    "font": "Arial Black", "size": 88, "bold": true, "italic": false,
+    "primary": "#FFFFFF", "outline": "#000000", "outlineW": 6, "shadow": 0,
+    "layout":    { "maxWords": 4, "uppercase": true },
+    "position":  { "align": 2, "marginV": 560 },
+    "highlight": { "channel": "spoken", "color": "#FFFF00", "scale": 108 }
+  },
+  "clean": {
+    "font": "Arial", "size": 72, "bold": true, "italic": false,
+    "primary": "#FFFFFF", "outline": "#000000", "outlineW": 4, "shadow": 1,
+    "layout":    { "maxWords": 4, "uppercase": true },
+    "position":  { "align": 2, "marginV": 520 },
+    "highlight": { "channel": "spoken", "color": "#FFD700", "scale": 108 }
+  },
+  "realce": {
+    "font": "Montserrat Black", "size": 96, "bold": true, "italic": true,
+    "primary": "#FFFFFF", "outline": "#000000", "outlineW": 4, "shadow": 1,
+    "layout":    { "maxWords": 1, "uppercase": false },
+    "position":  { "align": 5, "x": 540, "y": 1210 },
+    "highlight": { "channel": "keyword", "color": "#FF5200", "scale": 100 },
+    "enter":     { "fromScale": 80, "ms": 180 },
+    "_fontNote": "Requer Montserrat Black Italic instalada no sistema. Sem ela, libass substitui em silencio."
+  }
+}

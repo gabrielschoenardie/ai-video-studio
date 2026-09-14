@@ -36,6 +36,9 @@ cp .env.example .env     # PORT, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
 | **Remotion** | VISUALS (motion graphics). O player da TIMELINE **não** precisa disto — o bundle vem commitado | `cd remotion && npm install` | ver `remotion/` |
 | **libvmaf** (parte do ffmpeg) | métrica de qualidade do EXPORT | build do ffmpeg com `--enable-libvmaf` | BSD-2-Clause — sem esse flag só perde a métrica, o encode continua |
 | **zscale** (parte do ffmpeg) | LUT 3D em precisão float + dither RPDF nativo no EXPORT | build do ffmpeg com `--enable-libzimg` | BSD-2-Clause — sem esse flag cai pra rota `swscale` (LUT 8-bit, dither aproximado), o encode continua |
+| **Montserrat Black Italic** (fonte do sistema) | legendas — é a família que os presets pedem | <https://fonts.google.com/specimen/Montserrat> — instale o `.ttf` no sistema | SIL OFL |
+
+> **A fonte é a única dependência que não degrada graciosamente.** Diferente dos engines, libass não avisa quando a família pedida não existe — ele substitui por outra e queima a legenda assim mesmo, sem erro e sem log. Se a legenda sair com a aparência errada, confira primeiro se **Montserrat Black Italic** está instalada no sistema.
 
 Atalho pras dependências Python (Whisper, yt-dlp, OpenCV) de uma vez só:
 
@@ -74,7 +77,7 @@ Seis tracks, todas desenhadas sobre a mesma régua com zoom e snapping:
 | **MARKERS** | beats narrativos (HOOK, CONTEXTO, CTA…) — rótulo, não corte |
 | **B-ROLL** | clipes sobrepostos ao plate na janela deles (áudio do B-ROLL é descartado de propósito — o export bate com o que você ouviu na prévia) |
 | **VÍDEO** | o corte de verdade: cada segmento é `{srcIn, dur}`, arrastável e trimável. **Deletar faz ripple** — a timeline encurta |
-| **LEGENDA** | as palavras do Whisper, editáveis uma a uma (corrige o `transcript.json` e reescreve o `.ass`) |
+| **LEGENDA** | as palavras do Whisper, editáveis uma a uma (corrige o `transcript.json` e reescreve o `.ass`). No preset `realce`, o popover da palavra ganha um botão **MARCAR/REMOVER DESTAQUE** — some nos presets `spoken`, onde `hl` é ignorado e o botão mentiria sobre o `.ass` entregue |
 | **ÁUDIO** | a faixa base (voz/som direto do plate) |
 | **TRILHA** | música, com trim, ganho e delay, mixada sob a base (`amix` com `normalize=0`, pra não abaixar a voz em 1/N) |
 
@@ -85,6 +88,22 @@ Seis tracks, todas desenhadas sobre a mesma régua com zoom e snapping:
 **O preview** roda no `@remotion/player`: o corte da pista VÍDEO vira um `<Series>` declarativo, então o ripple e o mapa timeline→fonte saem do próprio Remotion, e B-ROLL e TRILHA entram como `<Sequence>` sincronizadas. O bundle (`public/vendor/studio-player.js`) vem commitado — nada a instalar. Se ele faltar, o passo 04 cai sozinho no compositor de canvas anterior, que segue no código: é o mesmo padrão de degradação graciosa dos engines. Para **alterar** o player: `cd remotion && npm install && npm run build:player`.
 
 **`CONFORMAR → EXPORT`** achata a timeline num arquivo real: `lib/timeline.js` lê o sidecar, aplica os cortes do VÍDEO, sobrepõe o B-ROLL, mixa a TRILHA, **reprojeta as palavras da legenda pelo mapa de cortes** (senão a legenda dessincroniza exatamente pelo corte) e escreve um mezanino 4:4:4 CRF 12. Esse mezanino é o único caminho pelo qual a timeline chega ao arquivo exportado — o compositor do navegador é prévia, não render. O EXPORT o recebe como `sourceKind: 'mezzanine'` e o usa também como referência do VMAF.
+
+### Presets de legenda
+
+Os presets vivem em `styles/captions.json` — dado, não código: fonte, cor, posição, `maxWords` e caixa alta saem do arquivo, e acrescentar um preset é acrescentar uma chave (o servidor relê no restart).
+
+| Preset | Layout | Destaque |
+| --- | --- | --- |
+| `impact` | 4 palavras, CAIXA ALTA, rodapé | **posicional** — pinta de amarelo a palavra sendo falada naquele instante (karaokê); toda palavra é pintada na sua vez |
+| `clean` | idem | idem, dourado |
+| `realce` | 1 palavra por vez, minúscula, centralizada | **semântico** — só UMA palavra por segmento é pintada de laranja, escolhida por conteúdo; as outras passam em branco |
+
+A diferença entre os dois canais é *o que decide a cor*: em `spoken` é a posição no tempo (quem está sendo falado agora), em `keyword` é a marca semântica da palavra — a posição não conta, e a maioria das palavras nunca é pintada.
+
+No `realce` a escolha sai da heurística offline (`lib/keywords.js`: stopwords, prioridade pra número com substância, palavra longa como fallback). Um LLM pode assumir a escolha quando `LLM_BASE_URL`/`LLM_API_KEY` estão configurados — **só nesse preset**, e se ele falhar a legenda sai pela heurística, nunca sem legenda. `impact` e `clean` não acionam LLM em hipótese nenhuma, então quem os usa não paga nada.
+
+**Nome de preset é um token só, sem espaço.** O nome viaja num comentário do `.ass` (`; studio-style: <nome>`) que é como o servidor descobre, na releitura, qual preset gerou aquele arquivo. A regex que o lê é `(\S+)`, então um nome com espaço não sobrevive ao round-trip e cai em silêncio no `impact`. Chave começando com `_` é metadado do arquivo, nunca preset.
 
 ---
 
@@ -159,6 +178,7 @@ Detalhes dessa camada de compatibilidade OpenAI da Anthropic (não é a API nati
 | `GET /api/voices` · `GET /api/luts` | presets pt-BR do Voicebox · `.cube` em `luts/` |
 | `GET/POST /api/beats` | sidecar `.beats.json` da timeline |
 | `GET /api/captions` · `POST /api/captions/word` | lê/corrige palavras e reescreve o `.ass` |
+| `GET /api/caption-styles` | lista os presets de `styles/captions.json` (`?full=1` devolve a definição inteira) |
 | `POST /api/timeline/conform` | achata a timeline num mezanino |
 | `POST /api/voiceover` · `/api/assemble` · `/api/clip` · `/api/download` · `/api/export` | os steps |
 | `POST /api/remotion/render` | renderiza uma composição |
@@ -191,7 +211,9 @@ ai-video-studio/
 │   ├── download.js         # yt-dlp na melhor resolução
 │   ├── clipper.js          # auto-clipper: download → transcrever → picking → reframe → cortar
 │   ├── transcribe.js       # Whisper com word timestamps
-│   ├── captions.js         # .ass palavra-a-palavra (presets impact / clean)
+│   ├── captions.js         # .ass palavra-a-palavra (presets em styles/captions.json)
+│   ├── keywords.js         # escolha da palavra-chave: heurística offline + prompt do LLM
+│   ├── llm.js              # cliente HTTP do LLM (compartilhado com o clipper)
 │   ├── voiceover.js        # TTS com cadeia de fallback
 │   ├── assemble.js         # mezanino 4:4:4 CRF 12 + .ass ao lado
 │   ├── timeline.js         # conform: sidecar .beats.json → mezanino de verdade
@@ -201,6 +223,7 @@ ai-video-studio/
 │   └── score.js            # curva de atenção (heurística local)
 ├── clipper/                # CLI do auto-clipper (clip.js, check-deps.js)
 ├── remotion/               # projeto Remotion (AutoKillReel, NeuralIntro) — npm próprio
+├── styles/                 # presets de legenda (captions.json)
 ├── luts/                   # suas LUTs .cube (aparecem sozinhas no EXPORT)
 ├── docs/plans/             # planos de implementação (fluxo Orquestrador/Executor)
 ├── .claude/                # agentes, skills e hooks do projeto
