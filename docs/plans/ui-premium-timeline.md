@@ -20,7 +20,7 @@
 - `@media (prefers-reduced-motion: reduce)` global (`index.html:56-61`) permanece; nenhuma animação/transição nova com duração literal — só `var(--dur-1..4)`.
 - `localStorage`: só a chave nova `studio.density`, todo acesso em `try/catch`.
 - Desktop apenas: nenhum breakpoint de telefone, `pointer:coarse`, gesto de toque ou alvo de 44px.
-- O executor **não commita**. Git só via `git-workflow`, com aprovação do usuário entre fases.
+- O executor **não commita** e trabalha sobre a `main` local sincronizada (mudanças não commitadas). Git só via `git-workflow`: `prepare` (cria a branch `feat/ui-premium-e<N>` levando as mudanças) → OK do usuário → `publish` (commit, push, PR, merge commit na `main`, limpeza). **Um PR por task.**
 - Condições de medição do probe: `node server.js`, janela com viewport 1280×800, URL `http://localhost:4870/?probe=1`, fixture `output/assembled-4545f906507a.mp4` (tem `jobs/4545f906507a/transcript.json`), carregada por `await uiProbe.load('output/assembled-4545f906507a.mp4')` logo após recarregar a página, sem outras ações antes de `uiProbe.run(...)`.
 
 ## File Structure
@@ -52,9 +52,9 @@ Com a fixture carregada na TIMELINE, **nas duas densidades a partir da Task 3**:
 
 ### Task 0: Preparo (Orquestrador, antes de qualquer execução)
 
-- [ ] **[Orquestrador]** Invocar `git-workflow` fase 1 com a tarefa explícita: criar a branch `feat/ui-premium-timeline` a partir de `main` e propor staging de `docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md` + `docs/plans/ui-premium-timeline.md`.
-- [ ] **[Usuário]** Aprovar → fase 2 (commit `Add design spec and plan for TIMELINE premium UI (sub-project A)`).
-- [ ] **[Orquestrador]** Só então invocar o `executor` para a Task 1.
+- [x] **[Orquestrador]** Spec e plano commitados (`1864106`) e mergeados na `main` pelo PR #9 (`dcc8242`, 2026-09-16).
+- [x] **[Orquestrador]** `git-workflow` `sync`: `main` local em `dcc8242`, igual a `origin/main`.
+- [ ] **[Orquestrador]** Antes de cada task: `git-workflow` `sync` se `origin/main` puder ter andado; executor roda sobre a `main` local limpa.
 
 ---
 
@@ -515,7 +515,7 @@ Expected, nesta ordem: `200 /dev/ui-probe.js`, `404 /dev/nope.js`, `404 /dev/..%
   4. Substituir `const BASELINE = null;` por `const BASELINE = <JSON>;` em `public/dev/ui-probe.js` (edição de dado).
   5. Recarregar, repetir 2 e rodar `await uiProbe.run('E1')` **ainda sem a Task 2**: tudo deve dar PASS exceto `labelw-sync` (token ausente) e `motion-literals` (29 literais). Isso prova que o probe é estável entre recargas. Registrar os dois resultados em `## Verificação`.
 
-- [ ] **Step 9 [Orquestrador → Usuário]: `git-workflow`** fase 1 (staging: `server.js`, `public/index.html`, `public/dev/ui-probe.js`) → aprovação → fase 2 (commit `Add UI probe and /dev/ static route (TIMELINE premium, E0)`) → aprovação → fase 3 só se o usuário pedir push.
+- [ ] **Step 9 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e0`; arquivos: `server.js`, `public/index.html`, `public/dev/ui-probe.js`; commit `Add UI probe and /dev/ static route (TIMELINE premium, E0)`) → OK do usuário → `publish` (PR + merge commit na `main`).
 
 ---
 
@@ -676,7 +676,7 @@ Não tocar em `(S.position.y / 1920)` de `updatePreviewOverlay`.
 
 - [ ] **Step 10 [Usuário]: Checklist manual de regressão** (itens 1–12).
 
-- [ ] **Step 11 [Orquestrador → Usuário]: `git-workflow`** fase 1 (staging: `public/index.html`) → aprovação → fase 2 (commit `Tokenize TIMELINE label width, targets and motion durations (E1, no visual change)`).
+- [ ] **Step 11 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e1`; arquivo: `public/index.html`; commit `Tokenize TIMELINE label width, targets and motion durations (E1, no visual change)`) → OK do usuário → `publish`.
 
 ---
 
@@ -899,7 +899,7 @@ A coluna "Regra" identifica onde está o trecho (há trechos repetidos em regras
 
 - [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12) **nas duas densidades**; conferir visualmente que os chips de palavra da LEGENDA e os clipes da TRILHA estão iguais aos de antes.
 
-- [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** fase 1 (staging: `public/index.html`) → aprovação → fase 2 (commit `Raise UI type floor, fix --faint contrast, add TIMELINE density toggle (E2)`).
+- [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e2`; arquivo: `public/index.html`; commit `Raise UI type floor, fix --faint contrast, add TIMELINE density toggle (E2)`) → OK do usuário → `publish`.
 
 ---
 
@@ -1127,7 +1127,7 @@ Substituir a função `renderPlayhead()` inteira por:
 
 - [ ] **Step 11 [Usuário]: Checklist manual** (itens 1–12, nas duas densidades) + travar B-ROLL e tentar arrastar um clipe (não move) + trim num segmento de VÍDEO encostado no vizinho (pega o segmento certo) + levar o playhead ao fim da timeline (chip passa para a esquerda da linha).
 
-- [ ] **Step 12 [Orquestrador → Usuário]: `git-workflow`** fase 1 (staging: `public/index.html`) → aprovação → fase 2 (commit `Replace track control letters with two-state icons, add playhead timecode (E3a)`).
+- [ ] **Step 12 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3a`; arquivo: `public/index.html`; commit `Replace track control letters with two-state icons, add playhead timecode (E3a)`) → OK do usuário → `publish`.
 
 ---
 
@@ -1484,7 +1484,7 @@ Imediatamente antes de `  function seekTo(t) {` inserir:
 
 - [ ] **Step 10 [Usuário]: Checklist manual** (itens 1–12, nas duas densidades) + adicionar clipe de B-ROLL (anima uma vez; arrastar logo depois não repete) + `S` num beat (flash uma vez) + clicar na régua (playhead desliza) + play logo depois (sem atraso visível) + `?` e fechar com `Esc` real (foco volta) + `J` com a folha aberta (nada acontece) + passar o mouse em FIT (badge mostra `\`).
 
-- [ ] **Step 11 [Orquestrador → Usuário]: `git-workflow`** fase 1 (staging: `public/index.html`) → aprovação → fase 2 (commit `Group TIMELINE transport, add shortcut sheet and seek/clip micro-interactions (E3b)`) → fase 3 (push) e PR de `feat/ui-premium-timeline` para `main`, se o usuário pedir.
+- [ ] **Step 11 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3b`; arquivo: `public/index.html`; commit `Group TIMELINE transport, add shortcut sheet and seek/clip micro-interactions (E3b)`) → OK do usuário → `publish`.
 
 ---
 

@@ -69,7 +69,7 @@ Trabalho não-trivial neste projeto segue um fluxo de três papéis com handoff 
 | 2. Escrever plano | Orquestrador (sessão principal) | `/superpowers:write-plan` → grava em `docs/plans/<slug>.md` | caro |
 | 3. Executar | subagente `executor` (`.claude/agents/executor.md`) via Task tool | `/superpowers:execute-plan` lendo o plano | barato (sonnet) |
 | 4. Validar | subagente `validator` (`.claude/agents/validator.md`) via Task tool | diff + plano, contexto limpo | barato (sonnet) |
-| 5. Git | subagente `git-workflow` (`.claude/agents/git-workflow.md`), uma fase por invocação | aprovação do usuário obrigatória entre fases | barato (sonnet) |
+| 5. Git | subagente `git-workflow` (`.claude/agents/git-workflow.md`), um modo por invocação: `prepare` → OK → `publish` | um OK do usuário antes de publicar; um PR por etapa do plano, merge commit na `main` | barato (sonnet) |
 
 **Quando NÃO aplicar**: correções triviais de uma linha, typo, ajuste de mensagem de log — o Orquestrador resolve direto, sem plano nem subagentes. Ceremony só para trabalho não-trivial.
 
@@ -77,4 +77,11 @@ Trabalho não-trivial neste projeto segue um fluxo de três papéis com handoff 
 
 **Dono das seções**: as seções de plano pertencem ao Orquestrador; a seção `## Status` pertence ao Executor. Não versionar histórico de conversa — só o necessário para retomar o trabalho.
 
-**Git**: operações git passam pelo subagente `git-workflow` em 3 fases discretas — ① inspecionar (propõe staging list + mensagem de commit, não muta nada), ② commit (stageia exatamente a lista aprovada e commita), ③ push — **uma fase por invocação**, com aprovação explícita do usuário entre cada fase, registrada pelo Orquestrador na tarefa do subagente. Gate duplo: além da aprovação entre invocações, cada comando git mutante do subagente passa pelos permission prompts normais. O agente recusa invocações sem fase clara + aprovação registrada, e nunca usa `--force`, `--no-verify`, amend, rebase ou `git add -A`.
+**Git**: operações git passam pelo subagente `git-workflow`, que leva cada etapa validada até a `main` do GitHub num ciclo sincronizado, **um modo por invocação**:
+
+- `sync` — `fetch --prune` + fast-forward da `main` local. Nunca publica.
+- `prepare` — sincroniza a `main`, cria a branch da etapa a partir dela (levando as mudanças do executor) e propõe staging list, mensagem de commit, título/corpo do PR e o **hash-base** de `origin/main`. Nada é commitado nem vai ao remote.
+- **OK do usuário** — o Orquestrador registra na tarefa exatamente o que foi aprovado (branch, hash-base, arquivos, mensagem, PR).
+- `publish` — confere que `origin/main` ainda está no hash-base, stageia só a lista aprovada, commita, `push -u`, `gh pr create`, exige `MERGEABLE`, faz `gh pr merge --merge --delete-branch --match-head-commit <commit>`, volta a `main` local por fast-forward e confirma que o commit está em `origin/main`.
+
+Um PR por etapa do plano, sempre **merge commit** (nunca squash/rebase). Qualquer estado inesperado — `origin/main` andou, staged diverge, PR não mergeável, hook falhou — faz o agente **parar e reportar** em vez de consertar; o PR fica aberto quando já existe. Gate duplo: além do OK antes do `publish`, cada comando mutante passa pelos permission prompts normais. O agente recusa invocação sem modo claro, `publish` sem registro de aprovação completo, e nunca usa `--force`, `--no-verify`, amend, rebase, stash, `reset --hard` ou `git add -A`.
