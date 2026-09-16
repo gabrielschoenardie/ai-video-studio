@@ -314,9 +314,9 @@ Por estágio, na ordem E0 → E1 → E2 → E3a → E3b:
 2. `validator` faz a checagem estática.
 3. Orquestrador roda `uiProbe.run('<estágio>')` via Chrome e registra em `## Verificação` do plano.
 4. Usuário roda o checklist manual.
-5. `git-workflow` em três fases (inspecionar → commit → push), com aprovação entre cada uma.
+5. `git-workflow` `prepare` → OK do usuário → `publish` (commit, push, PR, merge commit na `main`, limpeza).
 
-Branch `feat/ui-premium-timeline` a partir de `main`; PR ao final do E3b.
+Um PR por estágio, em branches `feat/ui-premium-e0` … `feat/ui-premium-e3b` criadas a partir da `main` sincronizada (decisão tomada após o merge do PR #9, que trouxe esta spec e o plano).
 
 ---
 
