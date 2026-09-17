@@ -393,9 +393,16 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 .bt-tctl:focus-visible{outline:2px solid var(--go); outline-offset:1px}
 .bt-tctl:hover{color:var(--ink)}
 .bt-tctl.on{color:var(--go); background:var(--go-dim)}
+.bt-tctl svg{width:60%; height:60%; fill:none; stroke:currentColor; stroke-width:1.7;
+  stroke-linecap:round; stroke-linejoin:round; pointer-events:none}
+.bt-tctl.on[data-act="hide"],.bt-tctl.on[data-act="mute"]{color:var(--bad); background:rgba(251,113,133,.12)}
+.bt-tctl.on[data-act="lock"]{color:var(--warn); background:rgba(255,179,71,.12)}
+.bt-tctl.on[data-act="solo"]{color:var(--go); background:var(--go-dim)}
 .bt-track-content{position:relative; background:rgba(10,11,26,.5)}
 .bt-track-row.hidden .bt-track-content{opacity:.2; pointer-events:none}
-.bt-track-row.locked .bt-track-content{cursor:not-allowed}
+/* travada: hachura sobre a lane, sem trocar a cor de fundo */
+.bt-track-row.locked .bt-track-content{cursor:not-allowed;
+  background-image:repeating-linear-gradient(45deg, rgba(255,179,71,.07) 0 6px, transparent 6px 12px)}
 .bt-track-content canvas{position:absolute; inset:0; width:100%; height:100%;
   margin-top:0; background:none; border-radius:0; outline:none}
 
@@ -408,6 +415,11 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 .bt-beat .dur{font:400 var(--fs-micro)/1.3 var(--mono); color:rgba(10,10,20,.6)}
 .bt-handle{position:absolute; top:0; bottom:0; width:8px; cursor:ew-resize; z-index:2}
 .bt-handle.right{right:-2px}
+/* Área de pega 4px maior, para DENTRO do clipe: .bt-clip tem overflow:hidden (para
+   fora seria cortada) e segmentos de VÍDEO encostam (para fora sobreporia a vizinha). */
+.bt-handle::before{content:''; position:absolute; top:0; bottom:0}
+.bt-handle.left::before{left:0; right:-4px}
+.bt-handle.right::before{left:-4px; right:0}
 .bt-handle:hover::after{content:''; position:absolute; top:22%; bottom:22%; left:3px;
   width:2px; background:rgba(255,255,255,.55); border-radius:2px}
 
@@ -422,6 +434,12 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   pointer-events:none; box-shadow:0 0 6px rgba(251,191,36,.7)}
 .bt-playhead-flag{position:absolute; top:var(--bt-markers-h,0px); left:-6px; width:13px; height:13px; background:var(--go);
   clip-path:polygon(0 0,100% 0,100% 60%,50% 100%,0 60%); pointer-events:auto; cursor:ew-resize}
+/* Timecode do playhead, na altura da régua; mesmo texto de #bt-time (fmt). Perto
+   do fim da timeline passa para a esquerda da linha (.flip) para não sair dela. */
+.bt-playhead-tc{position:absolute; top:calc(var(--bt-markers-h,0px) + 3px); left:9px; padding:0 5px; border-radius:3px;
+  background:var(--go); color:#191100; font:600 var(--fs-micro)/16px var(--mono); letter-spacing:.02em;
+  white-space:nowrap; pointer-events:none}
+.bt-playhead-tc.flip{left:auto; right:9px}
 .bt-snap-guide{position:absolute; width:1px; background:var(--warn); z-index:8; pointer-events:none;
   box-shadow:0 0 5px rgba(255,179,71,.7)}
 .bt-drop-marker{position:absolute; width:2px; background:var(--go); z-index:8; pointer-events:none}
@@ -521,6 +539,18 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 </style>
 </head>
 <body>
+<!-- Ícones dos controles de track da TIMELINE, usados por <use href="#i-…">.
+     Largura/altura zero em vez de hidden/display:none, que é frágil para <use>. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></symbol>
+  <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18 M10.7 6.1A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.6 M6.7 7.7A16.6 16.6 0 0 0 2 12s3.5 6 10 6a9.7 9.7 0 0 0 3.5-.6 M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol>
+  <symbol id="i-lock-open" viewBox="0 0 24 24"><path d="M5 11.5h14V21H5z M8.4 11.5V7.2A3.8 3.8 0 0 1 15.8 6"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M5 11.5h14V21H5z M8.4 11.5V7.2a3.6 3.6 0 0 1 7.2 0v4.3"/></symbol>
+  <symbol id="i-spk" viewBox="0 0 24 24"><path d="M4 9.2h3l5-3.8v13.2l-5-3.8H4z M16.4 9.6a3.4 3.4 0 0 1 0 4.8 M18.9 7.1a7 7 0 0 1 0 9.8"/></symbol>
+  <symbol id="i-spk-off" viewBox="0 0 24 24"><path d="M4 9.2h3l5-3.8v13.2l-5-3.8H4z M16.6 9.8l4.4 4.4 M21 9.8l-4.4 4.4"/></symbol>
+  <symbol id="i-solo" viewBox="0 0 24 24"><path d="M4 15v-3.2a8 8 0 0 1 16 0V15 M4 14.2h3.2V20H5.2a1.2 1.2 0 0 1-1.2-1.2z M20 14.2h-3.2V20h2a1.2 1.2 0 0 0 1.2-1.2z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.2v13.6 M5.2 12h13.6"/></symbol>
+</svg>
 
 <header>
   <svg class="logo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1674,6 +1704,24 @@ window.sendToClipper = (p) => {
     return out;
   }
 
+  /* Controles de track (H/L/M/S/+): ícone de dois estados em vez de letra. O
+     estado vai em aria-pressed e o aria-label não muda com ele — trocar os dois
+     faria o leitor de tela anunciar a ação duas vezes, invertida. H/M/S são só
+     do preview (o conform lê o sidecar inteiro), e o title diz isso. */
+  const TCTL = {
+    add:  { label: 'Adicionar clipe à track', title: 'adicionar clipe', icons: ['i-plus', 'i-plus'] },
+    hide: { label: 'Ocultar track', title: 'ocultar no preview — não altera o export', icons: ['i-eye', 'i-eye-off'] },
+    lock: { label: 'Travar track', title: 'travar edição', icons: ['i-lock-open', 'i-lock'] },
+    mute: { label: 'Silenciar trilha', title: 'mudo no preview — não altera o export', icons: ['i-spk', 'i-spk-off'] },
+    solo: { label: 'Ativar solo da trilha', title: 'solo da TRILHA: silencia o áudio do vídeo no preview — não altera o export', icons: ['i-solo', 'i-solo'] },
+  };
+  function tctlHtml(act, trackName) {
+    const d = TCTL[act];
+    const pressed = act === 'add' ? '' : ' aria-pressed="false"';
+    return `<button class="bt-tctl" data-act="${act}"${pressed} title="${d.title}" aria-label="${d.label} ${trackName}">` +
+      `<svg aria-hidden="true"><use href="#${d.icons[0]}"></use></svg></button>`;
+  }
+
   /* ---------------- DOM build ---------------- */
   function buildDom() {
     readLabelW();
@@ -1731,9 +1779,8 @@ window.sendToClipper = (p) => {
         <div class="bt-inner" id="bt-inner">
           <div class="bt-tracks bt-tracks-top" id="bt-tracks-top">
             <div class="bt-track-row" data-track="beats">
-              <div class="bt-track-label">
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track MARKERS">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track MARKERS">L</button></div>
+              <div class="bt-track-label"><span class="ic">◆</span><span class="nm">MARKERS</span>
+                ${tctlHtml('hide', 'MARKERS')}${tctlHtml('lock', 'MARKERS')}</div>
               <div class="bt-track-content" id="bt-track-beats"></div>
               <div class="bt-row-resize" data-track="beats"></div>
             </div>
@@ -1743,44 +1790,36 @@ window.sendToClipper = (p) => {
           <div class="bt-tracks" id="bt-tracks">
             <div class="bt-track-row" data-track="broll">
               <div class="bt-track-label"><span class="ic">▭</span><span class="nm">B-ROLL</span>
-                <button class="bt-tctl" data-act="add" title="adicionar clipe" aria-label="Adicionar clipe à track B-ROLL">+</button>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track B-ROLL">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track B-ROLL">L</button></div>
+                ${tctlHtml('add', 'B-ROLL')}${tctlHtml('hide', 'B-ROLL')}${tctlHtml('lock', 'B-ROLL')}</div>
               <div class="bt-track-content" id="bt-track-broll"></div>
               <div class="bt-row-resize" data-track="broll"></div>
             </div>
             <div class="bt-track-row" data-track="video">
               <div class="bt-track-label"><span class="ic">▶</span><span class="nm">VÍDEO</span>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track VÍDEO">L</button></div>
+                ${tctlHtml('lock', 'VÍDEO')}</div>
               <div class="bt-track-content" id="bt-track-video"></div>
               <div class="bt-row-resize" data-track="video"></div>
             </div>
             <div class="bt-track-row" data-track="legend">
               <div class="bt-track-label"><span class="ic">T</span><span class="nm">LEGENDA</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track LEGENDA">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track LEGENDA">L</button></div>
+                ${tctlHtml('hide', 'LEGENDA')}${tctlHtml('lock', 'LEGENDA')}</div>
               <div class="bt-track-content" id="bt-track-legend"></div>
               <div class="bt-row-resize" data-track="legend"></div>
             </div>
             <div class="bt-track-row" data-track="audio">
               <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track ÁUDIO">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track ÁUDIO">L</button></div>
+                ${tctlHtml('hide', 'ÁUDIO')}${tctlHtml('lock', 'ÁUDIO')}</div>
               <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
               <div class="bt-row-resize" data-track="audio"></div>
             </div>
             <div class="bt-track-row" data-track="music">
               <div class="bt-track-label"><span class="ic">♫</span><span class="nm">TRILHA</span>
-                <button class="bt-tctl" data-act="add" title="adicionar clipe" aria-label="Adicionar clipe à track TRILHA">+</button>
-                <button class="bt-tctl" data-act="mute" title="mudo" aria-label="Silenciar trilha TRILHA">M</button>
-                <button class="bt-tctl" data-act="solo" title="solo" aria-label="Ativar solo da trilha TRILHA">S</button>
-                <button class="bt-tctl" data-act="hide" title="ocultar" aria-label="Ocultar track TRILHA">H</button>
-                <button class="bt-tctl" data-act="lock" title="travar" aria-label="Travar track TRILHA">L</button></div>
+                ${tctlHtml('add', 'TRILHA')}${tctlHtml('mute', 'TRILHA')}${tctlHtml('solo', 'TRILHA')}${tctlHtml('hide', 'TRILHA')}${tctlHtml('lock', 'TRILHA')}</div>
               <div class="bt-track-content" id="bt-track-music"></div>
               <div class="bt-row-resize" data-track="music"></div>
             </div>
           </div>
-          <div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div></div>
+          <div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div><span class="bt-playhead-tc" aria-hidden="true">00:00.0</span></div>
           <div class="bt-inout" id="bt-inout" style="display:none"></div>
         </div>
       </div>`;
@@ -2236,10 +2275,17 @@ window.sendToClipper = (p) => {
     requestAnimationFrame(compositeTick);
   }
 
+  // Largura aproximada do chip "00:00.0" + folga: constante para não ler layout por frame.
+  const PH_TC_W = 72;
   function renderPlayhead() {
     const ph = $q('#bt-playhead');
     if (!ph) return;
     ph.style.left = (LABEL_W + timeToX(playhead)) + 'px';
+    const tc = ph.querySelector('.bt-playhead-tc');
+    if (!tc) return;
+    const txt = fmt(playhead);
+    if (tc.textContent !== txt) tc.textContent = txt;
+    tc.classList.toggle('flip', timeToX(playhead) + PH_TC_W > contentWidth());
   }
   function renderInOut() {
     const el = $q('#bt-inout');
@@ -2312,6 +2358,11 @@ window.sendToClipper = (p) => {
         else if (act === 'mute') on = trilhaMuted;
         else if (act === 'solo') on = trilhaSolo;
         btn.classList.toggle('on', on);
+        if (act !== 'add' && TCTL[act]) {
+          btn.setAttribute('aria-pressed', String(on));
+          const use = btn.querySelector('use');
+          if (use) use.setAttribute('href', '#' + TCTL[act].icons[on ? 1 : 0]);
+        }
       });
     });
   }
