@@ -6,6 +6,18 @@
 <title>AI VIDEO STUDIO</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Unica+One&family=Inter:wght@400;500;600;700&family=Red+Hat+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script>
+/* Probe de UI (docs/plans/ui-premium-timeline.md). Inerte sem ?probe na URL.
+   O coletor de erros entra antes de qualquer outro script para contar tudo. */
+if (new URLSearchParams(location.search).has('probe')) {
+  window.__probeErrors = [];
+  addEventListener('error', e => window.__probeErrors.push(String(e.message || e.type)));
+  addEventListener('unhandledrejection', e => window.__probeErrors.push(String((e.reason && e.reason.message) || e.reason)));
+  const s = document.createElement('script');
+  s.src = '/dev/ui-probe.js';
+  document.head.appendChild(s);
+}
+</script>
 <!-- Player da TIMELINE (bundle buildado em remotion/, commitado). Ausente ou
      falhando, o passo 04 cai no compositor de canvas — mesmo padrão de
      degradação graciosa dos engines. -->
