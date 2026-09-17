@@ -1305,11 +1305,11 @@ Substituir a função `renderPlayhead()` inteira por:
 
 - [ ] **Step 8 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 7. Parar aqui.
 
-- [ ] **Step 9 [Orquestrador]: `validator`** — "validar a Task 4 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que os 15 `aria-label` de `tctlHtml` reproduzem exatamente os do `git show HEAD:public/index.html` e que `wireTracks()` não foi alterado".
+- [x] **Step 9 [Orquestrador]: `validator`** — "validar a Task 4 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que os 15 `aria-label` de `tctlHtml` reproduzem exatamente os do `git show HEAD:public/index.html` e que `wireTracks()` não foi alterado".
 
-- [ ] **Step 10 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3a')`. Expected: PASS, incluindo `tctl-a11y` (`withText 0`, `missingPressed 0`, `togglesFailed []`) e `playhead-tc`. Repetir com o bundle bloqueado (rota canvas).
+- [x] **Step 10 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3a')`. Expected: PASS, incluindo `tctl-a11y` (`withText 0`, `missingPressed 0`, `togglesFailed []`) e `playhead-tc`. Repetir com o bundle bloqueado (rota canvas).
 
-- [ ] **Step 11 [Usuário]: Checklist manual** (itens 1–12) + travar B-ROLL e tentar arrastar um clipe (não move) + trim num segmento de VÍDEO encostado no vizinho (pega o segmento certo) + levar o playhead ao fim da timeline (chip passa para a esquerda da linha).
+- [x] **Step 11 [Usuário]: Checklist manual** (itens 1–12) + travar B-ROLL e tentar arrastar um clipe (não move) + trim num segmento de VÍDEO encostado no vizinho (pega o segmento certo) + levar o playhead ao fim da timeline (chip passa para a esquerda da linha).
 
 - [ ] **Step 12 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3a`; arquivo: `public/index.html`; commit `Replace track control letters with two-state icons, add playhead timecode (E3a)`) → OK do usuário → `publish`.
 
@@ -1723,6 +1723,23 @@ _Seção do Orquestrador. Por task: comando do probe, resultado (`ok` + falhas),
 
 **Checklist manual (Step R8):** informado pelo usuário — itens 1–12 OK na densidade única (1–11 na rota Player, 12 na rota canvas), header sem botão de densidade, LEGENDA e TRILHA iguais às de antes.
 
+### Task 4 (E3a) — 2026-09-17
+
+**Pré-checagem do Orquestrador:** script do Step 1, de arquivo, contra `main` em `5fb7020` → `FAIL` com 8 `símbolo ausente:`, 10 `ausente:`, `achadas 0` e a linha de `.bt-tctl` com letra, sem linhas de fonte, duração ou compilação — forma exata do Expected.
+
+**Executor (Steps 1–8), conferido pelo Orquestrador:** script do Step 1 → `PASS: Task 4 estático`; só `public/index.html` (+69/−18) e acréscimo em `## Status`; os 15 `aria-label` calculados de `TCTL` + chamadas `tctlHtml` iguais aos de `HEAD` com a mesma ordenação dos dois lados (`LC_ALL=C sort`; ordenar um lado no shell e o outro em JS dá falso diff por causa do "Á" de "ÁUDIO"); `wireTracks`, `saveBeats`, `doConform`, `seekTo`, atalhos, `localStorage` e `prefers-reduced-motion` fora do diff.
+
+**Validator (Step 9):** APROVADO. `PASS: Task 4 estático` (de arquivo). Sprite logo após `<body>` escondido por `width="0" height="0" style="position:absolute"` (não `hidden`/`display:none`, como a spec exige para `<use>`), 8 símbolos iguais ao plano. CSS nos 4 pontos do plano; `.bt-playhead-tc` com `var(--fs-micro)`; nada de `comfortable`/`data-density`. 15/15 `aria-label` idênticos a `HEAD`; `data-act`/`data-track` batem com o que `wireTracks()`/`applyTrackVisibility()` leem; `[data-act="add"]` sem `aria-pressed`; `title` de H/M/S diz que é só preview. Ordem das tracks preservada; ids: só os 8 `i-…` novos. `PH_TC_W = 72` constante; `renderPlayhead()` sai cedo se o playhead ou o chip não existem e não acrescenta leitura de layout na chamada por frame do canvas. `wireTracks()` byte-idêntica a `HEAD` (ignorando CR).
+**Correção ao `## Status` da Task 4:** o diff de `public/index.html` contra `HEAD` tem **9** hunks, não 8 — o markup do `buildDom()` (Step 5) sai em dois hunks, separados por linhas de contexto inalteradas (`bt-ruler-corner`, `bt-ruler`, abertura de `#bt-tracks`). O executor contou áreas editadas, não hunks.
+
+**Probe (Step 10):** viewport 1280×800, DPR 1, recarga antes de cada `load`.
+
+- Rota Player (`StudioPlayer` presente): `run('E3a')` → `PASS`, 14/14 (`text-floor`, `contrast`, `aria-live`, `motion-literals`, `console-errors`, `tap-targets`, `transport-overflow`, `track-order`, `label-truncate`, `labelw-sync`, `markers-above-ruler`, `playhead`, `tctl-a11y`, `playhead-tc`). `tctl-a11y` `{count:15, missingLabel:0, withText:0, missingPressed:0, togglesFailed:[]}`; `playhead-tc` `{chip:"00:00.0", time:"00:00.0"}`; `tap-targets` 30/24; `label-truncate` `[]`; `labelw-sync` 204/204/204, `playheadDelta 0`; `text-floor` `offenders []`, `exempt [".bt-word@9.5"]`; `__probeErrors` vazio.
+- Rota canvas (DevTools → Network request blocking em `/vendor/studio-player.js`; conferido `StudioPlayer` ausente e `__playerBundleFailed` ligado): `run('E3a')` → `PASS`, 14/14, mesmos valores medidos da rota Player; `__probeErrors` vazio.
+- Conferência extra do Orquestrador, após o `run`, nas duas rotas: nenhum `.bt-tctl` ficou com `aria-pressed="true"` (o probe restaurou o estado); `aria-pressed` bate com `.on` e todo controle tem `<use href>`; `[data-act="add"]` sem `aria-pressed`. `End` → chip `00:38.2` = `#bt-time` e classe `flip` (chip à esquerda da linha); `Home` → chip `00:00.0`, sem `flip`.
+
+**Checklist manual (Step 11):** informado pelo usuário — itens 1–12 OK (1–11 na rota Player, 12 na rota canvas), B-ROLL travado não move o clipe, trim em segmento de VÍDEO encostado no vizinho pega o segmento certo, chip passa para a esquerda da linha no fim da timeline; nenhuma falha.
+
 ---
 
 ## Status
@@ -2044,3 +2061,83 @@ Não tocados: `--tap:30px; --tap-sm:24px; --gap-ctl:2px;`, `--bt-labelw:204px;`,
 **Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano nos Steps R1–R4 (R1 falhou na forma exata esperada; R2 e R3 aplicados literalmente, trecho a trecho, cada um encontrado exatamente uma vez; R4 deu o esperado nos três itens). Único ponto a registrar é o já detalhado acima sobre a leitura do comando `git diff HEAD -- public/index.html | grep -ic ...` = `1` em vez de `0` — é um artefato de como `git diff` inclui o lado removido de um hunk pré-existente em `HEAD` (não um resíduo real no arquivo atual, confirmado por grep direto = `0`).
 
 **Pendente / próximos passos (fora do escopo desta execução):** Step R6 (`validator`), Step R7 (Orquestrador roda o probe `E2` revisado — espera `tap-targets {tbtnMinH:30, tctlMinSide:24}`, sem check `density`), Step R8 (checklist manual do usuário, header sem botão de densidade), Step R9 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e2`).
+
+### Task 4 (E3a) — executado
+
+Steps 1–7 executados (Steps 9–12 são do Orquestrador/Usuário, não executados aqui; Step 8 é este próprio acréscimo). Base: `main` local limpa em `5fb7020`, igual a `origin/main` (Tasks 1/E0, 2/E1 e 3/E2+Revisão R1 já mergeadas pelos PRs #11, #12, #13). Único arquivo modificado: `public/index.html`.
+
+**Ambiente:** o script do Step 1 (e o do Step 7, mesmo script reexecutado) foi extraído byte a byte de `docs/plans/ui-premium-timeline.md:1105-1132` (linhas entre o marcador `node - <<'NODE'` em `:1104` e `NODE` em `:1133`, via `sed -n '1105,1132p'`) para um arquivo no scratchpad da sessão (`task4-step1-check.js`, fora do repo) e rodado com `node task4-step1-check.js` a partir da raiz do repo — não via heredoc, pelo mesmo motivo já registrado no Status das Tasks 1–3 (o Git Bash deste ambiente colapsa `\\` → `\` dentro de heredoc; este script em particular não usa `\\` nos literais, mas a extração por arquivo foi mantida por consistência).
+
+**Step 1 — checagem estática, confirmar falha.** Saída (`node task4-step1-check.js`, `exit=1`):
+
+```
+FAIL
+símbolo ausente: i-eye
+símbolo ausente: i-eye-off
+símbolo ausente: i-lock-open
+símbolo ausente: i-lock
+símbolo ausente: i-spk
+símbolo ausente: i-spk-off
+símbolo ausente: i-solo
+símbolo ausente: i-plus
+ausente: const TCTL = {
+ausente: function tctlHtml(act, trackName) {
+ausente: btn.setAttribute('aria-pressed', String(on));
+ausente: use.setAttribute('href', '#' + TCTL[act].icons[on ? 1 : 0]);
+ausente: <span class="ic">◆</span><span class="nm">MARKERS</span>
+ausente: <span class="bt-playhead-tc" aria-hidden="true">00:00.0</span>
+ausente: tc.classList.toggle('flip', timeToX(playhead) + PH_TC_W > contentWidth());
+ausente: .bt-handle.left::before{left:0; right:-4px}
+ausente: .bt-handle.right::before{left:-4px; right:0}
+ausente: repeating-linear-gradient(45deg, rgba(255,179,71,.07) 0 6px, transparent 6px 12px)
+esperado 15 chamadas ${tctlHtml(…)} no buildDom, achadas 0
+ainda há .bt-tctl com letra no markup
+```
+
+Bate exatamente com o esperado (8 `símbolo ausente:`, 10 `ausente:`, `achadas 0`, e a linha de `.bt-tctl` com letra) — confere com a checagem prévia do Orquestrador. Nenhuma linha de fonte < 11px nem de duração literal, como já antecipado.
+
+**Step 2 — sprite de ícones logo após `<body>`.** Inserido o bloco `<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">` com os 8 `<symbol>` (`i-eye`, `i-eye-off`, `i-lock-open`, `i-lock`, `i-spk`, `i-spk-off`, `i-solo`, `i-plus`), conteúdo idêntico ao plano, imediatamente após a linha `<body>` (a linha em branco que antecedia `<header>` foi preservada depois do `</svg>`).
+
+**Step 3 — CSS.** Quatro inserções, todas localizadas pelo trecho citado (nenhuma linha "atual" do plano divergiu do arquivo):
+1. Após `.bt-tctl.on{color:var(--go); background:var(--go-dim)}` (`:395`): bloco `.bt-tctl svg{...}` + as 3 regras de cor por `data-act` (`hide`/`mute` → `--bad`; `lock` → `--warn`; `solo` → `--go`).
+2. `.bt-track-row.locked .bt-track-content{cursor:not-allowed}` → versão com comentário + `background-image:repeating-linear-gradient(...)`, mesma linha do original preservada como base.
+3. Após a primeira `.bt-playhead-flag{...}` (a de duas linhas terminando em `cursor:ew-resize}`, antes de `.bt-snap-guide`): bloco `.bt-playhead-tc{...}` + `.bt-playhead-tc.flip{...}` com o comentário do plano.
+4. Após `.bt-handle.right{right:-2px}` (a primeira ocorrência, regra CSS — não as ocorrências em JS/markup mais abaixo): bloco `.bt-handle::before{...}` + `.bt-handle.left::before{...}` + `.bt-handle.right::before{...}` com o comentário do plano.
+
+**Step 4 — `TCTL` e `tctlHtml` no closure.** Bloco inserido imediatamente antes de `/* ---------------- DOM build ---------------- */` (linha que antecede `function buildDom() {`), conteúdo idêntico ao plano (comentário + `const TCTL = {...}` com as 5 entradas `add`/`hide`/`lock`/`mute`/`solo` + `function tctlHtml(act, trackName) {...}`).
+
+**Step 5 — markup do `buildDom()`.** Substituído o trecho de `<div class="bt-tracks bt-tracks-top" id="bt-tracks-top">` até `<div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div></div>` (inclusive) pelo bloco do plano: `beats` ganhou `<span class="ic">◆</span><span class="nm">MARKERS</span>` (que não existia antes — único trecho "atual" do plano que já vinha sem esses spans, como a spec antecipa em "R3 reduzida"); as 15 chamadas `${tctlHtml(act, trackName)}` substituíram os 15 `<button class="bt-tctl" ...>H/L/M/S/+</button>` literais; `#bt-playhead` ganhou o filho `<span class="bt-playhead-tc" aria-hidden="true">00:00.0</span>`.
+
+**Step 6 — `applyTrackVisibility()` e `renderPlayhead()`.** Em `applyTrackVisibility()` (`:2341`), após `btn.classList.toggle('on', on);` inserido o bloco que sincroniza `aria-pressed` e o `href` do `<use>` (guardado por `act !== 'add' && TCTL[act]`). `renderPlayhead()` (`:2278`, antes da edição) substituída por inteiro pela versão do plano — const `PH_TC_W = 72` inserida imediatamente acima da função; corpo lê `.bt-playhead-tc`, escreve `fmt(playhead)` só quando o texto muda, e alterna `.flip` via `timeToX(playhead) + PH_TC_W > contentWidth()`. Confirmado antes da edição que `fmt`, `timeToX` e `contentWidth` já existem no mesmo closure (`function fmt(t)` `:1321`, `function timeToX(t)` `:1326`, `function contentWidth()` `:1328`).
+
+**Step 7 — checagem estática.** Reexecução do mesmo script (arquivo, sem heredoc):
+
+```
+PASS: Task 4 estático
+```
+
+`exit=0`. Bate exatamente com o esperado.
+
+**Verificações adicionais (não pedidas explicitamente por nenhum step, feitas por precaução):**
+- `node --check server.js` → `SYNTAX-OK` (arquivo não tocado nesta task). `node --check public/index.html` não é aplicável (`.html` não é um módulo Node — o próprio script do Step 1 já cobre a compilação de todo `<script>` inline via `new Function`, e passou dentro do `PASS`).
+- Comparação dos 15 `aria-label` gerados por `tctlHtml` contra `git show HEAD:public/index.html`: script `aria-compute.js` no scratchpad extrai o objeto `TCTL` e as 15 chamadas `${tctlHtml('act', 'trackName')}` do `buildDom()` atual, calcula `${TCTL[act].label} ${trackName}` para cada uma, ordena e escreve num arquivo; em paralelo, `grep -oE 'aria-label="(Ocultar|Travar|Adicionar|Silenciar|Ativar)[^"]*"' ` em `git show HEAD:public/index.html`, despido de `aria-label="…"` e ordenado. `diff` entre os dois → vazio, **idênticos 15/15**. Lista (ordenada): `Adicionar clipe à track B-ROLL`, `Adicionar clipe à track TRILHA`, `Ativar solo da trilha TRILHA`, `Ocultar track B-ROLL`, `Ocultar track LEGENDA`, `Ocultar track MARKERS`, `Ocultar track TRILHA`, `Ocultar track ÁUDIO`, `Silenciar trilha TRILHA`, `Travar track B-ROLL`, `Travar track LEGENDA`, `Travar track MARKERS`, `Travar track TRILHA`, `Travar track VÍDEO`, `Travar track ÁUDIO`.
+- `wireTracks()`: `diff` entre `git show HEAD:public/index.html` e o arquivo atual, ambos recortados de `function wireTracks(` até o `}` de fechamento no mesmo nível de indentação → vazio, **byte-idêntica a `HEAD`**.
+- `git diff -- public/index.html | grep -c localStorage` → `0` (nenhuma chave nova ou acesso tocado).
+- `id=` novos/removidos: `git diff` só introduz os 8 `id="i-…"` dos `<symbol>` do sprite (novos, previstos pelo plano); o único `id` existente que aparece nos dois lados do diff é `id="bt-playhead"`, porque a linha inteira mudou de conteúdo (ganhou o filho `<span class="bt-playhead-tc">`) — não foi renomeado nem removido.
+
+**Diff:** só `public/index.html` modificado (`git status --short` → ` M public/index.html`, único caminho). `git diff --stat` → `public/index.html | 87 +++++++++++++++++++++++++++++++++++++++++++------------` (1 arquivo, 69 inserções, 18 deleções). O diff completo (`git diff -- public/index.html`) tem 8 hunks, todos dentro do escopo da task:
+1. CSS `.bt-tctl` (Step 3.1): +10/−1.
+2. CSS `.bt-handle` (Step 3.4): +5/−0.
+3. CSS `.bt-playhead-tc` (Step 3.3): +6/−0.
+4. Sprite SVG após `<body>` (Step 2): +13/−0.
+5. `TCTL`/`tctlHtml` no closure (Step 4): +18/−0.
+6. Markup do `buildDom()` — tracks + playhead (Step 5): +14/−22 (net −8: quinze `<button>` de uma linha cada viraram nove linhas de `${tctlHtml(...)}`, e `beats` ganhou uma linha de `<span>`s).
+7. `renderPlayhead()` (Step 6): +7/−0.
+8. `applyTrackVisibility()` (Step 6): +5/−0.
+Nada fora dessas 8 áreas foi tocado — sem mudança em `wireTracks`, `saveBeats`, `doConform`, `seekTo`, o `switch` de teclado, `localStorage`, ou qualquer `id` renomeado. Conteúdo de LEGENDA (`.bt-word`), ÁUDIO (waveform) e TRILHA (`.bt-clip.music`) não tocado (fora do escopo das 8 áreas acima).
+
+**Arquivos tocados:** `public/index.html` (modificado). Nenhum outro arquivo tocado — `public/dev/ui-probe.js`, `server.js`, `remotion/`, `public/vendor/`, `styles/` e a spec não foram abertos para edição nesta task. Nenhuma operação git mutante (sem commit, sem branch nova, sem stage) — mudanças permanecem não commitadas sobre a `main` local.
+
+**Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano. Todos os trechos "atual" citados pela task (incluindo a peculiaridade de `beats` ainda não ter `<span class="ic">`/`<span class="nm">` antes desta task, que o Step 5 explicitamente corrige) bateram exatamente com o arquivo antes de cada edição. Único ponto registrado é o de ambiente (execução do script via arquivo em vez de heredoc), mesmo padrão já estabelecido nas Tasks 1–3.
+
+**Pendente / próximos passos (fora do escopo desta execução):** Step 9 (`validator`), Step 10 (Orquestrador roda o probe `E3a` nas duas rotas — Player e canvas), Step 11 (checklist manual do usuário, incluindo os itens específicos de E3a: travar B-ROLL e tentar arrastar; trim num segmento de VÍDEO encostado no vizinho; playhead no fim da timeline), Step 12 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e3a`).
