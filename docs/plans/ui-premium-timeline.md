@@ -195,6 +195,8 @@ if (new URLSearchParams(location.search).has('probe')) {
     sel.value = path;
     sel.dispatchEvent(new Event('change'));
     await waitFor(() => $('#bt-track-legend .bt-word, #bt-track-legend .empty'), 30000);
+    // Chips de #engines chegam via /api/deps (~3s, sem cache) e contam no text-floor.
+    await waitFor(() => $('#engines .chip'), 30000);
     await sleep(500);
     return timelineReady();
   }
@@ -506,9 +508,9 @@ Expected, nesta ordem: `200 /dev/ui-probe.js`, `404 /dev/nope.js`, `404 /dev/..%
 
 - [ ] **Step 6 [Executor]: Atualizar `## Status`** com os comandos dos Steps 1 e 5 e suas saídas. Parar aqui.
 
-- [ ] **Step 7 [Orquestrador]: `validator`** — tarefa: "validar a Task 1 de `docs/plans/ui-premium-timeline.md` contra o diff; rodar os scripts dos Steps 1 e 5; conferir path-safety da rota `/dev/`".
+- [x] **Step 7 [Orquestrador]: `validator`** — tarefa: "validar a Task 1 de `docs/plans/ui-premium-timeline.md` contra o diff; rodar os scripts dos Steps 1 e 5; conferir path-safety da rota `/dev/`".
 
-- [ ] **Step 8 [Orquestrador]: Gravar o baseline**
+- [x] **Step 8 [Orquestrador]: Gravar o baseline**
   1. Com o app **como está no `main`** exceto os arquivos desta task (a rota e o loader não mudam nada visível), rodar `node server.js`, abrir `http://localhost:4870/?probe=1` via Chrome com viewport 1280×800.
   2. `await uiProbe.load('output/assembled-4545f906507a.mp4')` → deve retornar `true`.
   3. `await uiProbe.run('E0')` → copiar a linha JSON impressa.
@@ -1492,8 +1494,67 @@ Imediatamente antes de `  function seekTo(t) {` inserir:
 
 _Seção do Orquestrador. Por task: comando do probe, resultado (`ok` + falhas), ajustes de uma linha feitos (ex.: `--bt-labelw`), e o resultado do checklist manual informado pelo usuário._
 
+### Task 1 (E0) — 2026-09-16
+
+**Validator (Step 7):** APROVADO. Steps 1 e 5 reproduzidos (Step 1 rodado de arquivo — heredoc no Git Bash colapsa `\\`, ver `## Status`); traversal em `/dev/` (`..%5C`, `%2e%2e/`, `../`, `..%2f..%2f`, `..js`, `--path-as-is`) → todos 404. Achado de processo, baixa severidade: no Windows `kill $SRV` não mata o `node.exe` do Step 5 — encerrar pelo PID real (`netstat -ano` → `taskkill`).
+
+**Baseline (Step 8):** `node server.js`, Chrome com viewport 1280×800 (DPR 1), rota Player (`window.StudioPlayer` presente), `?probe=1` recarregado antes de cada `load`.
+
+- Primeira tentativa descartada: `run('E0')` gravado, mas `run('E1')` após recarga deu `FAIL (3 falha(s))` — `text-floor` ganhou `span.chip.no@10` e `span.chip.ok@10`. Causa: os chips de `#engines` só renderizam quando `/api/deps` responde (medido 3,2–3,7 s, sem cache no servidor), e `load()` só esperava a lane LEGENDA + 500 ms — corrida entre as duas.
+- **Desvio do plano (aprovado pelo usuário):** `load()` passa a esperar também `#engines .chip` antes do `sleep(500)`. Aplicado em `public/dev/ui-probe.js` e no bloco do Step 4 deste plano; os dois seguem idênticos exceto a linha `BASELINE`. `node --check` OK; script do Step 1 → `PASS: Task 1 estático`. A Task 3 (tabela, linha 13) já cobre `.chip`, então E2+ não muda.
+- `run('E0')` regravado → JSON de 2113 caracteres em `BASELINE` (inclui os chips); conferido igual byte a byte ao snapshot da página via `fetch('/dev/ui-probe.js')`.
+- `run('E1')` sem a Task 2, duas recargas independentes → ambas `[uiProbe] E1: FAIL (2 falha(s))`: 11 PASS (`text-floor`, `contrast`, `aria-live`, `console-errors`, `tap-targets`, `transport-overflow`, `track-order`, `label-truncate`, `markers-above-ruler`, `playhead`, `tctl-a11y`), FAIL só nos esperados — `motion-literals` (15 declarações) e `labelw-sync` (token ausente; rótulo 192 = régua 192). `__probeErrors` vazio. Probe estável entre recargas.
+
 ---
 
 ## Status
 
 _Seção de propriedade exclusiva do Executor. Registrar aqui, por task: comando rodado, saída observada, desvio do plano (com motivo) e o que ficou pendente. Updates incrementais — acrescentar, não apagar._
+
+### Task 1 (E0) — executado
+
+Steps 1–6 executados (Steps 7–9 são do Orquestrador/Usuário, não executados aqui). Base: `main` local limpa em `cdcd6f7`, igual a `origin/main`.
+
+**Step 1 — checagem estática, confirmar falha.** Rodado com `node - <<'NODE' ... NODE` (script exato do plano). Saída:
+
+```
+FAIL
+server.js: DEV_DIR ausente
+server.js: regex da rota /dev/ ausente
+server.js: guarda startsWith(DEV_DIR + path.sep) ausente
+index.html: loader ?probe ausente
+index.html: loader não injeta /dev/ui-probe.js
+public/dev/ui-probe.js ausente
+```
+
+Bate exatamente com o esperado (6 linhas: DEV_DIR, regex, startsWith, loader, injeção do script, arquivo ausente).
+
+**Step 2 — rota `/dev/` em `server.js`.** Inserido `const DEV_DIR = path.join(ROOT, 'public', 'dev');` logo abaixo de `const VENDOR_DIR = ...` (com o comentário do plano), e o bloco da rota `mDev` logo após o fechamento do bloco `mVendor` (antes do comentário `// engines`) — conteúdo idêntico ao do plano.
+
+**Step 3 — loader no `<head>`.** Inserido o `<script>` do loader de probe imediatamente antes de `<!-- Player da TIMELINE (bundle buildado em remotion/, commitado). Ausente ou` — conteúdo idêntico ao do plano.
+
+**Step 4 — `public/dev/ui-probe.js` criado.** Arquivo novo (diretório `public/dev/` não existia) com o conteúdo exato do Step 4 do plano (341 linhas, `const BASELINE = null;` presente, sem edição).
+
+**Step 5 — checagem estática, sintaxe e HTTP.**
+
+- Reexecução do script do Step 1 **via heredoc** (`node - <<'NODE' ... NODE`) deu `FAIL` com uma única linha (`server.js: regex da rota /dev/ ausente`), diferente do `PASS: Task 1 estático` esperado. **Desvio investigado e isolado a um artefato do ambiente, não do código**: neste Git Bash, o heredoc colapsa `\\` → `\` antes do conteúdo chegar ao `node` (confirmado isolando o caso: `'a\\/b'` dentro de um heredoc chega a `node` como `'a/b'`, sem nenhuma barra invertida — ver também `console.log(JSON.stringify('a\\\\b'))` → `"a\\b"` dentro do mesmo heredoc). Isso corrompe o *needle* `'dev\\/([A-Za-z0-9._-]+'` do script (que depende de casar a barra invertida literal do regex `/^\/dev\/(...)` em `server.js`), fazendo o `includes()` falhar por engano.
+  Para confirmar que o código está correto, salvei o **mesmo script, byte a byte**, em um arquivo (`task1-step1-check.js`, fora do repo, no scratchpad da sessão) e rodei com `node task1-step1-check.js` (sem heredoc, portanto sem o bug de transmissão): saída `PASS: Task 1 estático`, `exit=0`. O diff de `server.js` (abaixo) confirma que a regex `mDev` foi inserida exatamente como no plano — `dev\/([A-Za-z0-9._-]+\.js)$/` contém a barra invertida.
+  **Conclusão:** o critério de aceite do Step 5 (`PASS: Task 1 estático`) é satisfeito pelo conteúdo real do repo; o `FAIL` só aparece quando o mesmo script passa pelo heredoc deste ambiente. Reportando ambas as saídas para o validador decidir se quer reproduzir/confirmar por outro caminho (ex.: `node --check` mais um script escrito em arquivo, como fiz aqui).
+
+- `node --check server.js && node --check public/dev/ui-probe.js && echo SYNTAX-OK` → `SYNTAX-OK`.
+
+- Checagem HTTP (`PORT=4899 node server.js` em background, depois `curl` nas 4 rotas + grep no HTML, depois processo encerrado):
+
+```
+200 /dev/ui-probe.js
+404 /dev/nope.js
+404 /dev/..%2Fserver.js
+404 /dev/ui-probe.txt
+1
+```
+
+Bate exatamente com o esperado. Servidor de teste (porta 4899) encerrado ao final (confirmado: nova tentativa de `curl` retorna código `000`).
+
+**Arquivos tocados:** `server.js` (modificado — rota `/dev/`), `public/index.html` (modificado — loader do probe no `<head>`), `public/dev/ui-probe.js` (criado). Nenhum outro arquivo tocado. Nenhuma operação git mutante (sem commit, sem branch nova) — `git status --short` mostra só esses três caminhos alterados/novos sobre a `main` local limpa.
+
+**Pendente / próximos passos (fora do escopo desta execução):** Step 7 (`validator`), Step 8 (Orquestrador grava o baseline `BASELINE` em `public/dev/ui-probe.js` rodando `uiProbe.run('E0')` no Chrome), Step 9 (`git-workflow` `prepare`/`publish`).

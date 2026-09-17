@@ -30,6 +30,9 @@ const LUTS_DIR = path.join(ROOT, 'luts'); // persistent 3D .cube library, picked
 // Build artifacts committed to the repo (the Player bundle). Not a media dir —
 // deliberately outside insideRoot(), which gates client-supplied media paths.
 const VENDOR_DIR = path.join(ROOT, 'public', 'vendor');
+// Instrumentos de desenvolvimento (probe de UI). Mesmo regime de /vendor/:
+// arquivo versionado, servido por allowlist, nunca path vindo do cliente.
+const DEV_DIR = path.join(ROOT, 'public', 'dev');
 for (const d of [JOBS_DIR, OUT_DIR, UP_DIR, LUTS_DIR]) fs.mkdirSync(d, { recursive: true });
 
 // ------------------------------------------------------------- job bus
@@ -195,6 +198,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && mVendor) {
       const abs = path.resolve(VENDOR_DIR, mVendor[1]);
       if (!abs.startsWith(VENDOR_DIR + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
+      return serveFile(req, res, abs);
+    }
+
+    // Probe de UI (public/dev/). Mesma allowlist por regex do /vendor/: o nome
+    // casado não contém '/', então '..' nunca vira segmento de traversal.
+    const mDev = /^\/dev\/([A-Za-z0-9._-]+\.js)$/.exec(p);
+    if (req.method === 'GET' && mDev) {
+      const abs = path.resolve(DEV_DIR, mDev[1]);
+      if (!abs.startsWith(DEV_DIR + path.sep)) { res.writeHead(403); return res.end('forbidden'); }
       return serveFile(req, res, abs);
     }
 
