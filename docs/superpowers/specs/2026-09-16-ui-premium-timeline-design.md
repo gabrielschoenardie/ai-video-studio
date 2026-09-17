@@ -2,8 +2,9 @@
 
 **Data:** 2026-09-16
 **Origem:** `ui-premium-upgrade.md` (plano escrito pelo usuário, não versionado) e `UI_Premium_Mockup.dc.html` (mockup interativo antes/depois). Esta spec é o resultado de verificar os dois contra o código e decompor o plano.
-**Arquivos-alvo:** `public/index.html` (tokens, tipografia, contraste, densidade, controles de track, playhead, transporte, folha de atalhos, microinterações, loader do probe), `public/dev/ui-probe.js` (novo), `server.js` (rota estática `GET /dev/*.js`).
+**Arquivos-alvo:** `public/index.html` (tokens, tipografia, contraste, largura da coluna de rótulos, controles de track, playhead, transporte, folha de atalhos, microinterações, loader do probe), `public/dev/ui-probe.js` (novo), `server.js` (rota estática `GET /dev/*.js`).
 **Base:** `main` em `3f47ec9`. Todo número de linha citado aqui se refere a esse commit.
+**Revisão R1 (2026-09-16), decisão do usuário:** **densidade única, compacta** (`--tap` 30px, `--tap-sm` 24px, `--gap-ctl` 2px, `--bt-labelw` 204px). O toggle `compact`/`comfortable` (G1) chegou a ser implementado e medido no E2 — os dois modos passaram no probe e no checklist —, mas foi removido antes do commit. Sem `data-density`, sem `studio.density`, sem evento `studio:density`, sem check `density` no probe. As seções abaixo já refletem a revisão; o plano (`docs/plans/ui-premium-timeline.md`, Task 3, Revisão R1) guarda o registro do que foi feito e desfeito.
 
 ---
 
@@ -49,7 +50,7 @@ Registrada aqui porque os sub-projetos B, C e D vão precisar dela.
 
 | Sub-projeto | Tasks do plano original | Toca | Status |
 |---|---|---|---|
-| **A. UI da TIMELINE** | R1, R2, R3 reduzida, R4 (ícone + estado), O3, Y1 (só timeline), G1 | `index.html`, `ui-probe.js`, rota `/dev/` | **Esta spec** |
+| **A. UI da TIMELINE** | R1, R2, R3 reduzida, R4 (ícone + estado), O3, Y1 (só timeline); G1 retirado na Revisão R1 | `index.html`, `ui-probe.js`, rota `/dev/` | **Esta spec** |
 | **B. Mixagem de áudio** | R5, M/S em ÁUDIO/SFX, solo exclusivo, preview × export | `server.js`, `lib/timeline.js`, `remotion/` + bundle | Pendente |
 | **C. Voz do sistema** | O1, O2, Y2, Y1 (job, asset, skeleton) | `index.html` + contrato de erro no servidor | Pendente |
 | **D. Biblioteca de jobs** | Y3 | Rotas novas, ação destrutiva | Pendente |
@@ -60,7 +61,7 @@ Registrada aqui porque os sub-projetos B, C e D vão precisar dela.
 
 ## Objetivo (sub-projeto A)
 
-- Alvos de clique com folga de mira em duas densidades de desktop (`compact` 30/24px, padrão; `comfortable` 36/28px), escolhidas pelo usuário e persistidas.
+- Alvos de clique com folga de mira numa densidade única de desktop, compacta: 30px nos botões do transporte, 24px nos controles de track (Revisão R1).
 - Nenhum texto de interface abaixo de 11px e todo texto de hierarquia baixa com contraste ≥ 4,5:1.
 - Controles de track que dizem o que fazem e se estão ativos, com semântica de botão de dois estados.
 - Playhead com timecode legível; rótulo de MARKERS nomeado.
@@ -78,7 +79,7 @@ Registrada aqui porque os sub-projetos B, C e D vão precisar dela.
 | Questão | Decisão |
 |---|---|
 | Decomposição | Quatro sub-projetos; A primeiro |
-| Densidade | `compact` padrão; toggle (G1) entra no A; persistido em `studio.density`; largura da coluna de rótulos vira token `--bt-labelw` |
+| Densidade | Única, `compact` (Revisão R1 — a decisão original era `compact` padrão com toggle G1 persistido em `studio.density`); largura da coluna de rótulos vira token `--bt-labelw` |
 | Piso de 11px dentro das lanes | Vale para toda a interface; **`.bt-word` e `.bt-clip.music` isentos** (dado em escala de tempo, como a waveform), com a exclusão declarada no probe |
 | Pointer Events | Fora do A; entra só a área de pega em CSS |
 | Verificação | `validator` estático + probe de runtime rodado pelo Orquestrador via Chrome + `public/dev/ui-probe.js` reutilizável (`?probe=1`) + checklist manual do usuário |
@@ -95,7 +96,7 @@ Registrada aqui porque os sub-projetos B, C e D vão precisar dela.
 
 ### Condições de medição (valem para todos os estágios)
 
-- `node server.js`, janela com viewport de **1280×800**, `data-density` ausente (`compact`) salvo quando o check alterna.
+- `node server.js`, janela com viewport de **1280×800**.
 - Na TIMELINE, um vídeo montado com transcript, para a lane LEGENDA ter chips: `output/assembled-<id>.mp4` com `jobs/<id>/transcript.json` (fixture local atual: `assembled-4545f906507a.mp4`). Zoom 100% (60 px/s).
 - URL `http://localhost:4870/?probe=1`.
 
@@ -118,13 +119,13 @@ Allowlist por regex, sem `..` possível, só leitura, nenhum path vindo de corpo
 
 **`public/index.html`** — loader imediatamente antes do `<script>` principal (`:705`): se `new URLSearchParams(location.search).has('probe')`, instala `window.__probeErrors = []` com listeners de `error` e `unhandledrejection`, e injeta `<script src="/dev/ui-probe.js">`. Sem `?probe`, nada acontece.
 
-**`public/dev/ui-probe.js`** — IIFE sem dependências, só DOM e CSSOM (não enxerga o closure da TIMELINE). Expõe `window.uiProbe.run(stage)`, com `stage ∈ {'E0','E1','E2','E3a','E3b'}`. Saída: uma linha `PASS` / `FAIL` / `SKIP` por check com medido × esperado, um `console.table`, e o objeto de resultados como retorno (é por ele que o Orquestrador lê via Chrome). Checks de TIMELINE dão `SKIP` se `#bt-root` não foi construído. Checks que alteram estado (alternar densidade, clicar controle, abrir folha) **restauram** o estado ao terminar.
+**`public/dev/ui-probe.js`** — IIFE sem dependências, só DOM e CSSOM (não enxerga o closure da TIMELINE). Expõe `window.uiProbe.run(stage)`, com `stage ∈ {'E0','E1','E2','E3a','E3b'}`. Saída: uma linha `PASS` / `FAIL` / `SKIP` por check com medido × esperado, um `console.table`, e o objeto de resultados como retorno (é por ele que o Orquestrador lê via Chrome). Checks de TIMELINE dão `SKIP` se `#bt-root` não foi construído. Checks que alteram estado (clicar controle, tocar, abrir folha) **restauram** o estado ao terminar.
 
 | id | Mede | Desde |
 |---|---|---|
 | `text-floor` | Nós folha com texto e `fontSize < 11`, fora de `.bt-word` e `.bt-clip.music`; os isentos em contador separado, com tamanho computado | E0 |
 | `contrast` | `--faint` e `--dim` sobre `--bg`, `--panel`, `--panel2`, lidos das variáveis computadas | E0 |
-| `tap-targets` | Menor altura renderizada de `.bt-tbtn`; menor lado de `.bt-tctl` | E0 |
+| `tap-targets` | Menor altura renderizada de `.bt-tbtn`; menor lado de `.bt-tctl`. Até E1 = baseline; a partir de E2 = 30 / 24 (densidade única) | E0 |
 | `transport-overflow` | `scrollWidth <= clientWidth` em `.bt-transport` | E0 |
 | `track-order` | `[...'.bt-track-row'].map(dataset.track)` = `beats, broll, video, legend, audio, music` | E0 |
 | `label-truncate` | Nenhum `.bt-track-label` com `scrollWidth > clientWidth` | E0 |
@@ -135,7 +136,6 @@ Allowlist por regex, sem `..` possível, só leitura, nenhum path vindo de corpo
 | `motion-literals` | Regras do CSSOM com `transition`/`animation` de duração literal; isentos `drift`, `blink`, `bt-pulse` e o `.001ms` do reduced-motion | E0 |
 | `aria-live` | Contagem de `[aria-live]` = 1 | E0 |
 | `console-errors` | `window.__probeErrors.length` = 0 | E0 |
-| `density` | Alterna `data-density`, remede `tap-targets`, `label-truncate`, `labelw-sync`; restaura | E2 |
 | `playhead-tc` | Texto de `.bt-playhead-tc` = parte corrente de `#bt-time` | E3a |
 | `transport-ids` | Os 21 IDs da tabela de grupos do E3b presentes; `#bt-play` mantém `.bt-kbd` após play/pause | E3b |
 | `shortcut-sheet` | `?` sintético abre `dialog[open]`; linhas = `window.SHORTCUTS.length`; `.close()` devolve o foco ao gatilho | E3b |
@@ -151,7 +151,7 @@ Regra: **nenhum pixel muda.**
 3. **Durações.** `:root{--dur-1:150ms; --dur-2:200ms; --dur-3:300ms; --dur-4:450ms}`. Substituições: `.15s`, `.16s` → `--dur-1`; `.18s`, `.2s` → `--dur-2`; `.28s` → `--dur-3`; `.4s`, `.5s` → `--dur-4`. Declarados e ainda não consumidos: `--ease-out:cubic-bezier(.16,1,.3,1)`, `--ease-in-out:cubic-bezier(.65,0,.35,1)`, `--ease-spring:cubic-bezier(.34,1.56,.64,1)`. Os `ease` existentes não mudam. Isentos: `drift 26s`, `blink 1.4s`/`1.2s`, `bt-pulse 1.6s`, `.001ms`.
 4. **Fontes não entram no E1.** Um token por tamanho existente seria renomear literal; a escala entra no E2, onde a mudança é intencional e medida.
 
-### E2 — Piso tipográfico, contraste, densidade
+### E2 — Piso tipográfico e contraste (densidade única)
 
 1. **Escala.** `:root{--fs-micro:11px; --fs-sm:12.5px; --fs-body:13.5px; --fs-lead:15px}`.
 
@@ -167,15 +167,12 @@ Regra: **nenhum pixel muda.**
 
    **Isentos (comentário `/* isento: lane intocada — sub-projeto A, decisão 2 */`):** `.bt-word` (9,5px); `.bt-clip.music .nm{font-size:9.5px}` e `.bt-clip.music .tag{font-size:8.5px}` como overrides, já que `.bt-clip .nm`/`.tag` são compartilhadas com B-ROLL e VÍDEO; `.bt-cap-overlay` (13px Unica One — representa a legenda queimada, é display).
 
-2. **Coluna de rótulos.** Com rótulo a 11px, "TRILHA" com 5 controles não cabe em 192px (≈43px disponíveis para ≈50px de texto). Valores de partida: `compact` `--bt-labelw:204px`; `comfortable` `248px`. Regra: o menor valor em passos de 4px que faz `label-truncate` passar — o Orquestrador ajusta o número se o probe reprovar.
+2. **Coluna de rótulos.** Com rótulo a 11px, "TRILHA" com 5 controles não cabe em 192px (≈43px disponíveis para ≈50px de texto). Valor de partida: `--bt-labelw:204px`. Regra: o menor valor em passos de 4px que faz `label-truncate` passar — o Orquestrador ajusta o número se o probe reprovar. (Medido no E2: 204px passou sem ajuste.)
 
 3. **Contraste.** `--faint:#7b80ad`. `.btn[disabled]` usa `--faint` como fundo e pareceria habilitado com o tom mais claro: passa a usar `--disabled-bg:#5c6190`.
 
-4. **Densidade.**
-   - `html[data-density="comfortable"]{--tap:36px; --tap-sm:28px; --gap-ctl:4px; --bt-labelw:248px}`; ausência do atributo = `compact`.
-   - Script inline no `<head>`, antes dos estilos: lê `studio.density` em `try/catch` e aplica o atributo antes da primeira pintura.
-   - `<button id="density-toggle" aria-pressed="false|true">` no header, antes de `#port`, texto `DENSIDADE · COMPACT` / `DENSIDADE · CONFORTÁVEL`, altura ≥ 28px.
-   - Clique: alterna o atributo, grava em `try/catch`, dispara `document.dispatchEvent(new CustomEvent('studio:density'))`. O closure da TIMELINE escuta: `if (built) { readLabelW(); renderTracks(); }`.
+4. **Densidade (Revisão R1): única, compacta.** Os alvos ficam nos valores do E1 (`--tap` 30px, `--tap-sm` 24px, `--gap-ctl` 2px) e só `--bt-labelw` muda (204px, item 2). Não há `data-density`, script no `<head>`, botão no header, `studio.density` nem evento `studio:density`. `readLabelW()` continua lendo o token no início de `buildDom()`. A classe `.hdr-btn` entra no E2 sem variante `[aria-pressed]`, para o botão `? ATALHOS` do E3b.
+   - *Registro:* a versão original tinha `html[data-density="comfortable"]{--tap:36px; --tap-sm:28px; --gap-ctl:4px; --bt-labelw:248px}`, leitura de `studio.density` no `<head>`, `#density-toggle` no header e o evento `studio:density` relendo `LABEL_W`. Foi implementada, passou no probe (36/28, 248px sem corte) e no checklist, e foi removida por decisão do usuário antes do commit do E2.
 
 ### E3a — Controles de track e playhead
 
@@ -208,13 +205,13 @@ Regra: **nenhum pixel muda.**
    | Projeto (`margin-left:auto`) | `#bt-save`, `#bt-conform` |
 
    - Rótulos: texto visível sem a letra (`◀◀ J` → `◀◀`, `L ▶▶` → `▶▶`), mais `<kbd class="bt-kbd">` de `--fs-micro`: Espaço, J, K, L, `,`, `.`, I, O, S, M, R, `Ctrl+Z`, `Ctrl+⇧+Z`, `-`, `+`, `\`.
-   - `compact`: `.bt-kbd{position:absolute; bottom:calc(100% + 4px); opacity:0}`, visível em `:hover`/`:focus-visible` — sem deslocar layout. `comfortable`: `position:static; opacity:1`.
+   - `.bt-kbd{position:absolute; bottom:calc(100% + 4px); opacity:0}`, visível em `:hover`/`:focus-visible` — sem deslocar layout.
    - `#bt-play` passa a `<span class="lbl">▶</span><kbd class="bt-kbd">Espaço</kbd>`; os quatro `textContent` de `:3149, 3150, 3156, 3157` passam a escrever em `#bt-play .lbl`.
 
 2. **Folha de atalhos (O3).**
    - `window.SHORTCUTS` no escopo global do script, `{keys:[...], desc, group}`, exatamente: **Reprodução** Espaço, J, K, L, `,`, `.`, Home, End · **Edição** I, O, S, M, R, Delete/Backspace, Ctrl+Z, Ctrl+⇧+Z · **Zoom** `+`/`=`, `-`, `\`, Ctrl+roda · **Geral** `?`, Esc.
    - `<dialog id="shortcuts-sheet" aria-labelledby="shortcuts-title">`, renderizado a partir de `SHORTCUTS` na primeira abertura; cabeçalho informa "atalhos da TIMELINE valem na etapa 04". Abre com `showModal()`; guarda `document.activeElement` ao abrir e o restaura no evento `close`.
-   - Gatilhos: listener global de `keydown` para `e.key === '?'`, ignorando alvo `INPUT`/`TEXTAREA`/`SELECT`/`isContentEditable` e dialog já aberto; botão `? ATALHOS` no header, ao lado do toggle de densidade.
+   - Gatilhos: listener global de `keydown` para `e.key === '?'`, ignorando alvo `INPUT`/`TEXTAREA`/`SELECT`/`isContentEditable` e dialog já aberto; botão `? ATALHOS` no header, antes de `#port`.
    - Única alteração no handler da TIMELINE (`:3220`): `if (document.querySelector('dialog[open]')) return;` no topo.
 
 3. **Microinterações (Y1, só timeline).**
@@ -248,7 +245,7 @@ Regra: **nenhum pixel muda.**
 4. Nenhum ID existente muda.
 5. Conteúdo das lanes LEGENDA, ÁUDIO e TRILHA visualmente igual.
 6. Regra global de reduced-motion mantida; nenhuma animação nova com duração literal.
-7. `localStorage`: só `studio.density` é novo, sempre em `try/catch`.
+7. `localStorage`: nenhuma chave nova (a `studio.density` saiu na Revisão R1); os acessos existentes continuam em `try/catch`.
 8. Desktop apenas: nenhum breakpoint de telefone, gesto de toque, `pointer:coarse` ou alvo de 44px.
 
 ---
@@ -264,7 +261,7 @@ Regra: **nenhum pixel muda.**
 ## Riscos declarados
 
 - **Aumentos de 0,5px (12 → 12,5; 13 → 13,5; 11,5 → 12,5)** podem quebrar linha em áreas justas (nav, `.btn`, tabelas). Coberto pelo checklist manual; aceito como consequência da escala.
-- **Valores de `--bt-labelw` (204 / 248px) são estimativas** de métrica de fonte. O probe decide; ajuste é de uma linha.
+- **O valor de `--bt-labelw` (204px) era estimativa** de métrica de fonte. O probe decide; ajuste é de uma linha. (Medido no E2: passou sem ajuste.)
 - **Eventos sintéticos no probe:** `?` é tratado pelo listener do app; `Esc` nativo do `<dialog>` não é sintetizável, então o probe fecha com `.close()`. O fechamento por `Esc` real fica no checklist.
 - **Rota canvas não é a padrão.** O E1 mexe em `192` usados pelas duas rotas; coberta pelo item 12 do checklist.
 - **Probe interrompido no meio** pode deixar um controle alternado; recarregar a TIMELINE reseta o estado (`:3185`).
@@ -277,11 +274,11 @@ Regra: **nenhum pixel muda.**
 |---|---|---|
 | E0 | Roda sem exceção; `console-errors` = 0; baseline gravado em `EXPECT.baseline` | Rota `/dev/` com regex e `startsWith`; loader só age com `?probe` |
 | E1 | Todos os checks visuais **idênticos ao baseline**; `labelw-sync` PASS; `motion-literals` = 0; `console-errors` = 0 | Nenhum `192` literal no closure da TIMELINE; tokens declarados; nenhuma duração literal fora dos isentos |
-| E2 | `text-floor` = 0 e isentos com o tamanho do baseline; `contrast` ≥ 4,5 nos 6 pares; `density`: compact 30/24, comfortable 36/28, `label-truncate` e `labelw-sync` PASS nas duas | Nenhum px < 11 fora dos seletores isentos (CSS e JS); `--fs-*` em ≥ 90% das declarações de 11 a 15px; leitura e escrita de `studio.density` em `try/catch` |
+| E2 | `text-floor` = 0 e isentos com o tamanho do baseline; `contrast` ≥ 4,5 nos 6 pares; `tap-targets` 30/24; `label-truncate` e `labelw-sync` PASS | Nenhum px < 11 fora dos seletores isentos (CSS e JS); `--fs-*` em ≥ 90% das declarações de 11 a 15px; nenhum resto de densidade (`data-density`, `studio.density`, `#density-toggle`, `studio:density`) |
 | E3a | `tctl-a11y` completo; `playhead-tc` PASS; `label-truncate` PASS | Nenhum `.bt-tctl` com texto no markup; `applyTrackVisibility` sincroniza `aria-pressed` e `<use>` |
-| E3b | `transport-overflow` PASS nas duas densidades; `transport-ids` PASS; `shortcut-sheet` PASS | `case`s do `switch`, os dois ramos Ctrl+Z e o Ctrl+roda ↔ `SHORTCUTS` 1:1; guard do dialog presente; `motion-literals` = 0 |
+| E3b | `transport-overflow` PASS; `transport-ids` PASS; `shortcut-sheet` PASS | `case`s do `switch`, os dois ramos Ctrl+Z e o Ctrl+roda ↔ `SHORTCUTS` 1:1; guard do dialog presente; `motion-literals` = 0 |
 
-Em todo estágio: recarregar mantém a densidade; janela privada funciona com `console-errors` = 0; checklist manual sem regressão.
+Em todo estágio: `console-errors` = 0; checklist manual sem regressão.
 
 ---
 
@@ -325,7 +322,7 @@ Um PR por estágio, em branches `feat/ui-premium-e0` … `feat/ui-premium-e3b` c
 Decididos ao ler o código linha a linha para `docs/plans/ui-premium-timeline.md`; o plano é a referência executável.
 
 1. **Loader do probe no `<head>`**, e não antes do script principal: o coletor de erros passa a cobrir também o bundle do Player.
-2. **Botão de densidade com texto fixo** `DENSIDADE CONFORTÁVEL`; o estado vai só em `aria-pressed` e na cor — mesmo raciocínio dos controles de track.
+2. ~~**Botão de densidade com texto fixo** `DENSIDADE CONFORTÁVEL`; o estado vai só em `aria-pressed` e na cor.~~ Sem efeito desde a Revisão R1: o botão saiu.
 3. **Sem override `.bt-clip.music .tag`:** clipes de TRILHA não renderizam `.tag` (só VÍDEO renderiza).
 4. **`.bt-beat .lbl` / `.dur` com `line-height:1.3`:** a 11px com o `1.6` herdado, duas linhas não cabem nos 34px internos do beat.
 5. **Texto do chip de timecode atualizado em `renderPlayhead()`:** na rota canvas o `compositeTick` chama só essa função por frame.

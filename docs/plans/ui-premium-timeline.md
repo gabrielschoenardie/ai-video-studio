@@ -4,7 +4,7 @@
 
 **Goal:** Elevar a TIMELINE (passo 04) de `public/index.html` a editor de desktop premium — alvos de clique com folga, piso tipográfico, contraste, controles de track com estado, timecode no playhead, transporte agrupado, atalhos descobríveis e movimento tokenizado — sem quebrar nada que funciona hoje.
 
-**Architecture:** Cinco estágios, um commit cada. E0 cria o instrumento de medição (`public/dev/ui-probe.js`) e grava o baseline do app atual. E1 é refatoração que precisa ser **pixel-idêntica** ao baseline (tokens com os valores de hoje). E2 muda valores (fonte, contraste, densidade). E3a e E3b acrescentam componentes. Nada fora de `public/index.html`, `public/dev/ui-probe.js` e uma rota estática em `server.js`.
+**Architecture:** Cinco estágios, um commit cada. E0 cria o instrumento de medição (`public/dev/ui-probe.js`) e grava o baseline do app atual. E1 é refatoração que precisa ser **pixel-idêntica** ao baseline (tokens com os valores de hoje). E2 muda valores (fonte, contraste, largura da coluna de rótulos; densidade única, compacta — Revisão R1 da Task 3). E3a e E3b acrescentam componentes. Nada fora de `public/index.html`, `public/dev/ui-probe.js` e uma rota estática em `server.js`.
 
 **Tech Stack:** HTML/CSS/JS vanilla num único arquivo (`public/index.html`, sem build), Node ≥18 sem npm (`server.js`), Chrome (probe de runtime).
 
@@ -18,7 +18,8 @@
 - Nenhum `id` existente muda de nome.
 - Conteúdo das lanes LEGENDA (`.bt-word`), ÁUDIO (waveform) e TRILHA (`.bt-clip.music`) visualmente igual.
 - `@media (prefers-reduced-motion: reduce)` global (`index.html:56-61`) permanece; nenhuma animação/transição nova com duração literal — só `var(--dur-1..4)`.
-- `localStorage`: só a chave nova `studio.density`, todo acesso em `try/catch`.
+- `localStorage`: nenhuma chave nova (a `studio.density` saiu na Revisão R1 da Task 3); os acessos existentes continuam em `try/catch`.
+- Densidade única, compacta (`--tap` 30px, `--tap-sm` 24px, `--gap-ctl` 2px, `--bt-labelw` 204px): sem toggle, sem `data-density`, sem variante `comfortable` em nenhuma task (decisão do usuário, 2026-09-16).
 - Desktop apenas: nenhum breakpoint de telefone, `pointer:coarse`, gesto de toque ou alvo de 44px.
 - O executor **não commita** e trabalha sobre a `main` local sincronizada (mudanças não commitadas). Git só via `git-workflow`: `prepare` (cria a branch `feat/ui-premium-e<N>` levando as mudanças) → OK do usuário → `publish` (commit, push, PR, merge commit na `main`, limpeza). **Um PR por task.**
 - Condições de medição do probe: `node server.js`, janela com viewport 1280×800, URL `http://localhost:4870/?probe=1`, fixture `output/assembled-4545f906507a.mp4` (tem `jobs/4545f906507a/transcript.json`), carregada por `await uiProbe.load('output/assembled-4545f906507a.mp4')` logo após recarregar a página, sem outras ações antes de `uiProbe.run(...)`.
@@ -28,12 +29,12 @@
 | Arquivo | Responsabilidade | Tasks |
 |---|---|---|
 | `server.js` | + rota estática `/dev/*.js` (allowlist por regex, espelho de `/vendor/`) | 1 |
-| `public/dev/ui-probe.js` (novo) | Instrumento de medição DOM/CSSOM; `window.uiProbe.{load,run}` | 1 (cria), Orquestrador grava `BASELINE` |
-| `public/index.html` | Loader do probe; tokens; tipografia; contraste; densidade; ícones de track; timecode; transporte; folha de atalhos; microinterações | 1–5 |
+| `public/dev/ui-probe.js` (novo) | Instrumento de medição DOM/CSSOM; `window.uiProbe.{load,run}` | 1 (cria), Orquestrador grava `BASELINE`; 3 (Revisão R1: `density` → `tap-targets` compacto) |
+| `public/index.html` | Loader do probe; tokens; tipografia; contraste; largura dos rótulos; ícones de track; timecode; transporte; folha de atalhos; microinterações | 1–5 |
 
 ## Checklist manual de regressão (referenciado pelas tasks 2–5)
 
-Com a fixture carregada na TIMELINE, **nas duas densidades a partir da Task 3**:
+Com a fixture carregada na TIMELINE (densidade única, compacta):
 
 1. Preview toca.
 2. Espaço, J/K/L, `,`/`.`.
@@ -67,7 +68,7 @@ Com a fixture carregada na TIMELINE, **nas duas densidades a partir da Task 3**:
 
 **Interfaces:**
 - Consumes: globais existentes `window.addAsset(asset)`, `window.goStep(step)`; DOM `#bt-visual`, `#step-beats`, `#bt-inner`, `.bt-transport`, `#bt-time`, `#bt-zoomlevel`, `#bt-playhead`, `#bt-ruler`, `.bt-tracks-top`, `.bt-track-row[data-track]`, `.bt-track-label`, `.bt-tctl[data-act]`.
-- Produces: `window.__probeErrors: string[]` (só com `?probe`); `window.uiProbe.load(path): Promise<boolean>`; `window.uiProbe.run(stage: 'E0'|'E1'|'E2'|'E3a'|'E3b'): Promise<{stage, ok, results, snapshot}>`. Tasks 3–5 introduzem, e o probe já consulta: `#density-toggle`, `.bt-playhead-tc`, `.bt-tgroup`, `.bt-kbd`, `#bt-play .lbl`, `#shortcuts-btn`, `dialog#shortcuts-sheet`, `.sc-row`, `window.SHORTCUTS`.
+- Produces: `window.__probeErrors: string[]` (só com `?probe`); `window.uiProbe.load(path): Promise<boolean>`; `window.uiProbe.run(stage: 'E0'|'E1'|'E2'|'E3a'|'E3b'): Promise<{stage, ok, results, snapshot}>`. Tasks 4–5 introduzem, e o probe já consulta: `.bt-playhead-tc`, `.bt-tgroup`, `.bt-kbd`, `#bt-play .lbl`, `#shortcuts-btn`, `dialog#shortcuts-sheet`, `.sc-row`, `window.SHORTCUTS`.
 
 - [ ] **Step 1 [Executor]: Rodar a checagem estática e confirmar que falha**
 
@@ -145,8 +146,8 @@ if (new URLSearchParams(location.search).has('probe')) {
    Só lê DOM/CSSOM — não enxerga o closure da TIMELINE. Uso, no console:
      await uiProbe.load('output/assembled-4545f906507a.mp4')
      await uiProbe.run('E1')
-   Checks que alteram estado (controles de track, densidade, play, folha de
-   atalhos) desfazem o que fizeram; o de play move o playhead ~1s. */
+   Checks que alteram estado (controles de track, play, folha de atalhos)
+   desfazem o que fizeram; o de play move o playhead ~1s. */
 (function () {
   'use strict';
 
@@ -337,20 +338,6 @@ if (new URLSearchParams(location.search).has('probe')) {
     }
     return bad;
   }
-  async function density() {
-    const btn = document.getElementById('density-toggle');
-    if (!btn) return null;
-    const root = document.documentElement;
-    const startComfy = root.dataset.density === 'comfortable';
-    const measure = () => ({ tap: tapTargets(), truncated: labelTruncate(), sync: labelwSync(), overflow: transportOverflow() });
-    const out = {};
-    if (startComfy) { btn.click(); await sleep(80); }
-    out.compact = measure();
-    btn.click(); await sleep(80);
-    out.comfortable = measure();
-    if (!startComfy) { btn.click(); await sleep(80); }
-    return out;
-  }
   async function transportIds() {
     const missing = TRANSPORT_IDS.filter(id => !document.getElementById(id));
     const ungrouped = TRANSPORT_IDS.filter(id => {
@@ -423,7 +410,10 @@ if (new URLSearchParams(location.search).has('probe')) {
       ['tap-targets', 'transport-overflow', 'track-order', 'label-truncate', 'labelw-sync',
         'markers-above-ruler', 'playhead', 'tctl-a11y'].forEach(id => add(id, null, null, null, 'TIMELINE não carregada'));
     } else {
-      if (!at('E2')) add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
+      // Alvo único (compacto) desde a revisão R1 da Task 3: do E2 em diante, tbtn 30 · tctl 24.
+      if (at('E2')) add('tap-targets', snap.tapTargets.tbtnMinH === 30 && snap.tapTargets.tctlMinSide === 24,
+        snap.tapTargets, { tbtnMinH: 30, tctlMinSide: 24 });
+      else add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
       if (at('E2')) add('transport-overflow', snap.transportOverflow === false, snap.transportOverflow, false);
       else add('transport-overflow', snap.transportOverflow === b.transportOverflow, snap.transportOverflow, b.transportOverflow);
       add('track-order', same(snap.trackOrder, TRACK_ORDER), snap.trackOrder, TRACK_ORDER);
@@ -445,15 +435,6 @@ if (new URLSearchParams(location.search).has('probe')) {
           { count: bt.count, missingLabel: 0, withText: bt.withText });
       }
 
-      if (at('E2')) {
-        const d = await density();
-        const want = { compact: [30, 24], comfortable: [36, 28] };
-        const ok = !!d && ['compact', 'comfortable'].every(k =>
-          d[k].tap.tbtnMinH === want[k][0] && d[k].tap.tctlMinSide === want[k][1] &&
-          d[k].truncated.length === 0 && syncOk(d[k].sync) && (!at('E3b') || d[k].overflow === false));
-        add('density', ok, d, { compact: 'tbtn 30 · tctl 24', comfortable: 'tbtn 36 · tctl 28',
-          truncated: [], sync: 'ok', overflow: at('E3b') ? false : 'não avaliado' });
-      }
       if (at('E3a')) {
         const p = playheadTc();
         add('playhead-tc', !!p.chip && p.chip === p.time, p, 'chip === texto corrente de #bt-time');
@@ -642,7 +623,7 @@ Logo abaixo de `  let built = false;` inserir:
 
 ```js
   /* Largura da coluna de rótulos, em px. A fonte da verdade é o token CSS
-     --bt-labelw (que muda com a densidade); aqui fica em cache porque
+     --bt-labelw; aqui fica em cache porque
      renderPlayhead roda por frame e getComputedStyle ali forçaria recálculo. */
   let LABEL_W = 192;
   function readLabelW() {
@@ -682,17 +663,20 @@ Não tocar em `(S.position.y / 1920)` de `updatePreviewOverlay`.
 
 ---
 
-### Task 3 (E2): Piso tipográfico, contraste e densidade
+### Task 3 (E2): Piso tipográfico e contraste (densidade única)
+
+> **Revisão R1 (2026-09-16, decisão do usuário): densidade única, compacta.** Os Steps 1–8 abaixo foram executados na versão com toggle de densidade, validada e medida (ver `## Status` e `## Verificação`). Depois do probe, o usuário decidiu manter só a densidade compacta. Os Steps R1–R9, no fim desta task, removem o toggle **antes do commit**; os Steps 9 e 10 originais foram substituídos por R8 e R9. Os trechos de densidade dos Steps 1–3 ficam como registro do que foi feito e desfeito — o estado final é o descrito em **Files** e **Interfaces**.
 
 **Files:**
-- Modify: `public/index.html` — `<head>` (script de densidade), `:root`, bloco novo `html[data-density="comfortable"]`, `.tag` + `.hdr-btn` novo, `.btn[disabled]`, as 57 declarações de fonte da tabela do Step 4, `<header>` (botão), script global (IIFE do toggle, após a IIFE do `#side-toggle`), closure da TIMELINE (listener `studio:density`, antes de `/* ---------------- keyboard shortcuts (scoped to #step-beats.on)`).
+- Modify: `public/index.html` — `:root` (`--faint`, `--bt-labelw` 204px, `--fs-*`, `--disabled-bg`), `.tag` + `.hdr-btn` novo, `.btn[disabled]`, as 57 declarações de fonte da tabela do Step 4, comentário de `LABEL_W` no closure da TIMELINE.
+- Modify (Revisão R1): `public/dev/ui-probe.js` — saem `density()` e o check `density`; `tap-targets` passa a exigir o compacto (30/24) do E2 em diante. O bloco do Step 4 da Task 1 já reflete a revisão.
 
 **Interfaces:**
-- Consumes: `LABEL_W`, `readLabelW()`, `renderTracks()`, `built` (closure da TIMELINE, Task 2); tokens `--tap`, `--tap-sm`, `--gap-ctl`, `--bt-labelw`, `--dur-1` (Task 2).
-- Produces: tokens `--fs-micro`, `--fs-sm`, `--fs-body`, `--fs-lead`, `--disabled-bg`; atributo `html[data-density="comfortable"]`; chave `localStorage` `studio.density` (`'comfortable'|'compact'`); evento `document` `studio:density`; `button#density-toggle.hdr-btn[aria-pressed]`; classe `.hdr-btn` (reusada na Task 5).
+- Consumes: `LABEL_W`, `readLabelW()` (closure da TIMELINE, Task 2); tokens `--tap`, `--tap-sm`, `--gap-ctl`, `--bt-labelw`, `--dur-1` (Task 2).
+- Produces: tokens `--fs-micro`, `--fs-sm`, `--fs-body`, `--fs-lead`, `--disabled-bg`; `--bt-labelw` 204px; classe `.hdr-btn`, sem variante `[aria-pressed]` (consumida pelo `? ATALHOS` da Task 5).
 
 **Ajustes sobre a spec, decididos aqui:**
-- O botão de densidade tem **texto fixo** `DENSIDADE CONFORTÁVEL` e o estado vai em `aria-pressed` + cor âmbar. Trocar o texto junto com `aria-pressed` repetiria o problema que a spec evitou nos controles de track (estado anunciado duas vezes).
+- (Revisão R1) Sem botão de densidade; `.hdr-btn` fica sem estado, porque o único botão do header que o usa (`? ATALHOS`, Task 5) não alterna nada.
 - Não há override `.bt-clip.music .tag`: clipes de TRILHA não renderizam `.tag` (só VÍDEO renderiza, `renderVideoTrack`). Só `.bt-clip.music .nm` precisa de isenção.
 - `.bt-beat .lbl` e `.bt-beat .dur` ganham `line-height:1.3`: a 11px com o `1.6` herdado do `body`, as duas linhas (35px) não cabem nos 34px internos do beat numa linha de 44px.
 
@@ -895,13 +879,211 @@ A coluna "Regra" identifica onde está o trecho (há trechos repetidos em regras
 
 - [ ] **Step 6 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 5. Parar aqui.
 
-- [ ] **Step 7 [Orquestrador]: `validator`** — "validar a Task 3 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que as isenções são só `.bt-word`, `.bt-clip.music .nm` e `.bt-cap-overlay`, e que todo acesso a `studio.density` está em `try`".
+- [x] **Step 7 [Orquestrador]: `validator`** — "validar a Task 3 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que as isenções são só `.bt-word`, `.bt-clip.music .nm` e `.bt-cap-overlay`, e que todo acesso a `studio.density` está em `try`".
 
-- [ ] **Step 8 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E2')`. Expected: PASS. Se `density` reprovar por `truncated` não vazio, subir o `--bt-labelw` da densidade que falhou em passos de 4px (`204` → `208`…; `248` → `252`…) até passar — ajuste de uma linha feito pelo Orquestrador e registrado em `## Verificação`. Recarregar a página e confirmar que a densidade escolhida persiste; abrir em janela anônima e confirmar `console-errors` = 0.
+- [x] **Step 8 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E2')`. Expected: PASS. Se `density` reprovar por `truncated` não vazio, subir o `--bt-labelw` da densidade que falhou em passos de 4px (`204` → `208`…; `248` → `252`…) até passar — ajuste de uma linha feito pelo Orquestrador e registrado em `## Verificação`. Recarregar a página e confirmar que a densidade escolhida persiste; abrir em janela anônima e confirmar `console-errors` = 0.
 
-- [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12) **nas duas densidades**; conferir visualmente que os chips de palavra da LEGENDA e os clipes da TRILHA estão iguais aos de antes.
+- **Step 9 [Usuário]** — substituído pelo Step R8. (A versão com toggle passou no checklist nas duas densidades, sem rótulos cortados; ver `## Verificação`.)
 
-- [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e2`; arquivo: `public/index.html`; commit `Raise UI type floor, fix --faint contrast, add TIMELINE density toggle (E2)`) → OK do usuário → `publish`.
+- **Step 10 [Orquestrador → Usuário]** — substituído pelo Step R9.
+
+#### Revisão R1: densidade única (compacta)
+
+Remove tudo que a versão com toggle acrescentou para a densidade confortável e mantém o compacto: `--tap` 30px, `--tap-sm` 24px, `--gap-ctl` 2px, `--bt-labelw` 204px (medido sem rótulo cortado no Step 8), fontes, contraste, isenções e `.hdr-btn`. `readLabelW()` e sua chamada no início de `buildDom()` (Task 2) ficam. Todo trecho citado nos Steps R2 e R3 ocorre **exatamente uma vez** no arquivo; o working tree está em CRLF (`core.autocrlf=true`), então compare por conteúdo, não por bytes de fim de linha.
+
+- [ ] **Step R1 [Executor]: Rodar a checagem estática da revisão e confirmar que falha**
+
+```bash
+node - <<'NODE'
+const fs = require('fs');
+const src = fs.readFileSync('public/index.html', 'utf8');
+const probe = fs.readFileSync('public/dev/ui-probe.js', 'utf8');
+const lines = src.split('\n');
+const fail = [];
+for (const t of ['--fs-micro:11px;', '--fs-sm:12.5px;', '--fs-body:13.5px;', '--fs-lead:15px;', '--faint:#7b80ad;',
+  '--disabled-bg:#5c6190;', '--bt-labelw:204px;', '--tap:30px; --tap-sm:24px; --gap-ctl:2px;',
+  '.btn[disabled]{background:var(--disabled-bg);', '.hdr-btn{all:unset;', '.hdr-btn:focus-visible{'])
+  if (!src.includes(t)) fail.push('ausente: ' + t);
+for (const [name, text] of [['index.html', src], ['ui-probe.js', probe]])
+  text.split('\n').forEach((l, i) => {
+    if (/densidade|density|comfortable|\.hdr-btn\[aria-pressed/i.test(l)) fail.push('resto de densidade em ' + name + ':' + (i + 1));
+  });
+const ls = (src.match(/localStorage\.(get|set)Item\(/g) || []).length;
+if (ls !== 2) fail.push('esperado 2 acessos a localStorage (os de studio-side-collapsed), achados ' + ls);
+if (!probe.includes("add('tap-targets', snap.tapTargets.tbtnMinH === 30 && snap.tapTargets.tctlMinSide === 24,"))
+  fail.push('ui-probe.js: tap-targets compacto (30/24) ausente do E2 em diante');
+try { new Function(probe); } catch (e) { fail.push('ui-probe.js não compila: ' + e.message); }
+if (!/\.bt-beat \.lbl\{font:700 var\(--fs-micro\)\/1\.3 /.test(src)) fail.push('.bt-beat .lbl sem --fs-micro/1.3');
+if (!/\.bt-beat \.dur\{font:400 var\(--fs-micro\)\/1\.3 /.test(src)) fail.push('.bt-beat .dur sem --fs-micro/1.3');
+if (!/\.bt-clip\.music \.nm\{font-size:9\.5px\}/.test(src)) fail.push('isenção .bt-clip.music .nm ausente');
+const sizeOf = decl => { const m = /(\d*\.?\d+)px/.exec(decl); return m ? parseFloat(m[1]) : null; };
+let tokens = 0, literal = 0;
+lines.forEach((l, i) => {
+  for (const m of l.matchAll(/font(?:-size)?\s*:\s*([^;}"]*)/g)) {
+    const v = m[1];
+    if (/var\(--fs-/.test(v)) { tokens++; continue; }
+    const px = sizeOf(v);
+    if (px == null || /isento:/.test(l)) continue;
+    if (px < 11) fail.push('fonte < 11px em :' + (i + 1) + ': ' + l.trim());
+    else if (px <= 15) literal++;
+  }
+});
+if (tokens / (tokens + literal) < 0.9) fail.push('--fs-* em ' + tokens + ' de ' + (tokens + literal) + ' declarações de 11–15px (< 90%)');
+[...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].forEach((m, k) => {
+  try { new Function(m[1]); } catch (e) { fail.push('<script> inline #' + k + ' não compila: ' + e.message); }
+});
+console.log(fail.length ? 'FAIL\n' + fail.join('\n') : 'PASS: Task 3 R1 estático (' + tokens + ' tokens, ' + literal + ' literais 11–15px)');
+process.exitCode = fail.length ? 1 : 0;
+NODE
+```
+
+Rodar **a partir de arquivo** (extrair o bloco para um arquivo temporário fora do repo e `node <arquivo>`): neste ambiente o heredoc do Git Bash colapsa `\\`. Expected: `FAIL` com 19 linhas `resto de densidade em index.html:…`, 9 linhas `resto de densidade em ui-probe.js:…`, `esperado 2 acessos a localStorage (os de studio-side-collapsed), achados 4` e `ui-probe.js: tap-targets compacto (30/24) ausente do E2 em diante` — nenhuma linha `ausente:`. (Conferido pelo Orquestrador contra o working tree da versão com toggle.)
+
+- [ ] **Step R2 [Executor]: Remover a densidade de `public/index.html`** (8 trocas)
+
+1. No `<head>`, remover o bloco inteiro (logo após o `</script>` do loader do probe):
+
+```html
+<script>
+/* Densidade da TIMELINE aplicada antes da primeira pintura, para não piscar.
+   localStorage pode lançar em janela privada — daí o try. */
+try { if (localStorage.getItem('studio.density') === 'comfortable') document.documentElement.dataset.density = 'comfortable'; } catch (e) {}
+</script>
+```
+
+2. Logo após o `}` que fecha o `:root`, remover as 3 linhas:
+
+```css
+/* Densidade confortável (toggle do header, salva em studio.density). compact é a
+   ausência do atributo. Só a TIMELINE consome estes tokens. */
+html[data-density="comfortable"]{--tap:36px; --tap-sm:28px; --gap-ctl:4px; --bt-labelw:248px}
+```
+
+3. `/* Botões do header (densidade; atalhos). Mesmo chrome da .tag, com estado. */` → `/* Botões do header (hoje só a folha de atalhos, Task 5). Mesmo chrome da .tag. */`
+
+4. Remover a linha `.hdr-btn[aria-pressed="true"]{color:var(--go); border-color:rgba(251,191,36,.5); background:var(--go-dim)}`. As outras três regras de `.hdr-btn` ficam.
+
+5. No `<header>`, remover as 2 linhas (entre `  <span class="spacer"></span>` e `  <span class="tag" id="port">…</span>`, que voltam a ficar adjacentes):
+
+```html
+  <button type="button" id="density-toggle" class="hdr-btn" aria-pressed="false"
+    title="Alvos maiores na TIMELINE (36px em vez de 30px). A escolha fica salva neste navegador.">DENSIDADE CONFORTÁVEL</button>
+```
+
+6. No script global, remover a IIFE inteira **e a linha em branco que a segue**, de modo que o `})();` da IIFE de `studio-side-collapsed`, uma linha em branco e `/* next/prev footers on pipeline steps …` fiquem como em `HEAD`:
+
+```js
+/* ---------------- densidade da TIMELINE (compact | comfortable)
+   O atributo já foi aplicado no <head>; aqui fica só o botão. O closure da
+   TIMELINE escuta 'studio:density' para reler --bt-labelw e redesenhar. */
+(() => {
+  const btn = $('#density-toggle');
+  if (!btn) return;
+  const root = document.documentElement;
+  const paint = () => btn.setAttribute('aria-pressed', String(root.dataset.density === 'comfortable'));
+  paint();
+  btn.onclick = () => {
+    const comfy = root.dataset.density !== 'comfortable';
+    if (comfy) root.dataset.density = 'comfortable'; else delete root.dataset.density;
+    try { localStorage.setItem('studio.density', comfy ? 'comfortable' : 'compact'); } catch (e) {}
+    paint();
+    document.dispatchEvent(new CustomEvent('studio:density'));
+  };
+})();
+```
+
+7. No closure da TIMELINE, remover o listener **e a linha em branco que o segue**, de modo que `  /* ---------------- keyboard shortcuts (scoped to #step-beats.on) ---------------- */` volte a vir logo após a linha em branco que fecha a função anterior, como em `HEAD`:
+
+```js
+  /* Densidade: o toggle do header troca --bt-labelw. Os px da TIMELINE saem de
+     LABEL_W, então é preciso reler o token e redesenhar. */
+  document.addEventListener('studio:density', () => {
+    readLabelW();
+    if (built) renderTracks();
+  });
+```
+
+8. No comentário de `LABEL_W`: `     --bt-labelw (que muda com a densidade); aqui fica em cache porque` → `     --bt-labelw; aqui fica em cache porque`
+
+Não tocar: `--tap:30px; --tap-sm:24px; --gap-ctl:2px;`, `--bt-labelw:204px;`, `readLabelW()` e a chamada em `buildDom()`, as fontes, as isenções, os dois acessos a `studio-side-collapsed`.
+
+- [ ] **Step R3 [Executor]: Probe sem `density` (`public/dev/ui-probe.js`)** (4 trocas; não tocar a linha `const BASELINE`)
+
+1. Comentário do cabeçalho:
+
+```js
+   Checks que alteram estado (controles de track, densidade, play, folha de
+   atalhos) desfazem o que fizeram; o de play move o playhead ~1s. */
+```
+
+vira
+
+```js
+   Checks que alteram estado (controles de track, play, folha de atalhos)
+   desfazem o que fizeram; o de play move o playhead ~1s. */
+```
+
+2. Remover a função inteira (fica entre o fim de `tctlToggles()` e `async function transportIds() {`):
+
+```js
+  async function density() {
+    const btn = document.getElementById('density-toggle');
+    if (!btn) return null;
+    const root = document.documentElement;
+    const startComfy = root.dataset.density === 'comfortable';
+    const measure = () => ({ tap: tapTargets(), truncated: labelTruncate(), sync: labelwSync(), overflow: transportOverflow() });
+    const out = {};
+    if (startComfy) { btn.click(); await sleep(80); }
+    out.compact = measure();
+    btn.click(); await sleep(80);
+    out.comfortable = measure();
+    if (!startComfy) { btn.click(); await sleep(80); }
+    return out;
+  }
+```
+
+3. A linha
+
+```js
+      if (!at('E2')) add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
+```
+
+vira
+
+```js
+      // Alvo único (compacto) desde a revisão R1 da Task 3: do E2 em diante, tbtn 30 · tctl 24.
+      if (at('E2')) add('tap-targets', snap.tapTargets.tbtnMinH === 30 && snap.tapTargets.tctlMinSide === 24,
+        snap.tapTargets, { tbtnMinH: 30, tctlMinSide: 24 });
+      else add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
+```
+
+4. Remover o bloco (entre o `}` que fecha o `else` de `tctl-a11y` + linha em branco e `      if (at('E3a')) {` do `playhead-tc`):
+
+```js
+      if (at('E2')) {
+        const d = await density();
+        const want = { compact: [30, 24], comfortable: [36, 28] };
+        const ok = !!d && ['compact', 'comfortable'].every(k =>
+          d[k].tap.tbtnMinH === want[k][0] && d[k].tap.tctlMinSide === want[k][1] &&
+          d[k].truncated.length === 0 && syncOk(d[k].sync) && (!at('E3b') || d[k].overflow === false));
+        add('density', ok, d, { compact: 'tbtn 30 · tctl 24', comfortable: 'tbtn 36 · tctl 28',
+          truncated: [], sync: 'ok', overflow: at('E3b') ? false : 'não avaliado' });
+      }
+```
+
+Cobertura mantida: `label-truncate`, `labelw-sync` e `transport-overflow` já são checks próprios do E2 em diante; só os alvos (30/24) dependiam de `density`.
+
+- [ ] **Step R4 [Executor]: Checagens** — (a) script do Step R1, de arquivo → `PASS: Task 3 R1 estático (56 tokens, 0 literais 11–15px)`; (b) `node --check public/dev/ui-probe.js`; (c) extrair o bloco de código do Step 4 da Task 1 para um arquivo e compará-lo com `public/dev/ui-probe.js` ignorando CR → a única diferença é a linha `  const BASELINE = …`.
+
+- [ ] **Step R5 [Executor]: Atualizar `## Status`** com as saídas dos Steps R1 e R4. Parar aqui.
+
+- [x] **Step R6 [Orquestrador]: `validator`** — "validar a Revisão R1 da Task 3 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step R1 de arquivo; conferir que `public/index.html` contra `HEAD` só tem as mudanças dos Steps 2 e 4 da Task 3 sem nada de densidade, que `public/dev/ui-probe.js` contra `HEAD` só tem as 4 trocas do Step R3, e que o bloco do Step 4 da Task 1 bate com o arquivo exceto `BASELINE`".
+
+- [x] **Step R7 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E2')`. Expected: `PASS`, com `tap-targets` `{tbtnMinH:30, tctlMinSide:24}`, `label-truncate` `[]`, `labelw-sync` 204/204/204, `console-errors` `[]`, e nenhum check `density` na lista. Conferir `#density-toggle` e `html[data-density]` ausentes. A chave `studio.density` que ficou no navegador dos testes da versão com toggle é inerte (nada a lê); pode ser apagada com `localStorage.removeItem('studio.density')`.
+
+- [x] **Step R8 [Usuário]: Checklist manual** (itens 1–12); header sem botão de densidade; conferir visualmente que os chips de palavra da LEGENDA e os clipes da TRILHA estão iguais aos de antes.
+
+- [ ] **Step R9 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e2`; arquivos: `public/index.html`, `public/dev/ui-probe.js`, `docs/plans/ui-premium-timeline.md`, `docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md`; commit `Raise UI type floor and fix --faint contrast (E2)`) → OK do usuário → `publish`.
 
 ---
 
@@ -1127,7 +1309,7 @@ Substituir a função `renderPlayhead()` inteira por:
 
 - [ ] **Step 10 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3a')`. Expected: PASS, incluindo `tctl-a11y` (`withText 0`, `missingPressed 0`, `togglesFailed []`) e `playhead-tc`. Repetir com o bundle bloqueado (rota canvas).
 
-- [ ] **Step 11 [Usuário]: Checklist manual** (itens 1–12, nas duas densidades) + travar B-ROLL e tentar arrastar um clipe (não move) + trim num segmento de VÍDEO encostado no vizinho (pega o segmento certo) + levar o playhead ao fim da timeline (chip passa para a esquerda da linha).
+- [ ] **Step 11 [Usuário]: Checklist manual** (itens 1–12) + travar B-ROLL e tentar arrastar um clipe (não move) + trim num segmento de VÍDEO encostado no vizinho (pega o segmento certo) + levar o playhead ao fim da timeline (chip passa para a esquerda da linha).
 
 - [ ] **Step 12 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3a`; arquivo: `public/index.html`; commit `Replace track control letters with two-state icons, add playhead timecode (E3a)`) → OK do usuário → `publish`.
 
@@ -1136,7 +1318,7 @@ Substituir a função `renderPlayhead()` inteira por:
 ### Task 5 (E3b): Transporte em grupos, folha de atalhos, microinterações
 
 **Files:**
-- Modify: `public/index.html` — CSS (`.bt-transport`, `.bt-tsep`, `.bt-spacer`, após `.bt-tbtn[disabled]`, bloco novo antes de `</style>`); `<header>` (botão `? ATALHOS`); entre `</aside>` e o `<script>` principal (`<dialog>`); script global (após a IIFE de densidade da Task 3); closure da TIMELINE: marcas `justAdded`/`justSplit` + `fxClass` (após `let selectedClipSet = new Set();`), `splitBeatAt`, `addClipAt`, `renderBeatsTrack`, `renderClipTrack`, `splitClipAt`, `duplicateClip`, `renderVideoTrack`, template do transporte em `buildDom()`, `renderLegendList`, `renderTracks`, `glidePlayhead` novo + `seekTo`, `onRulerMouseDown`, `wireTransport` (4 escritas do rótulo de play), handler de `keydown` (guard + Home/End).
+- Modify: `public/index.html` — CSS (`.bt-transport`, `.bt-tsep`, `.bt-spacer`, após `.bt-tbtn[disabled]`, bloco novo antes de `</style>`); `<header>` (botão `? ATALHOS`); entre `</aside>` e o `<script>` principal (`<dialog>`); script global (após a IIFE do rodapé colapsável, `studio-side-collapsed`); closure da TIMELINE: marcas `justAdded`/`justSplit` + `fxClass` (após `let selectedClipSet = new Set();`), `splitBeatAt`, `addClipAt`, `renderBeatsTrack`, `renderClipTrack`, `splitClipAt`, `duplicateClip`, `renderVideoTrack`, template do transporte em `buildDom()`, `renderLegendList`, `renderTracks`, `glidePlayhead` novo + `seekTo`, `onRulerMouseDown`, `wireTransport` (4 escritas do rótulo de play), handler de `keydown` (guard + Home/End).
 
 **Interfaces:**
 - Consumes: `.hdr-btn` e `--fs-*` (Task 3); `--dur-1..3`, `--ease-out`, `--ease-in-out` (Task 2); `renderTracks()`, `seekTo(t)`, `addClipAt`, `duplicateClip`, `splitBeatAt`, `splitClipAt` (existentes).
@@ -1228,16 +1410,13 @@ Apagar a linha `.bt-spacer{flex:1}`.
 Logo após `.bt-tbtn[disabled]{opacity:.3; cursor:default}` inserir:
 
 ```css
-/* Atalho no próprio botão. compact: flutua acima só em hover/foco, sem mexer no
-   layout. comfortable: inline e sempre visível. */
+/* Atalho no próprio botão: flutua acima só em hover/foco, sem mexer no layout. */
 .bt-tbtn{position:relative}
 .bt-kbd{position:absolute; left:50%; bottom:calc(100% + 4px); transform:translateX(-50%); z-index:8;
   font:500 var(--fs-micro)/1.4 var(--mono); color:var(--ink); background:var(--panel2);
   border:1px solid var(--line); border-radius:4px; padding:0 4px; white-space:nowrap;
   opacity:0; pointer-events:none; transition:opacity var(--dur-1)}
 .bt-tbtn:hover .bt-kbd,.bt-tbtn:focus-visible .bt-kbd{opacity:1}
-html[data-density="comfortable"] .bt-kbd{position:static; transform:none; opacity:1; margin-left:6px;
-  color:var(--faint); background:none}
 ```
 
 - [ ] **Step 3 [Executor]: Template do transporte em `buildDom()`**
@@ -1284,7 +1463,7 @@ Em `wireTransport()`, trocar as 4 ocorrências de `$q('#bt-play').textContent = 
 
 - [ ] **Step 4 [Executor]: Folha de atalhos — header, `<dialog>`, CSS, JS**
 
-No `<header>`, logo após o `</button>` do `#density-toggle`, inserir:
+No `<header>`, entre `  <span class="spacer"></span>` e `  <span class="tag" id="port">…</span>`, inserir:
 
 ```html
   <button type="button" id="shortcuts-btn" class="hdr-btn" title="Folha de atalhos (?)">? ATALHOS</button>
@@ -1331,7 +1510,7 @@ Imediatamente antes de `</style>` inserir:
 .bt-playhead.bt-seek{transition:left var(--dur-1) var(--ease-in-out)}
 ```
 
-No script global, logo após o `})();` da IIFE de densidade (Task 3), inserir:
+No script global, logo após o `})();` da IIFE do rodapé colapsável (a que usa `studio-side-collapsed`), inserir:
 
 ```js
 /* ---------------- folha de atalhos (?)
@@ -1482,9 +1661,9 @@ Imediatamente antes de `  function seekTo(t) {` inserir:
 
 - [ ] **Step 8 [Orquestrador]: `validator`** — "validar a Task 5 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que os 21 ids e os handlers de `wireTransport()` não mudaram, e que `seekTo` sem `opts` se comporta como antes".
 
-- [ ] **Step 9 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3b')`. Expected: PASS, incluindo `transport-ids`, `shortcut-sheet` e `density` com `overflow:false` nas duas densidades. Repetir com o bundle bloqueado (rota canvas).
+- [ ] **Step 9 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3b')`. Expected: PASS, incluindo `transport-ids`, `shortcut-sheet`, `tap-targets` (30/24) e `transport-overflow` `false`. Repetir com o bundle bloqueado (rota canvas).
 
-- [ ] **Step 10 [Usuário]: Checklist manual** (itens 1–12, nas duas densidades) + adicionar clipe de B-ROLL (anima uma vez; arrastar logo depois não repete) + `S` num beat (flash uma vez) + clicar na régua (playhead desliza) + play logo depois (sem atraso visível) + `?` e fechar com `Esc` real (foco volta) + `J` com a folha aberta (nada acontece) + passar o mouse em FIT (badge mostra `\`).
+- [ ] **Step 10 [Usuário]: Checklist manual** (itens 1–12) + adicionar clipe de B-ROLL (anima uma vez; arrastar logo depois não repete) + `S` num beat (flash uma vez) + clicar na régua (playhead desliza) + play logo depois (sem atraso visível) + `?` e fechar com `Esc` real (foco volta) + `J` com a folha aberta (nada acontece) + passar o mouse em FIT (badge mostra `\`).
 
 - [ ] **Step 11 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3b`; arquivo: `public/index.html`; commit `Group TIMELINE transport, add shortcut sheet and seek/clip micro-interactions (E3b)`) → OK do usuário → `publish`.
 
@@ -1518,6 +1697,31 @@ _Seção do Orquestrador. Por task: comando do probe, resultado (`ok` + falhas),
 - **Diferença de rota pré-existente, aceita pelo usuário (não é regressão):** o elemento existe no canvas com o mesmo `9.5px`, mas vazio — o probe só conta elementos com texto. Na rota Player o evento de tempo inicial passa por `applyPlayhead` → `updatePreviewOverlay` e preenche `0:00.0`; no canvas `updatePreviewOverlay` só roda no `timeupdate` do `<video>`, que não dispara sem play/seek (e o plano proíbe ações antes do `run`). O diff da Task 2 não toca `updatePreviewOverlay`, `applyPlayhead`, `timeupdate`, `PLAYER.on` nem `#bt-preview-time`. O baseline é da rota Player, então o `text-floor` do E1 no canvas sempre diverge nesse item. A partir do E2 o critério é `offenders.length === 0` (sem comparar com o baseline), e a Task 3 (tabela, linha 50) já sobe `.bt-preview-time`; a rota Player continua cobrindo o item.
 
 **Checklist manual (Step 10):** informado pelo usuário — itens 1–12 OK (1–11 na rota Player, 12 na rota canvas com o bundle bloqueado), nenhuma falha.
+
+### Task 3 (E2) — 2026-09-16
+
+**Validator (Step 7):** APROVADO, sem achados. Script do Step 1 (rodado de arquivo) → `PASS: Task 3 estático (56 tokens, 0 literais 11–15px)`; o `0` (plano: "1 ou menos") é o `.bt-cap-overlay`, pulado pelo script por ter `isento:` na mesma linha. Valores do Step 2 idênticos ao plano; contraste de `--faint` recalculado 5.29/4.80/4.53. Step 4: 57 declarações — 53 token, 2 token `/1.3` (`.bt-beat .lbl`/`.dur`), 2 isentas; trechos repetidos conferidos por regra (`.tag` e `.bt-zoomlevel` trocadas; 2ª `.bt-role-opt` e 2ª `.bt-legend-row` intactas). Isenções exatamente `.bt-word` 9.5px, `.bt-clip.music .nm` 9.5px, `.bt-cap-overlay` 13px (valores de `HEAD`). `localStorage`: 2 acessos novos, só `studio.density`, ambos em `try/catch`; os 2 de `studio-side-collapsed` pré-existentes e intactos. Único `id` novo `density-toggle`; `wireTracks`, `saveBeats`, `doConform`, `seekTo`, atalhos e `prefers-reduced-motion` byte-idênticos a `HEAD`.
+
+**Probe (Step 8):** viewport 1280×800, DPR 1, rota Player, `studio.density` ausente no início (compacto).
+
+- `run('E2')` → `PASS`, 13/13 (`text-floor`, `contrast`, `aria-live`, `motion-literals`, `console-errors`, `transport-overflow`, `track-order`, `label-truncate`, `labelw-sync`, `markers-above-ruler`, `playhead`, `tctl-a11y`, `density`). `text-floor` `offenders: []`, `exempt: [".bt-word@9.5"]`. `contrast` `--faint` 5.29/4.80/4.53, `--dim` 8.06/7.32/6.91.
+- `density`: compacto `tbtn 30 · tctl 24`, rótulo = régua = token 204, `truncated []`, `playheadDelta 0`; confortável `tbtn 36 · tctl 28`, rótulo = régua = token 248, `truncated []`, `playheadDelta 0`. `overflow:false` nas duas.
+- **Sem ajuste de `--bt-labelw`**: 204/248 do plano bastaram.
+- Persistência: toggle → `comfortable` (`localStorage` `comfortable`, `aria-pressed="true"`, `--bt-labelw` 248px); recarga → `data-density="comfortable"` e `aria-pressed="true"` antes do `load`, TIMELINE com rótulo e régua 248px, `__probeErrors` vazio. Restaurado para compacto (204px).
+- Janela anônima (feito pelo usuário): `?probe=1`, `load` + dois cliques no `#density-toggle` → `window.__probeErrors` = `[]`.
+
+**Checklist manual (Step 9, versão com toggle):** informado pelo usuário — itens 1–12 OK nos dois modos, sem rótulos cortados.
+
+**Decisão do usuário → Revisão R1:** manter só a densidade compacta. Spec e plano atualizados (Global Constraints, checklist, Task 1 Step 4, Task 3 Revisão R1, Tasks 4 e 5). A revisão foi testada pelo Orquestrador numa cópia fora do repo (scratchpad): o script do Step R1 dá `FAIL` na árvore atual (19 + 9 linhas de resto, `localStorage` 4, `tap-targets` ausente) e, com as trocas dos Steps R2 e R3 aplicadas à cópia, `PASS: Task 3 R1 estático (56 tokens, 0 literais 11–15px)`, `node --check` do probe OK e o bloco do Step 4 da Task 1 igual ao probe revisado exceto `BASELINE`.
+
+**Revisão R1 — executor (R1–R5):** `public/index.html` e `public/dev/ui-probe.js` resultantes idênticos (ignorando CR) à cópia simulada pelo Orquestrador; script do Step R1 → `PASS: Task 3 R1 estático (56 tokens, 0 literais 11–15px)`; `densid|density|comfortable` = 0 nos dois arquivos.
+
+**Revisão R1 — validator (Step R6):** APROVADO. `index.html` × `HEAD` só com fontes, contraste, `--bt-labelw` 204, `.btn[disabled]` e `.hdr-btn` (3 regras, sem `[aria-pressed]`); ids 115/115 idênticos a `HEAD`; `localStorage` só os 2 acessos de `studio-side-collapsed`; espaçamento de `HEAD` restaurado onde a IIFE e o listener saíram; `wireTracks`, `saveBeats`, `doConform`, `seekTo` e `prefers-reduced-motion` fora do diff. `ui-probe.js` × `HEAD`: 4 trechos, um por troca do R3, `BASELINE` intacto, sem referência residual a `density`; bloco do Step 4 da Task 1 igual ao arquivo exceto `BASELINE`. Nenhuma instrução executável do plano ou da spec contradiz a revisão.
+**Correção ao `## Status` da Revisão R1:** o diff de `public/dev/ui-probe.js` contra `HEAD` tem **4** hunks (`:5`, `:197`, `:283`, `:305`), não 3 — a troca do `tap-targets` e a remoção do bloco `density` são separadas pelo bloco `tctl-a11y`, inalterado.
+
+**Revisão R1 — probe (Step R7):** viewport 1280×800, DPR 1, rota Player; chave residual `studio.density` (`compact`, dos testes da versão com toggle) apagada antes da recarga. `run('E2')` → `PASS`, 13/13 (`text-floor`, `contrast`, `aria-live`, `motion-literals`, `console-errors`, `tap-targets`, `transport-overflow`, `track-order`, `label-truncate`, `labelw-sync`, `markers-above-ruler`, `playhead`, `tctl-a11y`), **sem check `density`**. `tap-targets` `{tbtnMinH:30, tctlMinSide:24}`; `label-truncate` `[]`; `labelw-sync` rótulo = régua = token 204, `playheadDelta 0`; `transport-overflow` `false`; `text-floor` `offenders []`, `exempt [".bt-word@9.5"]`; `contrast` `--faint` 5.29/4.80/4.53. DOM: `#density-toggle` ausente, `html[data-density]` ausente, `--bt-labelw` computado 204px, nenhum `<button>` no header, `studio.density` não recriada; `__probeErrors` vazio.
+
+**Checklist manual (Step R8):** informado pelo usuário — itens 1–12 OK na densidade única (1–11 na rota Player, 12 na rota canvas), header sem botão de densidade, LEGENDA e TRILHA iguais às de antes.
 
 ---
 
@@ -1658,3 +1862,185 @@ PASS: Task 2 estático
 **Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano. Único ponto registrado é o de ambiente (execução do script via arquivo em vez de heredoc, já era o padrão estabelecido na Task 1 e não altera o resultado do critério de aceite).
 
 **Pendente / próximos passos (fora do escopo desta execução):** Step 8 (`validator`), Step 9 (Orquestrador roda o probe `E1` no Chrome nas duas rotas — Player e canvas — e registra em `## Verificação`), Step 10 (checklist manual do usuário), Step 11 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e1`).
+
+### Task 3 (E2) — executado
+
+Steps 1–6 executados (Steps 7–10 são do Orquestrador/Usuário, não executados aqui). Base: `main` local limpa em `1ed5363`, igual a `origin/main` (Task 1/E0 mergeada pelo PR #11, Task 2/E1 mergeada pelo PR #12). Único arquivo modificado: `public/index.html`.
+
+**Ambiente:** o script do Step 1 (e o do Step 5, mesmo script reexecutado) foi extraído byte a byte de `docs/plans/ui-premium-timeline.md:702-734` (com `sed -n '702,734p'`, depois removidas as duas linhas do heredoc `node - <<'NODE'` / `NODE` com `sed '1d;$d'`) para um arquivo no scratchpad da sessão (`task3-step1-check.js`, fora do repo) e rodado com `node task3-step1-check.js` a partir da raiz do repo — não via heredoc, pelo mesmo motivo já registrado no Status das Tasks 1 e 2 (o Git Bash deste ambiente colapsa `\\` → `\` dentro de heredoc). `diff` entre as linhas extraídas do plano e o arquivo do scratchpad confirmou conteúdo idêntico antes de rodar.
+
+**Step 1 — checagem estática, confirmar falha.** Saída (`node task3-step1-check.js`, `exit=1`):
+
+```
+FAIL
+ausente: --fs-micro:11px;
+ausente: --fs-sm:12.5px;
+ausente: --fs-body:13.5px;
+ausente: --fs-lead:15px;
+ausente: --faint:#7b80ad;
+ausente: --disabled-bg:#5c6190;
+ausente: --bt-labelw:204px;
+ausente: html[data-density="comfortable"]{--tap:36px; --tap-sm:28px; --gap-ctl:4px; --bt-labelw:248px}
+ausente: .btn[disabled]{background:var(--disabled-bg);
+ausente: id="density-toggle"
+ausente: localStorage.getItem('studio.density')
+ausente: localStorage.setItem('studio.density'
+ausente: new CustomEvent('studio:density')
+ausente: addEventListener('studio:density'
+.bt-beat .lbl sem --fs-micro/1.3
+.bt-beat .dur sem --fs-micro/1.3
+isenção .bt-clip.music .nm ausente
+fonte < 11px em :107: .rec{display:flex; align-items:center; gap:7px; color:var(--dim); font-size:10.5px;
+fonte < 11px em :114: font:400 10.5px var(--mono); letter-spacing:.12em; color:var(--dim);
+fonte < 11px em :168: .card h3{font-size:10.5px; letter-spacing:.22em; color:var(--dim); margin-bottom:12px; font-weight:600}
+fonte < 11px em :169: label{display:block; font-size:10.5px; letter-spacing:.12em; color:var(--dim); margin:14px 0 5px; font-weight:600}
+fonte < 11px em :209: padding:3px 11px; font:500 10px var(--sans); letter-spacing:.1em; margin:2px 4px 2px 0}
+fonte < 11px em :229: .asset .meta{color:var(--faint); font:400 10px var(--mono)}
+fonte < 11px em :230: .asset button{all:unset; cursor:pointer; color:var(--go); font:600 10px var(--sans); border-radius:999px;
+fonte < 11px em :238: th{color:var(--faint); font-weight:600; font-size:9.5px; letter-spacing:.18em}
+fonte < 11px em :253: aside h3{font-size:10px; letter-spacing:.26em; color:var(--faint); margin-bottom:9px; font-weight:600}
+fonte < 11px em :261: font:600 10px var(--mono); color:var(--dim); letter-spacing:.1em; background:var(--bg)}
+fonte < 11px em :284: #console{flex:1; overflow-y:auto; padding:0 0 12px; font:400 10.5px/1.55 var(--mono);
+fonte < 11px em :332: .bt-zoomlevel{font:400 10.5px var(--mono); color:var(--faint); min-width:38px; text-align:center}
+fonte < 11px em :335: .bt-toggle{all:unset; cursor:pointer; font:500 10.5px var(--sans); color:var(--dim);
+fonte < 11px em :345: .bt-legend-head{font:600 9.5px var(--sans); letter-spacing:.08em; color:var(--dim);
+fonte < 11px em :363: .bt-tick span{position:absolute; top:3px; left:4px; font-size:9px; color:var(--faint)}
+fonte < 11px em :374: border-right:1px solid var(--line); font:600 9.5px var(--sans); letter-spacing:.08em; color:var(--dim)}
+fonte < 11px em :377: .bt-tctl{all:unset; flex:0 0 auto; cursor:pointer; color:var(--faint); font:700 9px var(--mono);
+fonte < 11px em :394: .bt-beat .lbl{font:700 9.5px var(--sans); letter-spacing:.04em; color:#0a0a14; white-space:nowrap}
+fonte < 11px em :395: .bt-beat .dur{font:400 8.5px var(--mono); color:rgba(10,10,20,.6)}
+fonte < 11px em :403: font:400 9.5px var(--mono); color:var(--dim); padding:0 3px; white-space:nowrap; overflow:hidden;
+fonte < 11px em :420: .bt-pop .t{font:600 9px var(--sans); letter-spacing:.1em; color:var(--dim); margin-bottom:7px}
+fonte < 11px em :422: .bt-role-opt{all:unset; cursor:pointer; font:500 9px var(--sans); color:var(--dim);
+fonte < 11px em :429: .bt-pop .row2 button{all:unset; flex:1; text-align:center; cursor:pointer; font:500 10px var(--sans);
+fonte < 11px em :437: font:500 10px var(--sans); letter-spacing:.04em; color:var(--dim); padding:7px 9px; border-radius:5px}
+fonte < 11px em :457: .bt-clip .tag{position:relative; z-index:1; flex:0 0 auto; font:400 8.5px var(--mono);
+fonte < 11px em :461: .bt-clip .nm{position:relative; z-index:1; font:600 9.5px var(--sans); color:var(--ink); white-space:nowrap;
+fonte < 11px em :469: .bt-asset-opt{all:unset; cursor:pointer; font:500 10px var(--sans); color:var(--dim);
+fonte < 11px em :487: .bt-rate{font:600 10px var(--mono);color:#0a0a14;background:linear-gradient(180deg,#fde68a,#fbbf24);
+fonte < 11px em :496: .bt-preview-tag{position:absolute;top:8px;left:8px;font:600 8.5px var(--sans);letter-spacing:.08em;color:var(--go);
+fonte < 11px em :498: .bt-preview-time{position:absolute;bottom:8px;right:8px;font:400 9.5px var(--mono);color:var(--dim);
+fonte < 11px em :2650: <div id="bt-word-pop-err" style="display:none;color:var(--bad);font:400 10px var(--sans);margin-top:5px"></div>
+--fs-* em 0 de 26 declarações de 11–15px (< 90%)
+```
+
+Bate exatamente com o esperado: 14 linhas `ausente:`, 3 itens de `.bt-beat`/isenção, 31 linhas `fonte < 11px` e `--fs-* em 0 de 26`.
+
+**Step 2 — tokens, contraste e densidade no CSS.** No `:root`: `--faint:#5c6190` → `#7b80ad`; `--bt-labelw:192px` → `204px`; inserido bloco `--fs-micro:11px; --fs-sm:12.5px; --fs-body:13.5px; --fs-lead:15px;` + `--disabled-bg:#5c6190;` logo abaixo de `--ease-spring:...`, com os comentários do plano. Logo após o `}` que fecha `:root`, inserida a regra `html[data-density="comfortable"]{--tap:36px; --tap-sm:28px; --gap-ctl:4px; --bt-labelw:248px}`. `.btn[disabled]{background:var(--faint);...}` → `background:var(--disabled-bg);...`. Logo após a regra `.tag{...}` (que termina em `background:rgba(129,140,248,.06)}`), inserido o bloco `.hdr-btn` completo (regra base + `:hover` + `:focus-visible` + `[aria-pressed="true"]`), conteúdo idêntico ao plano.
+
+**Step 3 — densidade: `<head>`, header e JS.** No `<head>`, logo após o `</script>` do loader do probe (Task 1), inserido o `<script>` que aplica `data-density` antes da primeira pintura (com `try/catch` em volta do `localStorage.getItem`). No `<header>`, entre `<span class="spacer"></span>` e `<span class="tag" id="port">…</span>`, inserido `<button id="density-toggle" class="hdr-btn" aria-pressed="false">DENSIDADE CONFORTÁVEL</button>`. No script global, logo após o `})();` que fecha a IIFE do rodapé colapsável (`studio-side-collapsed`), inserida a IIFE do toggle de densidade (`localStorage.setItem` também em `try/catch`). No closure da TIMELINE, imediatamente antes de `/* ---------------- keyboard shortcuts (scoped to #step-beats.on) ---------------- */`, inserido o listener `document.addEventListener('studio:density', () => { readLabelW(); if (built) renderTracks(); });` — `readLabelW`, `built` e `renderTracks` já existem no mesmo closure (confirmado via grep: `function readLabelW()` e `let built = false;` na Task 2, `function renderTracks()` preexistente).
+
+**Step 4 — fontes → escala (57 declarações).** As 57 linhas da tabela do Step 4 conferidas uma a uma contra o arquivo (com `Read`/`Grep` antes de cada `Edit`, usando trecho suficiente para o `old_string` ser único) e trocadas exatamente como especificado:
+- 54 declarações trocadas por `var(--fs-micro|sm|body|lead)` puro.
+- Linha 37/38 (`.bt-beat .lbl`/`.bt-beat .dur`) trocadas para `var(--fs-micro)/1.3` (line-height 1.3 acrescentado, conforme "Ajustes sobre a spec" da task).
+- Linha 39 (`.bt-word`) e linha 52 (`.bt-cap-overlay`): texto de fonte mantido literal (9.5px e 13px, lanes/isenções da spec), comentário ` /* isento: … */` acrescentado no fim da mesma linha, como pedido.
+- Linha 47 (`.bt-clip .nm`): trocada para token, e logo após inserida a linha nova `.bt-clip.music .nm{font-size:9.5px} /* isento: lane intocada — sub-projeto A, decisão 2 */`.
+- Linhas 54–57 (atributos `style=` inline e `#bt-word-pop-err`): trocadas para `var(--fs-sm)`.
+Confirmado por grep: só 3 ocorrências de `isento:` no arquivo (`.bt-word`, `.bt-clip.music .nm`, `.bt-cap-overlay`) — nenhuma isenção extra.
+
+**Step 5 — checagem estática.** Reexecução do mesmo script (arquivo, sem heredoc):
+
+```
+PASS: Task 3 estático (56 tokens, 0 literais 11–15px)
+```
+
+`exit=0`. O enunciado do Step 5 esperava `PASS: Task 3 estático (… tokens, 1 literais 11–15px)` **ou menos literais** — `0 literais` está dentro do aceito: o único literal candidato (`.bt-cap-overlay`, 13px) cai na cláusula `/isento:/.test(l)` do próprio script de checagem (o comentário `isento:` está na mesma linha do `font:`), então nem chega a ser contado como "literal" — é descartado antes da contagem, não avaliado quanto a faixa 11–15px.
+
+**Contagem de tokens `var(--fs-*)` usados no arquivo (`grep -o` + `sort | uniq -c`):** `--fs-micro` 32×, `--fs-sm` 19×, `--fs-body` 4×, `--fs-lead` 1× — soma 56, batendo com o "56 tokens" do Step 5.
+
+**Acessos a `localStorage.*('studio.density'...)`:** 2 no total — `localStorage.getItem('studio.density')` em `public/index.html:24`, dentro de `try { ... } catch (e) {}` de uma linha só (script do `<head>`); `localStorage.setItem('studio.density', ...)` em `public/index.html:808`, dentro de `try { ... } catch (e) {}` de uma linha só (IIFE do toggle no script global). Nenhuma chave de `localStorage` além de `studio.density` foi tocada nesta task.
+
+**Diff:** só `public/index.html` modificado (`git status --short` → ` M public/index.html`, único caminho). `git diff --stat` → `public/index.html | 170 +++++++++++++++++++++++++++++++++++-------------------` (1 arquivo, 110 inserções, 60 deleções). Inspeção do diff completo (`git diff -- public/index.html`) confirma que toda mudança está dentro do previsto pela task: tokens no `:root` e `html[data-density="comfortable"]`, `.btn[disabled]`, bloco `.hdr-btn` novo após `.tag`, as 57 trocas de fonte da tabela do Step 4 (+ a linha nova de isenção `.bt-clip.music .nm`), botão `#density-toggle` no `<header>`, `<script>` de densidade no `<head>`, IIFE do toggle no script global, e o listener `studio:density` no closure da TIMELINE. Nenhum `id` existente mudou de nome; nenhuma lógica de arraste, `wireTracks`, `saveBeats`, `doConform`, `seekTo` ou `switch` de teclado foi tocada; conteúdo de `.bt-word` e `.bt-clip.music` permanece visualmente igual (só ganharam comentário/isenção, não mudança de valor renderizado — `.bt-clip.music .nm` já herdava `9.5px` da regra `.bt-clip .nm` antes da tokenização, a nova linha apenas reafirma o mesmo valor explicitamente agora que a regra-mãe virou token).
+
+**Arquivos tocados:** `public/index.html` (modificado). Nenhum outro arquivo tocado — `public/dev/ui-probe.js` e `server.js` não foram abertos para edição nesta task. Nenhuma operação git mutante (sem commit, sem branch nova, sem stage) — mudanças permanecem não commitadas sobre a `main` local.
+
+**Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano. Nenhum trecho "Antes" da tabela do Step 4 divergiu do que estava no arquivo — todas as 57 linhas bateram exatamente. Único ponto registrado é o de ambiente (execução do script via arquivo em vez de heredoc, mesmo padrão já estabelecido nas Tasks 1 e 2).
+
+**Pendente / próximos passos (fora do escopo desta execução):** Step 7 (`validator`), Step 8 (Orquestrador roda o probe `E2`; se `density` reprovar por `truncated`, ajusta `--bt-labelw` em passos de 4px e registra em `## Verificação`), Step 9 (checklist manual do usuário nas duas densidades), Step 10 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e2`). Não ajustei `--bt-labelw` além do valor fixo do plano (`204px`/`248px`) — esse ajuste fino é do Orquestrador, pós-probe.
+
+### Task 3 (E2) — Revisão R1: densidade única (compacta) — executado
+
+Steps R1–R5 executados (Steps R6–R9 são do Orquestrador/Usuário, não executados aqui). Base: `main` local em `1ed5363` (igual a `origin/main`), com as mudanças não commitadas da Task 3 (versão com toggle de densidade) já presentes em `public/index.html`, e com o plano e a spec já atualizados pelo Orquestrador para a Revisão R1. Não reexecutei os Steps 1–6 originais da Task 3.
+
+**Ambiente:** o script do Step R1 foi extraído byte a byte de `docs/plans/ui-premium-timeline.md:898-936` (linhas entre os marcadores `node - <<'NODE'` em `:897` e `NODE` em `:937`, obtidas com `sed -n '898,936p'`) para um arquivo no scratchpad da sessão (`task3-r1-check.js`, fora do repo) e rodado com `node task3-r1-check.js` a partir da raiz do repo — não via heredoc, pelo mesmo motivo já registrado no Status das Tasks 1–3 (o Git Bash deste ambiente colapsa `\\` → `\` dentro de heredoc). O mesmo arquivo foi reusado, sem alteração, para o Step R4(a).
+
+**Step R1 — checagem estática da revisão, confirmar falha.** Saída (`node task3-r1-check.js`, `exit=1`):
+
+```
+FAIL
+resto de densidade em index.html:22
+resto de densidade em index.html:24
+resto de densidade em index.html:61
+resto de densidade em index.html:63
+resto de densidade em index.html:130
+resto de densidade em index.html:137
+resto de densidade em index.html:541
+resto de densidade em index.html:542
+resto de densidade em index.html:796
+resto de densidade em index.html:798
+resto de densidade em index.html:800
+resto de densidade em index.html:803
+resto de densidade em index.html:806
+resto de densidade em index.html:807
+resto de densidade em index.html:808
+resto de densidade em index.html:810
+resto de densidade em index.html:1220
+resto de densidade em index.html:3297
+resto de densidade em index.html:3299
+resto de densidade em ui-probe.js:8
+resto de densidade em ui-probe.js:200
+resto de densidade em ui-probe.js:201
+resto de densidade em ui-probe.js:204
+resto de densidade em ui-probe.js:210
+resto de densidade em ui-probe.js:309
+resto de densidade em ui-probe.js:310
+resto de densidade em ui-probe.js:311
+resto de densidade em ui-probe.js:314
+esperado 2 acessos a localStorage (os de studio-side-collapsed), achados 4
+ui-probe.js: tap-targets compacto (30/24) ausente do E2 em diante
+```
+
+19 linhas `resto de densidade em index.html`, 9 linhas `resto de densidade em ui-probe.js`, a linha de `localStorage` (4 achados) e a linha de `tap-targets` — nenhuma linha `ausente:`. Bate exatamente com o esperado registrado no plano.
+
+**Step R2 — remover a densidade de `public/index.html`** (8 trocas, todas aplicadas literalmente conforme o plano):
+1. Removido o bloco `<script>` de densidade no `<head>` (aplicação de `data-density` antes da pintura), logo após o `</script>` do loader do probe.
+2. Removidas as 3 linhas da regra `html[data-density="comfortable"]{--tap:36px; --tap-sm:28px; --gap-ctl:4px; --bt-labelw:248px}` e seu comentário, logo após o `}` que fecha o `:root`.
+3. Comentário de `.hdr-btn` trocado de `/* Botões do header (densidade; atalhos)... */` para `/* Botões do header (hoje só a folha de atalhos, Task 5)... */`.
+4. Removida a linha `.hdr-btn[aria-pressed="true"]{...}`; as outras três regras de `.hdr-btn` (base, `:hover`, `:focus-visible`) permanecem intactas.
+5. Removido o `<button id="density-toggle" class="hdr-btn" ...>DENSIDADE CONFORTÁVEL</button>` (2 linhas) do `<header>`, entre `<span class="spacer">` e `<span class="tag" id="port">`, que voltaram a ficar adjacentes.
+6. Removida a IIFE inteira do toggle de densidade no script global (comentário + `(() => {...})();`) e a linha em branco que a seguia — `})();` da IIFE de `studio-side-collapsed`, uma linha em branco e `/* next/prev footers on pipeline steps...` ficaram adjacentes, como pedido.
+7. Removido o listener `document.addEventListener('studio:density', ...)` no closure da TIMELINE e a linha em branco que o seguia — `/* ---------------- keyboard shortcuts (scoped to #step-beats.on) ---------------- */` voltou a vir logo após a linha em branco que fecha a função anterior.
+8. Comentário de `LABEL_W`: `--bt-labelw (que muda com a densidade); aqui fica em cache porque` → `--bt-labelw; aqui fica em cache porque`.
+
+Não tocados: `--tap:30px; --tap-sm:24px; --gap-ctl:2px;`, `--bt-labelw:204px;`, `readLabelW()` e sua chamada em `buildDom()`, as fontes/tokens `--fs-*`, as isenções (`.bt-word`, `.bt-clip.music .nm`, `.bt-cap-overlay`), os dois acessos a `studio-side-collapsed`.
+
+**Step R3 — probe sem `density` (`public/dev/ui-probe.js`)** (4 trocas, `const BASELINE` não tocada):
+1. Comentário do cabeçalho: `Checks que alteram estado (controles de track, densidade, play, folha de atalhos) desfazem...` → `Checks que alteram estado (controles de track, play, folha de atalhos) desfazem...`.
+2. Removida a função `async function density() {...}` inteira (entre o fim de `tctlToggles()` e `async function transportIds() {`).
+3. A linha `if (!at('E2')) add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);` trocada pelo bloco de 4 linhas com o comentário `// Alvo único (compacto) desde a revisão R1 da Task 3...` e o `if (at('E2')) add('tap-targets', snap.tapTargets.tbtnMinH === 30 && snap.tapTargets.tctlMinSide === 24, ...)`.
+4. Removido o bloco `if (at('E2')) { const d = await density(); ... add('density', ...); }` (9 linhas), mantendo a linha em branco antes e a linha `if (at('E3a')) { const p = playheadTc(); ...` logo em seguida, sem linha em branco extra.
+
+**Step R4 — checagens:**
+- (a) reexecução de `task3-r1-check.js` (mesmo arquivo do Step R1, sem heredoc) → `PASS: Task 3 R1 estático (56 tokens, 0 literais 11–15px)`, `exit=0`. Bate exatamente com o esperado.
+- (b) `node --check public/dev/ui-probe.js` → sem saída, `exit=0` (sintaxe OK).
+- (c) bloco de código do Step 4 da Task 1 extraído de `docs/plans/ui-premium-timeline.md:142-464` (entre os marcadores ` ```js ` em `:141` e ` ``` ` em `:465`, via `sed -n '142,464p'`) para `task1-step4-block.js` no scratchpad, comparado com `public/dev/ui-probe.js` via `diff --strip-trailing-cr` (ignora CR): única diferença é a linha `const BASELINE = ...` (o bloco do plano tem `const BASELINE = null;`; o arquivo do repo tem o baseline gravado pelo Orquestrador na Task 1 — Step 8). Confirmado.
+
+**Verificações adicionais (não pedidas explicitamente pelo Step R4, mas conferidas por precaução):** `node --check server.js` → `exit=0` (arquivo não tocado nesta revisão, checado só por precaução); `grep -c "isento:" public/index.html` → `3` (`.bt-word`, `.bt-clip.music .nm`, `.bt-cap-overlay`, intactas); `grep -c "localStorage\.\(get\|set\)Item("  public/index.html` → `2` (só `studio-side-collapsed`); `grep -ic "densid\|density\|comfortable" public/index.html` (grep direto no arquivo, não no diff) → `0`.
+
+**Diff:** `git diff --stat` (relativo a `HEAD` = `1ed5363`, arquivos tocados nesta sessão — inclui o conteúdo já presente da Task 3 original mais a revisão):
+
+```
+ docs/plans/ui-premium-timeline.md                  | 394 ++++++++++++++++++---
+ .../specs/2026-09-16-ui-premium-timeline-design.md |  43 ++-
+ public/dev/ui-probe.js                             |  32 +-
+ public/index.html                                  | 136 +++----
+ 4 files changed, 443 insertions(+), 162 deletions(-)
+```
+
+`docs/plans/ui-premium-timeline.md` e a spec já estavam modificados pelo Orquestrador antes desta execução (não tocados por mim nesta revisão, exceto este próprio acréscimo em `## Status`). `public/dev/ui-probe.js` (32 linhas, só tocado nesta revisão — Task 3 original não mexia nele) mostra exatamente as 4 trocas do Step R3 (`git diff HEAD -- public/dev/ui-probe.js` com 3 hunks: comentário do cabeçalho; remoção de `density()`; troca do `tap-targets` + remoção do bloco `if (at('E2')) { ... add('density', ...) }` no mesmo hunk por adjacência). `public/index.html` (136 linhas) é o líquido de Steps 2+4 da Task 3 original mais os 8 itens do Step R2 desta revisão — as adições/remoções de densidade da versão com toggle se cancelaram contra `HEAD` (não aparecem no diff, porque HEAD nunca teve essas linhas), restando só um hunk residual: a linha do comentário `LABEL_W` (item 8 do Step R2), que aparece como `- ...que muda com a densidade); aqui fica em cache porque` / `+ ...; aqui fica em cache porque` — **por isso `git diff HEAD -- public/index.html | grep -ic "densid\|density\|comfortable"` dá `1`, não `0`**: o `-1` vem do lado removido de um hunk genuíno (o comentário de `LABEL_W`, escrito ainda na Task 2/E1 já mergeada em `HEAD`, antecipando a então-planejada feature de densidade; o Step R2 item 8 desta revisão corrige essa referência). O conteúdo **atual** do arquivo não tem nenhuma ocorrência — confirmado acima por grep direto no arquivo (`0`). Reportando o desvio entre o resultado literal do comando pedido (`1`) e a leitura pretendida (conteúdo final sem resíduo de densidade, que é `0`), sem alterar a linha do Step R2 item 8 (ela está correta conforme o plano).
+
+**Arquivos tocados por mim nesta execução:** `public/index.html` (modificado — Step R2), `public/dev/ui-probe.js` (modificado — Step R3), `docs/plans/ui-premium-timeline.md` (só este acréscimo em `## Status`). Não toquei `docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md` nem nenhuma outra seção do plano. Nenhuma operação git mutante (sem commit, sem branch nova, sem stage) — mudanças permanecem não commitadas sobre a `main` local.
+
+**Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano nos Steps R1–R4 (R1 falhou na forma exata esperada; R2 e R3 aplicados literalmente, trecho a trecho, cada um encontrado exatamente uma vez; R4 deu o esperado nos três itens). Único ponto a registrar é o já detalhado acima sobre a leitura do comando `git diff HEAD -- public/index.html | grep -ic ...` = `1` em vez de `0` — é um artefato de como `git diff` inclui o lado removido de um hunk pré-existente em `HEAD` (não um resíduo real no arquivo atual, confirmado por grep direto = `0`).
+
+**Pendente / próximos passos (fora do escopo desta execução):** Step R6 (`validator`), Step R7 (Orquestrador roda o probe `E2` revisado — espera `tap-targets {tbtnMinH:30, tctlMinSide:24}`, sem check `density`), Step R8 (checklist manual do usuário, header sem botão de densidade), Step R9 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e2`).

@@ -5,8 +5,8 @@
    Só lê DOM/CSSOM — não enxerga o closure da TIMELINE. Uso, no console:
      await uiProbe.load('output/assembled-4545f906507a.mp4')
      await uiProbe.run('E1')
-   Checks que alteram estado (controles de track, densidade, play, folha de
-   atalhos) desfazem o que fizeram; o de play move o playhead ~1s. */
+   Checks que alteram estado (controles de track, play, folha de atalhos)
+   desfazem o que fizeram; o de play move o playhead ~1s. */
 (function () {
   'use strict';
 
@@ -197,20 +197,6 @@
     }
     return bad;
   }
-  async function density() {
-    const btn = document.getElementById('density-toggle');
-    if (!btn) return null;
-    const root = document.documentElement;
-    const startComfy = root.dataset.density === 'comfortable';
-    const measure = () => ({ tap: tapTargets(), truncated: labelTruncate(), sync: labelwSync(), overflow: transportOverflow() });
-    const out = {};
-    if (startComfy) { btn.click(); await sleep(80); }
-    out.compact = measure();
-    btn.click(); await sleep(80);
-    out.comfortable = measure();
-    if (!startComfy) { btn.click(); await sleep(80); }
-    return out;
-  }
   async function transportIds() {
     const missing = TRANSPORT_IDS.filter(id => !document.getElementById(id));
     const ungrouped = TRANSPORT_IDS.filter(id => {
@@ -283,7 +269,10 @@
       ['tap-targets', 'transport-overflow', 'track-order', 'label-truncate', 'labelw-sync',
         'markers-above-ruler', 'playhead', 'tctl-a11y'].forEach(id => add(id, null, null, null, 'TIMELINE não carregada'));
     } else {
-      if (!at('E2')) add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
+      // Alvo único (compacto) desde a revisão R1 da Task 3: do E2 em diante, tbtn 30 · tctl 24.
+      if (at('E2')) add('tap-targets', snap.tapTargets.tbtnMinH === 30 && snap.tapTargets.tctlMinSide === 24,
+        snap.tapTargets, { tbtnMinH: 30, tctlMinSide: 24 });
+      else add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
       if (at('E2')) add('transport-overflow', snap.transportOverflow === false, snap.transportOverflow, false);
       else add('transport-overflow', snap.transportOverflow === b.transportOverflow, snap.transportOverflow, b.transportOverflow);
       add('track-order', same(snap.trackOrder, TRACK_ORDER), snap.trackOrder, TRACK_ORDER);
@@ -305,15 +294,6 @@
           { count: bt.count, missingLabel: 0, withText: bt.withText });
       }
 
-      if (at('E2')) {
-        const d = await density();
-        const want = { compact: [30, 24], comfortable: [36, 28] };
-        const ok = !!d && ['compact', 'comfortable'].every(k =>
-          d[k].tap.tbtnMinH === want[k][0] && d[k].tap.tctlMinSide === want[k][1] &&
-          d[k].truncated.length === 0 && syncOk(d[k].sync) && (!at('E3b') || d[k].overflow === false));
-        add('density', ok, d, { compact: 'tbtn 30 · tctl 24', comfortable: 'tbtn 36 · tctl 28',
-          truncated: [], sync: 'ok', overflow: at('E3b') ? false : 'não avaliado' });
-      }
       if (at('E3a')) {
         const p = playheadTc();
         add('playhead-tc', !!p.chip && p.chip === p.time, p, 'chip === texto corrente de #bt-time');
