@@ -14,7 +14,7 @@
 
 - Zero npm. A única mudança em `server.js` é a rota estática `GET /dev/*.js` (Task 1).
 - Não tocar `lib/*`, `remotion/`, `public/vendor/`, `styles/`. Sem rebuild do bundle do Player.
-- Não alterar a lógica de: handlers de arraste (`start*`, `on*MouseDown`), `wireTracks`, `saveBeats`, `doConform`, formato do sidecar, `seekTo`, o `switch` de teclado. Exceções exatas, todas na Task 5: `seekTo` ganha o parâmetro opcional `opts`; quatro chamadas passam `{ animate: true }` (`onRulerMouseDown`, `case 'Home'`, `case 'End'`, `.bt-legend-row` onclick); o handler de `keydown` ganha o guard `dialog[open]` na primeira linha.
+- Não alterar a lógica de: handlers de arraste (`start*`, `on*MouseDown`), `wireTracks`, `saveBeats`, `doConform`, formato do sidecar, `seekTo`, o `switch` de teclado. Exceções exatas, todas na Task 5: `seekTo` ganha o parâmetro opcional `opts`; quatro chamadas passam `{ animate: true }` (`onRulerMouseDown`, `case 'Home'`, `case 'End'`, `.bt-legend-row` onclick); o handler de `keydown` ganha o guard `dialog[open]` na primeira linha. Na **Revisão R1 da Task 5** (decisão do usuário, 2026-09-17), o `switch` ganha mais três mudanças, e só estas: `case ','`/`case '.'` viram `case 'ArrowLeft'`/`case 'ArrowRight'` (mesmo `frameStep`); `case 'Delete': case 'Backspace':` vira `case 'Delete':`; e dois ramos novos antes do `switch`, no mesmo padrão dos de Ctrl+Z, para Ctrl+C e Ctrl+V.
 - Nenhum `id` existente muda de nome.
 - Conteúdo das lanes LEGENDA (`.bt-word`), ÁUDIO (waveform) e TRILHA (`.bt-clip.music`) visualmente igual.
 - `@media (prefers-reduced-motion: reduce)` global (`index.html:56-61`) permanece; nenhuma animação/transição nova com duração literal — só `var(--dur-1..4)`.
@@ -1317,12 +1317,14 @@ Substituir a função `renderPlayhead()` inteira por:
 
 ### Task 5 (E3b): Transporte em grupos, folha de atalhos, microinterações
 
+> **Revisão R1 (2026-09-17, decisão do usuário): atalhos no padrão do Premiere.** Os Steps 1–8 abaixo foram executados e validados (ver `## Status` e `## Verificação`), e o probe passou na rota Player. Depois disso o usuário pediu, na folha de atalhos e no teclado: `←`/`→` no lugar de `,`/`.` para andar frame a frame; só `Delete` apagando (sem `Backspace`); sem o grupo "Geral" e sem a nota do cabeçalho da folha; e **Ctrl+C / Ctrl+V funcionando de verdade** na TIMELINE. Os Steps R1–R10, no fim desta task, fazem isso **antes do commit**; os Steps 9, 10 e 11 originais foram substituídos por R8, R9 e R10. O estado final é o descrito em **Files**/**Interfaces** e na seção da revisão.
+
 **Files:**
-- Modify: `public/index.html` — CSS (`.bt-transport`, `.bt-tsep`, `.bt-spacer`, após `.bt-tbtn[disabled]`, bloco novo antes de `</style>`); `<header>` (botão `? ATALHOS`); entre `</aside>` e o `<script>` principal (`<dialog>`); script global (após a IIFE do rodapé colapsável, `studio-side-collapsed`); closure da TIMELINE: marcas `justAdded`/`justSplit` + `fxClass` (após `let selectedClipSet = new Set();`), `splitBeatAt`, `addClipAt`, `renderBeatsTrack`, `renderClipTrack`, `splitClipAt`, `duplicateClip`, `renderVideoTrack`, template do transporte em `buildDom()`, `renderLegendList`, `renderTracks`, `glidePlayhead` novo + `seekTo`, `onRulerMouseDown`, `wireTransport` (4 escritas do rótulo de play), handler de `keydown` (guard + Home/End).
+- Modify: `public/index.html` — CSS (`.bt-transport`, `.bt-tsep`, `.bt-spacer`, após `.bt-tbtn[disabled]`, bloco novo antes de `</style>`); `<header>` (botão `? ATALHOS`); entre `</aside>` e o `<script>` principal (`<dialog>`); script global (após a IIFE do rodapé colapsável, `studio-side-collapsed`); closure da TIMELINE: marcas `justAdded`/`justSplit` + `fxClass` (após `let selectedClipSet = new Set();`), `splitBeatAt`, `addClipAt`, `renderBeatsTrack`, `renderClipTrack`, `splitClipAt`, `duplicateClip`, `renderVideoTrack`, template do transporte em `buildDom()`, `renderLegendList`, `renderTracks`, `glidePlayhead` novo + `seekTo`, `onRulerMouseDown`, `wireTransport` (4 escritas do rótulo de play), handler de `keydown` (guard + Home/End). Revisão R1: também `.sc-note`/`.sc-head h2` no CSS e no `<dialog>`, `window.SHORTCUTS`, os dois botões de frame no template do transporte, o `switch` do `keydown` (setas, Delete, ramos de Ctrl+C/Ctrl+V) e o bloco novo `clipboard`/`copySelection`/`pasteClipboard` antes de `deleteSelection`.
 
 **Interfaces:**
-- Consumes: `.hdr-btn` e `--fs-*` (Task 3); `--dur-1..3`, `--ease-out`, `--ease-in-out` (Task 2); `renderTracks()`, `seekTo(t)`, `addClipAt`, `duplicateClip`, `splitBeatAt`, `splitClipAt` (existentes).
-- Produces: `window.SHORTCUTS: {group, keys: string[], desc}[]`; `dialog#shortcuts-sheet` com linhas `.sc-row`; `button#shortcuts-btn`; `.bt-tgroup`, `.bt-kbd`, `#bt-play .lbl`; `seekTo(t, opts?: {animate?: boolean})`; classes `.bt-enter`, `.bt-split`, `.bt-seek`.
+- Consumes: `.hdr-btn` e `--fs-*` (Task 3); `--dur-1..3`, `--ease-out`, `--ease-in-out` (Task 2); `renderTracks()`, `seekTo(t)`, `addClipAt`, `duplicateClip`, `splitBeatAt`, `splitClipAt` (existentes). Revisão R1 consome também `clipsFor`, `findGapAt`, `segIndexAt`, `snapTime`, `reconcileToDuration`, `clearMultiSelection`, `snapshot`, `lockedTracks`, `justAdded`, `MIN_BEAT_DUR` e `stage()` (existentes).
+- Produces: `window.SHORTCUTS: {group, keys: string[], desc}[]`; `dialog#shortcuts-sheet` com linhas `.sc-row`; `button#shortcuts-btn`; `.bt-tgroup`, `.bt-kbd`, `#bt-play .lbl`; `seekTo(t, opts?: {animate?: boolean})`; classes `.bt-enter`, `.bt-split`, `.bt-seek`. Revisão R1: `let clipboard`, `copySelection()`, `pasteClipboard()` no closure da TIMELINE.
 
 **Ajuste sobre a spec, decidido aqui:** `duplicateClip` também marca `justAdded` — é o outro caminho que faz um clipe surgir na timeline (menu de contexto → DUPLICAR); a spec citava só `addClipAt`.
 
@@ -1659,13 +1661,281 @@ Imediatamente antes de `  function seekTo(t) {` inserir:
 
 - [ ] **Step 7 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 6. Parar aqui.
 
-- [ ] **Step 8 [Orquestrador]: `validator`** — "validar a Task 5 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que os 21 ids e os handlers de `wireTransport()` não mudaram, e que `seekTo` sem `opts` se comporta como antes".
+- [x] **Step 8 [Orquestrador]: `validator`** — "validar a Task 5 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step 1; conferir que os 21 ids e os handlers de `wireTransport()` não mudaram, e que `seekTo` sem `opts` se comporta como antes".
 
-- [ ] **Step 9 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3b')`. Expected: PASS, incluindo `transport-ids`, `shortcut-sheet`, `tap-targets` (30/24) e `transport-overflow` `false`. Repetir com o bundle bloqueado (rota canvas).
+- [x] **Step 9 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3b')`. Expected: PASS, incluindo `transport-ids`, `shortcut-sheet`, `tap-targets` (30/24) e `transport-overflow` `false`. Repetir com o bundle bloqueado (rota canvas). *(Rodado na rota Player antes da Revisão R1 — ver `## Verificação`; a rota canvas e o rerun ficam no Step R9.)*
 
-- [ ] **Step 10 [Usuário]: Checklist manual** (itens 1–12) + adicionar clipe de B-ROLL (anima uma vez; arrastar logo depois não repete) + `S` num beat (flash uma vez) + clicar na régua (playhead desliza) + play logo depois (sem atraso visível) + `?` e fechar com `Esc` real (foco volta) + `J` com a folha aberta (nada acontece) + passar o mouse em FIT (badge mostra `\`).
+- **Step 10 [Usuário]** — substituído pelo Step R9.
 
-- [ ] **Step 11 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3b`; arquivo: `public/index.html`; commit `Group TIMELINE transport, add shortcut sheet and seek/clip micro-interactions (E3b)`) → OK do usuário → `publish`.
+- **Step 11 [Orquestrador → Usuário]** — substituído pelo Step R10.
+
+#### Revisão R1: atalhos no padrão do Premiere (setas, Delete, copiar/colar)
+
+Decisões do usuário (2026-09-17), respondidas antes de escrever esta seção:
+
+- **Ctrl+C/Ctrl+V** operam no **clipe selecionado**, colando **no playhead, na mesma track de origem** (nunca entre tracks), respeitando track travada e passando pelo histórico (undo/redo). Beats não entram.
+- **Backspace sai do handler**: só `Delete` apaga.
+- **`,` e `.` saem**: só `←`/`→` andam frame a frame.
+- **Texto do Delete na folha** descreve o que o código faz (apaga clipe, não track).
+
+Consequências que esta revisão precisa tratar junto:
+
+- Sem o grupo "Geral", `?` e `Esc` somem da folha mas continuam funcionando; a checagem 1:1 do Step 1 precisa parar de exigir `?` e passar a isentar `Esc`.
+- Os `<kbd>` dos botões `#bt-frameback`/`#bt-frameforward` mostram `,`/`.` e viram `←`/`→` (a contagem de 16 `.bt-kbd` não muda).
+- Sem a `.sc-note`, o `.sc-head` perde o elemento com `flex:1` que empurrava o botão FECHAR para a direita; o `flex:1` passa para o `h2`.
+
+- [ ] **Step R1 [Executor]: Rodar a checagem estática da revisão e confirmar que falha**
+
+O script abaixo substitui o do Step 1 desta task daqui em diante (mantém as checagens do E3b e acrescenta as da revisão).
+
+```bash
+node - <<'NODE'
+const fs = require('fs');
+// O working tree vem em CRLF (core.autocrlf=true) e as agulhas multilinha abaixo
+// usam \n: normalizar aqui evita um FAIL que é só de terminador de linha.
+const src = fs.readFileSync('public/index.html', 'utf8').replace(/\r\n/g, '\n');
+const lines = src.split('\n');
+const fail = [];
+// atalhos no padrão do Premiere: setas para frame, Delete sozinho, copiar/colar
+for (const t of ["case 'ArrowLeft': e.preventDefault(); frameStep(-1); break;",
+  "case 'ArrowRight': e.preventDefault(); frameStep(1); break;",
+  "case 'Delete':\n        if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); }",
+  'let clipboard = null;', 'function copySelection() {', 'function pasteClipboard() {',
+  "e.key.toLowerCase() === 'c' && selectedClip) { e.preventDefault(); copySelection(); return; }",
+  "e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); return; }",
+  "{ group: 'Edição', keys: ['Ctrl+C'], desc: 'copiar o clipe selecionado' },",
+  "{ group: 'Edição', keys: ['Ctrl+V'], desc: 'colar no playhead, na mesma track' },",
+  "{ group: 'Edição', keys: ['Delete'], desc: 'apagar o clipe selecionado' },",
+  "{ group: 'Reprodução', keys: ['←'], desc: 'voltar 1 frame' },",
+  "{ group: 'Reprodução', keys: ['→'], desc: 'avançar 1 frame' },",
+  '.sc-head h2{flex:1;', '<kbd class="bt-kbd">←</kbd>', '<kbd class="bt-kbd">→</kbd>'])
+  if (!src.includes(t)) fail.push('ausente: ' + t);
+for (const t of ["case ',':", "case '.':", "case 'Backspace'", '.sc-note', "group: 'Geral'",
+  "keys: ['Delete', 'Backspace']", '<kbd class="bt-kbd">,</kbd>', '<kbd class="bt-kbd">.</kbd>'])
+  if (src.includes(t)) fail.push('resto do esquema antigo: ' + t);
+// estrutura do transporte e da folha (mantida da Task 5)
+const ids = ['bt-play', 'bt-time', 'bt-rate', 'bt-j', 'bt-k', 'bt-l', 'bt-frameback', 'bt-frameforward', 'bt-markin',
+  'bt-markout', 'bt-split', 'bt-merge', 'bt-rename', 'bt-undo', 'bt-redo', 'bt-zoomout', 'bt-zoomlevel', 'bt-zoomin',
+  'bt-zoomfit', 'bt-save', 'bt-conform'];
+const tpl = /<div class="bt-transport">([\s\S]*?)<div class="bt-preview">/.exec(src);
+if (!tpl) fail.push('template do transporte não encontrado');
+else {
+  const groups = (tpl[1].match(/<div class="bt-tgroup[^"]*" role="group" aria-label="/g) || []).length;
+  if (groups !== 5) fail.push('esperado 5 .bt-tgroup no transporte, achados ' + groups);
+  for (const id of ids) if (!tpl[1].includes('id="' + id + '"')) fail.push('id ausente no transporte: ' + id);
+  if ((tpl[1].match(/<kbd class="bt-kbd">/g) || []).length !== 16) fail.push('esperado 16 .bt-kbd no transporte');
+}
+// SHORTCUTS ↔ handler de teclado da TIMELINE, 1:1
+const sc = /window\.SHORTCUTS = (\[[\s\S]*?\]);/.exec(src);
+const kb = /keyboard shortcuts \(scoped to #step-beats\.on\)([\s\S]*?)init: wire the static elements/.exec(src);
+if (sc && kb) {
+  const listed = new Set(new Function('return ' + sc[1])().flatMap(s => s.keys));
+  const norm = k => k === ' ' ? 'Espaço' : k === 'Escape' ? 'Esc' : k === 'ArrowLeft' ? '←' : k === 'ArrowRight' ? '→'
+    : k.length === 1 ? k.toUpperCase() : k;
+  const handled = new Set([...kb[1].matchAll(/case '((?:\\.|[^'])*)'/g)].map(m => norm(m[1].replace(/\\\\/g, '\\'))));
+  if (/e\.ctrlKey && !e\.shiftKey && e\.key\.toLowerCase\(\) === 'z'/.test(kb[1])) handled.add('Ctrl+Z');
+  if (/e\.ctrlKey && e\.shiftKey && e\.key\.toLowerCase\(\) === 'z'/.test(kb[1])) handled.add('Ctrl+⇧+Z');
+  if (/e\.ctrlKey && !e\.shiftKey && e\.key\.toLowerCase\(\) === 'c'/.test(kb[1])) handled.add('Ctrl+C');
+  if (/e\.ctrlKey && !e\.shiftKey && e\.key\.toLowerCase\(\) === 'v'/.test(kb[1])) handled.add('Ctrl+V');
+  if (/if \(!e\.ctrlKey\) return;\s*e\.preventDefault\(\);\s*zoomAt\(/.test(src)) handled.add('Ctrl+roda');
+  // Esc fecha popover e a folha, mas não é atalho de edição: fica fora de SHORTCUTS de propósito.
+  const naoListados = new Set(['Esc']);
+  for (const k of handled) if (!listed.has(k) && !naoListados.has(k)) fail.push('atalho registrado e ausente de SHORTCUTS: ' + k);
+  for (const k of listed) if (!handled.has(k)) fail.push('SHORTCUTS lista atalho que o handler não registra: ' + k);
+} else fail.push('SHORTCUTS ou handler de teclado não encontrados');
+// copiar/colar: colar respeita track travada e passa pelo histórico
+const paste = /function pasteClipboard\(\) \{([\s\S]*?)\n  \}/.exec(src);
+if (!paste) fail.push('pasteClipboard não encontrada');
+else {
+  if (!/lockedTracks\[track\]/.test(paste[1])) fail.push('pasteClipboard não checa lockedTracks');
+  if ((paste[1].match(/snapshot\(\);/g) || []).length < 1) fail.push('pasteClipboard não chama snapshot()');
+  if ((paste[1].match(/renderTracks\(\);/g) || []).length < 1) fail.push('pasteClipboard não chama renderTracks()');
+  if (!/justAdded = \{ track/.test(paste[1])) fail.push('pasteClipboard não marca justAdded');
+}
+lines.forEach((l, i) => {
+  for (const m of l.matchAll(/font(?:-size)?\s*:\s*([^;}"]*)/g)) {
+    const px = /(\d*\.?\d+)px/.exec(m[1]);
+    if (px && !/var\(--fs-/.test(m[1]) && !/isento:/.test(l) && parseFloat(px[1]) < 11) fail.push('fonte < 11px em :' + (i + 1));
+  }
+  if (/(transition|animation)[\w-]*\s*:/.test(l) && !/\b(drift|blink|bt-pulse)\b|\.001ms/.test(l) &&
+      /(^|[\s,(:])\d*\.?\d+m?s(?![\w-])/.test(l.replace(/var\(--dur-\d\)/g, ''))) fail.push('duração literal em :' + (i + 1));
+});
+[...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].forEach((m, k) => {
+  try { new Function(m[1]); } catch (e) { fail.push('<script> inline #' + k + ' não compila: ' + e.message); }
+});
+console.log(fail.length ? 'FAIL\n' + fail.join('\n') : 'PASS: Task 5 R1 estático');
+process.exitCode = fail.length ? 1 : 0;
+NODE
+```
+
+Rodar **a partir de arquivo** (o heredoc do Git Bash colapsa `\\`). Expected: `FAIL` com 26 itens — 16 `ausente:`, 8 `resto do esquema antigo:`, `SHORTCUTS lista atalho que o handler não registra: ?` e `pasteClipboard não encontrada` —, nenhum de id, fonte, duração ou compilação. São 28 linhas no total: o cabeçalho `FAIL` mais os 26 itens, com o item do `case 'Delete'` ocupando duas linhas porque a agulha tem quebra de linha. (Conferido pelo Orquestrador contra este working tree.)
+
+- [ ] **Step R2 [Executor]: Folha sem a nota e sem o grupo "Geral"** (3 trocas)
+
+1. No `<dialog id="shortcuts-sheet">`, remover a linha:
+
+```html
+    <span class="sc-note">atalhos da TIMELINE valem na etapa 04</span>
+```
+
+2. No CSS, remover a regra:
+
+```css
+.sc-note{flex:1; font:400 var(--fs-micro) var(--mono); color:var(--faint); letter-spacing:.04em}
+```
+
+3. `.sc-head h2{font:400 22px var(--disp); letter-spacing:.14em}` → `.sc-head h2{flex:1; font:400 22px var(--disp); letter-spacing:.14em}` (o `flex:1` que era da nota passa para o título, senão o botão FECHAR cola no `h2`).
+
+- [ ] **Step R3 [Executor]: `window.SHORTCUTS`** (3 trocas)
+
+1. Frame a frame:
+
+```js
+  { group: 'Reprodução', keys: [','], desc: 'voltar 1 frame' },
+  { group: 'Reprodução', keys: ['.'], desc: 'avançar 1 frame' },
+```
+
+vira
+
+```js
+  { group: 'Reprodução', keys: ['←'], desc: 'voltar 1 frame' },
+  { group: 'Reprodução', keys: ['→'], desc: 'avançar 1 frame' },
+```
+
+2. Delete e copiar/colar:
+
+```js
+  { group: 'Edição', keys: ['Delete', 'Backspace'], desc: 'apagar os clipes selecionados' },
+  { group: 'Edição', keys: ['Ctrl+Z'], desc: 'desfazer' },
+  { group: 'Edição', keys: ['Ctrl+⇧+Z'], desc: 'refazer' },
+```
+
+vira
+
+```js
+  { group: 'Edição', keys: ['Delete'], desc: 'apagar o clipe selecionado' },
+  { group: 'Edição', keys: ['Ctrl+C'], desc: 'copiar o clipe selecionado' },
+  { group: 'Edição', keys: ['Ctrl+V'], desc: 'colar no playhead, na mesma track' },
+  { group: 'Edição', keys: ['Ctrl+Z'], desc: 'desfazer' },
+  { group: 'Edição', keys: ['Ctrl+⇧+Z'], desc: 'refazer' },
+```
+
+3. Remover as duas linhas do grupo "Geral":
+
+```js
+  { group: 'Geral', keys: ['?'], desc: 'abrir esta folha' },
+  { group: 'Geral', keys: ['Esc'], desc: 'fechar popover ou esta folha' },
+```
+
+- [ ] **Step R4 [Executor]: Handler de `keydown` da TIMELINE** (3 trocas)
+
+1. Logo após a linha do redo (`… e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redo(); return; }`), acrescentar:
+
+```js
+    // Sem clipe selecionado (ou sem nada copiado) o navegador segue com o seu
+    // próprio copiar/colar — só sequestramos a tecla quando há o que fazer.
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'c' && selectedClip) { e.preventDefault(); copySelection(); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); return; }
+```
+
+2. No `switch`:
+
+```js
+      case ',': e.preventDefault(); frameStep(-1); break;
+      case '.': e.preventDefault(); frameStep(1); break;
+```
+
+vira
+
+```js
+      case 'ArrowLeft': e.preventDefault(); frameStep(-1); break;
+      case 'ArrowRight': e.preventDefault(); frameStep(1); break;
+```
+
+3. `      case 'Delete': case 'Backspace':` → `      case 'Delete':` (o corpo do `case` não muda).
+
+- [ ] **Step R5 [Executor]: `clipboard`, `copySelection()` e `pasteClipboard()`**
+
+Imediatamente antes de `  function deleteSelection() {` inserir:
+
+```js
+  /* ---------------- copiar / colar (Ctrl+C / Ctrl+V) ----------------
+     Guarda uma cópia profunda do clipe selecionado e cola no playhead, sempre
+     na track de origem: as três tracks têm formatos diferentes (B-ROLL disputa
+     espaço livre, TRILHA tem volume, VÍDEO é EDL sem `start`), então colar
+     entre tracks mudaria o clipe em vez de copiá-lo. */
+  let clipboard = null; // { track, clip } | null
+  function copySelection() {
+    if (!selectedClip) return false;
+    const c = clipsFor(selectedClip.track)[selectedClip.index];
+    if (!c) return false;
+    clipboard = { track: selectedClip.track, clip: JSON.parse(JSON.stringify(c)) };
+    stage('clipe copiado — Ctrl+V cola no playhead');
+    return true;
+  }
+  function pasteClipboard() {
+    if (!clipboard) return false;
+    const track = clipboard.track;
+    if (lockedTracks[track]) { stage('track travada — destrave para colar', true); return false; }
+    const src = clipboard.clip;
+    if (track === 'video') {
+      // V1 é EDL: a cópia entra depois do segmento sob o playhead e empurra o
+      // resto, como em duplicateClip. Sempre cabe.
+      const at = segIndexAt(playhead);
+      VIDEO.splice(at + 1, 0, Object.assign({}, src));
+      clearMultiSelection();
+      selectedClip = { track, index: at + 1 };
+      justAdded = { track, idx: at + 1 };
+      reconcileToDuration();
+      snapshot();
+      renderTracks();
+      return true;
+    }
+    const t = snapTime(playhead);
+    let start = t, dur = src.dur;
+    if (track === 'broll') {
+      const gap = findGapAt('broll', t, src.dur);
+      if (!gap) { stage('sem espaço livre no B-ROLL nesse ponto — mova o playhead', true); return false; }
+      start = gap.start; dur = gap.dur;
+    } else {
+      dur = Math.min(src.dur, DURATION - t);
+      if (dur <= MIN_BEAT_DUR) { stage('sem espaço até o fim da timeline', true); return false; }
+    }
+    clipsFor(track).push(Object.assign({}, src, { start, dur }));
+    clearMultiSelection();
+    selectedClip = { track, index: clipsFor(track).length - 1 };
+    justAdded = { track, idx: clipsFor(track).length - 1 };
+    snapshot();
+    renderTracks();
+    return true;
+  }
+```
+
+- [ ] **Step R6 [Executor]: `<kbd>` dos botões de frame no template do transporte**
+
+```html
+          <button class="bt-tbtn" id="bt-frameback" title=",">-1f<kbd class="bt-kbd">,</kbd></button>
+          <button class="bt-tbtn" id="bt-frameforward" title=".">+1f<kbd class="bt-kbd">.</kbd></button>
+```
+
+vira
+
+```html
+          <button class="bt-tbtn" id="bt-frameback" title="←">-1f<kbd class="bt-kbd">←</kbd></button>
+          <button class="bt-tbtn" id="bt-frameforward" title="→">+1f<kbd class="bt-kbd">→</kbd></button>
+```
+
+- [ ] **Step R7 [Executor]: Checagem estática** — rodar o script do Step R1, de arquivo. Expected: `PASS: Task 5 R1 estático`.
+
+- [ ] **Step R8 [Executor]: Atualizar `## Status`** com as saídas dos Steps R1 e R7. Parar aqui.
+
+- [ ] **Step R9 [Orquestrador]: `validator`** — "validar a Revisão R1 da Task 5 de `docs/plans/ui-premium-timeline.md`; rodar o script do Step R1 de arquivo; conferir que as únicas mudanças no `switch` são as três previstas, que `copySelection`/`pasteClipboard` só usam helpers existentes e passam por `snapshot()`, que colar não cruza tracks nem escreve em track travada, e que `SHORTCUTS` bate 1:1 com o handler (com `?` e `Esc` fora de propósito)".
+
+- [ ] **Step R10 [Orquestrador]: Probe** — recarregar `?probe=1`, `load`, `await uiProbe.run('E3b')` nas duas rotas (Player e canvas, com o bundle bloqueado). Expected: PASS; `shortcut-sheet` com `rows` = `SHORTCUTS.length` = 22 (20 antigas − 2 do grupo "Geral" + Ctrl+C e Ctrl+V), `transport-ids` com os 21 ids agrupados e `#bt-play` mantendo o `.bt-kbd`.
+
+- [ ] **Step R11 [Usuário]: Checklist manual** (itens 1–12) + os extras do Step 10 original (clipe de B-ROLL anima uma vez; `S` num beat pisca; clicar na régua desliza o playhead; play logo depois sem atraso; `?` abre e `Esc` real fecha devolvendo o foco; `J` com a folha aberta não faz nada; hover em FIT mostra `\`) + os da revisão: `←`/`→` andam um frame e `,`/`.` não fazem mais nada; `Delete` apaga o clipe selecionado e `Backspace` não; Ctrl+C num clipe de B-ROLL e Ctrl+V com o playhead em outro ponto (cola na mesma track, anima uma vez, Ctrl+Z desfaz); Ctrl+V com a track travada avisa e não cola; Ctrl+C num segmento de VÍDEO e Ctrl+V (entra depois do segmento sob o playhead, timeline cresce); Ctrl+C sem clipe selecionado não sequestra o copiar do navegador; a folha abre sem a nota e sem o grupo "Geral".
+
+- [ ] **Step R12 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/ui-premium-e3b`; arquivos: `public/index.html`, `docs/plans/ui-premium-timeline.md`, `docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md`; commit com título ≤ 72 no espírito de `Group TIMELINE transport, add shortcut sheet and clip copy/paste (E3b)`) → OK do usuário → `publish`.
 
 ---
 
@@ -1739,6 +2009,37 @@ _Seção do Orquestrador. Por task: comando do probe, resultado (`ok` + falhas),
 - Conferência extra do Orquestrador, após o `run`, nas duas rotas: nenhum `.bt-tctl` ficou com `aria-pressed="true"` (o probe restaurou o estado); `aria-pressed` bate com `.on` e todo controle tem `<use href>`; `[data-act="add"]` sem `aria-pressed`. `End` → chip `00:38.2` = `#bt-time` e classe `flip` (chip à esquerda da linha); `Home` → chip `00:00.0`, sem `flip`.
 
 **Checklist manual (Step 11):** informado pelo usuário — itens 1–12 OK (1–11 na rota Player, 12 na rota canvas), B-ROLL travado não move o clipe, trim em segmento de VÍDEO encostado no vizinho pega o segmento certo, chip passa para a esquerda da linha no fim da timeline; nenhuma falha.
+
+### Task 5 (E3b) — 2026-09-17
+
+**Pré-checagem do Orquestrador:** script do Step 1, de arquivo, contra `main` em `88d19f0` → `FAIL` com a forma do Expected (grupos, kbd, FIT, `.bt-tsep`, rótulo do play, 17 `ausente:`, contagens, `SHORTCUTS ou handler … não encontrados`), sem `id ausente no transporte` nem linhas de fonte/duração/compilação; todos os pontos de inserção citados existem uma vez (incluindo os dois revistos na Revisão R1 da Task 3).
+
+**Executor (Steps 1–7), conferido pelo Orquestrador:** script do Step 1 → `PASS: Task 5 estático`; `public/index.html` +199/−43 em 23 hunks, plano só com acréscimo em `## Status` (+85/−0); 21 ids do transporte × 1 cada; nenhum id de `HEAD` removido; as únicas linhas antigas removidas em lógica protegida são a assinatura de `seekTo` e as 4 chamadas que ganharam `{ animate: true }`; FIT com `\\` no template literal. Números relatados pelo executor batem com os medidos.
+
+**Validator (Step 8):** APROVADO, sem achados. `PASS: Task 5 estático` (de arquivo). CSS do transporte igual ao plano, sem regra `comfortable`. Template com 5 `.bt-tgroup` (`role="group"` + `aria-label`) e 16 `.bt-kbd`; os 21 pares id↔`title` idênticos a `HEAD`; `wireTransport()` igual a `HEAD` exceto as 4 escritas em `#bt-play .lbl`. Folha: `#shortcuts-btn` entre `.spacer` e `#port`; `<dialog>` sem `open`, entre `</aside>` e o script principal; `showModal()`, foco restaurado no `close`, `?` ignora campos de texto e dialog aberto; `SHORTCUTS` conferida à mão contra cada `case`, os dois Ctrl+Z e o Ctrl+roda (só `?` e Esc a mais, previstos). Microinterações nos 9 pontos da tabela; marcas zeradas no fim de `renderTracks()`; `glidePlayhead()` remove `.bt-seek` por `transitionend` com `setTimeout(done, 250)` de segurança (reduced-motion) e só roda com `opts.animate`. Exceções: `seekTo` sem `opts` idêntico a `HEAD`; exatamente 4 `{ animate: true }` entre as 14 chamadas de `seekTo` (as outras 10 iguais a `HEAD`, incluindo o arraste contínuo da régua); handler de `keydown` igual a `HEAD` exceto o guard e `Home`/`End`. 23 hunks revisados: nada de arraste, `wireTracks`, `saveBeats`, `doConform`, sidecar ou outros `case`s. Ids: 122 de `HEAD` presentes, 5 novos (`shortcuts-btn`, `-sheet`, `-title`, `-grid`, `-close`); sem `localStorage` novo nem resto de densidade.
+
+**Probe (Step 9, antes da Revisão R1):** viewport 1280×800, DPR 1, rota Player. `run('E3b')` → `PASS`, 16/16. `transport-ids` `{missing: [], ungrouped: [], kbdKept: [true, true], playLabels: ["❚❚", "▶"]}` (o play tocou e voltou, mantendo o `.bt-kbd`); `shortcut-sheet` `{present, opened, modal: true, rows: 22, expected: 22, focusReturned: true}`; `tap-targets` 30/24; `transport-overflow` `false`; `tctl-a11y` e `playhead-tc` como no E3a; `__probeErrors` vazio. Conferência extra: `End` põe `.bt-seek` no playhead e a classe sai sozinha depois da transição; a folha abre modal com 22 linhas em 4 grupos; com a folha aberta, `J` e `Home` não mexem no tempo; `#bt-zoomfit` mostra `\` no `title` e no `.bt-kbd`. A rota canvas ficou para o Step R10, junto com a revisão.
+
+**Decisão do usuário → Revisão R1 da Task 5 (2026-09-17):** atalhos no padrão do Premiere. Perguntas respondidas antes de escrever a revisão: Ctrl+C/Ctrl+V operam no clipe selecionado e colam no playhead **na track de origem**; `Backspace` sai do handler; `,`/`.` saem em favor de `←`/`→`; a descrição do `Delete` passa a dizer que apaga clipe (o código chama `deleteSelection()`, nunca apagou track). Consequências tratadas junto: sem o grupo "Geral", a checagem 1:1 para de exigir `?` e isenta `Esc`; os `<kbd>` de `#bt-frameback`/`#bt-frameforward` viram `←`/`→`; o `flex:1` da `.sc-note` passa para o `h2`. Spec atualizada (Revisão R2, mesma mudança).
+
+**Pré-teste da Revisão R1 (Orquestrador, fora do repo):** o script do Step R1 dá `FAIL` com 26 itens na árvore atual (16 `ausente:`, 8 `resto do esquema antigo:`, `SHORTCUTS lista … ?`, `pasteClipboard não encontrada`) e, com as 11 trocas dos Steps R2–R6 aplicadas a uma cópia, `PASS: Task 5 R1 estático` com todos os `<script>` inline compilando.
+
+**Correção no script do Step R1 (bug do Orquestrador, achado pelo executor):** a agulha multilinha do `case 'Delete'` usa `\n` (LF), mas o working tree é CRLF, então ela nunca casava e o Step R7 dava `FAIL` com esse único item mesmo com o código certo. O pré-teste não pegou porque o simulador normalizava a cópia para LF. O script passou a ler `public/index.html` com `.replace(/\r\n/g, '\n')`; rodado de novo contra a árvore com a revisão aplicada → `PASS: Task 5 R1 estático`, `exit=0`. O executor agiu certo: investigou, provou que era o terminador de linha (`includes` falso no texto cru e verdadeiro no normalizado), não forçou o `PASS` mexendo no código e parou para o Orquestrador decidir. O Expected do Step R1 não muda (o item do `Delete` já contava como `ausente:` antes da revisão).
+
+**Validator da Revisão R1 (Step R9):** APROVADO, sem achado de severidade média ou alta. `PASS: Task 5 R1 estático` (de arquivo); a normalização de CRLF só troca o terminador, aplicada uma vez na leitura. As 11 trocas conferidas uma a uma; os outros 20 hunks do diff acumulado mapeiam para a Task 5 já validada. Handler de `keydown` × `HEAD`: exatamente 5 diferenças — guard `dialog[open]`, `Home`/`End` com `{ animate: true }` (Task 5), setas, `case 'Delete'` sem `Backspace` e os dois ramos de Ctrl+C/Ctrl+V (revisão), estes guardados por `selectedClip`/`clipboard`, depois dos ramos de Ctrl+Z e antes do `switch`. Copiar/colar: helpers todos pré-existentes e chamados com a assinatura certa; cópia profunda; destino sempre `clipboard.track` (nunca cruza tracks); track travada avisa e não escreve; todo caminho de sucesso marca `justAdded` → `snapshot()` → `renderTracks()`; só o ramo de VÍDEO chama `reconcileToDuration()`; B-ROLL sem gap e TRILHA sem espaço avisam sem escrever; `dur` nunca ≤ `MIN_BEAT_DUR` nem passa de `DURATION`; `selectedClip.index` correto após `push`/`splice`. `SHORTCUTS` ↔ handler 1:1 (23 chaves em 22 linhas; `?` e `Esc` os únicos fora da lista, de propósito). Sem regressão da Task 5 (21 ids × 1, 16 `.bt-kbd`, 5 `.bt-tgroup`, `wireTransport` com as 4 escritas, `seekTo` sem `opts` idêntico a `HEAD`, 4 `{ animate: true }`). Números do `## Status` batem com os medidos.
+**Correção ao enunciado do Orquestrador:** a folha agora tem **3 grupos** (Reprodução, Edição, Zoom), não 4 — o grupo "Geral" saiu nesta revisão. As 22 linhas continuam (`justAdded` passa a ter 5 marcas: 3 da Task 5 + 2 do `pasteClipboard`).
+**Achado informativo (não bloqueia):** no ramo de VÍDEO, se `VIDEO` estivesse vazio, `segIndexAt` devolveria 0 e o `index` do clipe colado ficaria fora do array; o estado é inalcançável hoje porque `canDeleteVideoSeg()` e o guard de exclusão em massa mantêm pelo menos um segmento.
+
+**Probe da Revisão R1 (Step R10):** viewport 1280×800, DPR 1, recarga antes de cada `load`. `run('E3b')` → `PASS` 16/16 nas **duas rotas** (Player, e canvas com `/vendor/studio-player.js` bloqueado no DevTools — conferido `StudioPlayer` ausente e `__playerBundleFailed` ligado). `shortcut-sheet` `{opened, modal: true, rows: 22, expected: 22, focusReturned: true}`; `transport-ids` `{missing: [], ungrouped: [], kbdKept: [true, true], playLabels: ["❚❚", "▶"]}`; `tap-targets` 30/24; `transport-overflow` `false`; `playhead-tc` = `#bt-time`; `__probeErrors` vazio. `SHORTCUTS` com 22 linhas em 3 grupos (Reprodução, Edição, Zoom).
+
+**Teste funcional dos atalhos novos (Orquestrador, nas duas rotas):**
+
+- Setas: 10× `→` movem o playhead 20px (10 frames a 60 px/s) e 10× `←` voltam ao pixel de origem (Player 238 → 258 → 238; canvas 234.789 → 254.789 → 234.789). `,` e `.` não movem mais nada.
+- `Delete` × `Backspace`: com 2 segmentos de VÍDEO, `Backspace` não apaga (segue 2) e `Delete` apaga (volta a 1).
+- Ctrl+C/Ctrl+V num segmento de VÍDEO: `stage` mostra "clipe copiado — Ctrl+V cola no playhead"; colar insere o segmento e a timeline vai de `00:38.2` para `01:16.4`; `Ctrl+Z` desfaz e volta a `00:38.2`.
+- Nenhum erro de script em nenhum dos passos.
+
+**Checklist manual (Step R11):** informado pelo usuário — tudo certo. Itens 1–12 (1–11 na rota Player, 12 na canvas), os extras da Task 5 (animação de entrada de uso único, flash do split, playhead deslizando no seek, `?`/`Esc` com foco devolvido, `J` inerte com a folha aberta, `\` no hover do FIT) e os da revisão (`←`/`→` andam um frame e `,`/`.` não; `Delete` apaga e `Backspace` não; Ctrl+C/Ctrl+V num clipe de B-ROLL colando na mesma track com undo; Ctrl+V em track travada avisando sem colar; Ctrl+C sem seleção não sequestra o copiar do navegador; folha sem a nota e sem o grupo "Geral").
 
 ---
 
@@ -2141,3 +2442,171 @@ Nada fora dessas 8 áreas foi tocado — sem mudança em `wireTracks`, `saveBeat
 **Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano. Todos os trechos "atual" citados pela task (incluindo a peculiaridade de `beats` ainda não ter `<span class="ic">`/`<span class="nm">` antes desta task, que o Step 5 explicitamente corrige) bateram exatamente com o arquivo antes de cada edição. Único ponto registrado é o de ambiente (execução do script via arquivo em vez de heredoc), mesmo padrão já estabelecido nas Tasks 1–3.
 
 **Pendente / próximos passos (fora do escopo desta execução):** Step 9 (`validator`), Step 10 (Orquestrador roda o probe `E3a` nas duas rotas — Player e canvas), Step 11 (checklist manual do usuário, incluindo os itens específicos de E3a: travar B-ROLL e tentar arrastar; trim num segmento de VÍDEO encostado no vizinho; playhead no fim da timeline), Step 12 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e3a`).
+
+### Task 5 (E3b) — executado
+
+Steps 1–7 executados (Steps 8–11 são do Orquestrador/Usuário, não executados aqui). Base: `main` local limpa em `88d19f0`, igual a `origin/main` (Tasks 1–4 já mergeadas pelos PRs #11–#14). Único arquivo modificado: `public/index.html`.
+
+**Ambiente:** script do Step 1 (e o do Step 6, mesmo script reexecutado) rodado **de arquivo**, não via heredoc — mesmo motivo já registrado nas Tasks 1–4 (o Git Bash deste ambiente colapsa `\\` → `\` dentro de `node - <<'NODE' ... NODE'`, e este script em particular depende de literais com barra invertida, ex. `'<kbd class="bt-kbd">\\\\</kbd>'`). Extraído com `sed -n '1333,1389p' docs/plans/ui-premium-timeline.md` (as linhas do JS entre `node - <<'NODE'` e o `NODE` de fechamento, sem essas duas linhas) para `task5-step1-check.js` no scratchpad da sessão, fora do repo, e rodado com `node task5-step1-check.js` a partir da raiz do repo.
+
+**Step 1 — checagem estática, confirmar falha.** Saída (`node task5-step1-check.js`, `exit=1`):
+
+```
+FAIL
+esperado 5 .bt-tgroup no transporte, achados 0
+esperado 16 .bt-kbd no transporte
+kbd de FIT deve ser \\ no template (vira \ no HTML)
+.bt-tsep/.bt-spacer ainda presentes
+rótulo do play ainda escrito em $q('#bt-play').textContent
+esperado 4 escritas em #bt-play .lbl
+ausente: id="shortcuts-btn"
+ausente: <dialog id="shortcuts-sheet" aria-labelledby="shortcuts-title">
+ausente: id="shortcuts-grid"
+ausente: id="shortcuts-close"
+ausente: window.SHORTCUTS = [
+ausente: dlg.showModal();
+ausente: dlg.addEventListener('close'
+ausente: if (document.querySelector('dialog[open]')) return;
+ausente: function glidePlayhead() {
+ausente: function seekTo(t, opts) {
+ausente: if (opts && opts.animate) glidePlayhead();
+ausente: let justAdded = null, justSplit = null;
+ausente: function fxClass(track, i) {
+ausente: justAdded = null; justSplit = null;
+ausente: .bt-playhead.bt-seek{transition:left var(--dur-1) var(--ease-in-out)}
+ausente: .bt-clip.bt-enter{
+ausente: .bt-split{animation:bt-split-flash var(--dur-3) linear}
+esperado 4 chamadas seekTo(…, { animate: true })
+esperado 3 usos de fxClass nos renders
+esperado 3 marcas justAdded (addClipAt + 2 em duplicateClip)
+esperado 2 marcas justSplit (splitBeatAt, splitClipAt)
+SHORTCUTS ou handler de teclado não encontrados
+```
+
+Bate exatamente com o esperado do plano e com a pré-checagem do Orquestrador: 5 linhas de contagem/forma (`bt-tgroup`, `bt-kbd`, kbd de FIT, `.bt-tsep/.bt-spacer`, rótulo do play em duas linhas), **17** linhas `ausente:`, as 4 contagens finais (`{ animate: true }`, `fxClass`, `justAdded`, `justSplit`) e a linha `SHORTCUTS ou handler de teclado não encontrados`. Nenhuma linha de `id ausente no transporte` (os 21 ids já existiam no template antigo) nem de fonte/duração/compilação.
+
+**Step 2 — CSS do transporte e do atalho no botão.** `.bt-transport{...gap:8px...}` → `gap:10px 18px`. `.bt-tsep{width:1px; height:18px; background:var(--line)}` substituído pelo bloco `.bt-tgroup{...}` + `.bt-tgroup-end{margin-left:auto}` com o comentário do plano. Linha `.bt-spacer{flex:1}` apagada. Logo após `.bt-tbtn[disabled]{opacity:.3; cursor:default}` inserido o bloco `.bt-tbtn{position:relative}` + `.bt-kbd{...}` + `.bt-tbtn:hover .bt-kbd,.bt-tbtn:focus-visible .bt-kbd{opacity:1}` com o comentário do plano — conteúdo idêntico ao Step 2.
+
+**Step 3 — template do transporte em `buildDom()`.** Bloco de `<div class="bt-transport">` até o `</div>` de fechamento (imediatamente antes de `<div class="bt-preview">`) substituído pelo bloco de 5 `.bt-tgroup` do plano, byte a byte — incluindo `title="\\">FIT<kbd class="bt-kbd">\\</kbd>` com a barra invertida dupla (conferido no arquivo após a escrita: `grep` mostra `title="\\">FIT...bt-kbd">\\</kbd>` com dois `\` literais em cada ocorrência, não um). `#bt-time` e `#bt-rate` migraram para dentro do primeiro `.bt-tgroup` ("Reprodução"), como no bloco do plano. Em `wireTransport()`, as 4 ocorrências de `$q('#bt-play').textContent = ` trocadas por `$q('#bt-play .lbl').textContent = ` (duas nos listeners `PLAYER.on('play'/'pause')`, duas em `video.addEventListener('play'/'pause')`), sem tocar o resto de cada linha.
+
+**Step 4 — folha de atalhos.** Botão `<button type="button" id="shortcuts-btn" class="hdr-btn" title="Folha de atalhos (?)">? ATALHOS</button>` inserido no `<header>` entre `<span class="spacer"></span>` e `<span class="tag" id="port">…</span>` (único ponto de inserção existente no arquivo). `<dialog id="shortcuts-sheet" ...>` inserido entre `</aside>` e a linha `<script>`/`'use strict';` do script principal — confirmado que só há um `<script>` nesse ponto (o outro, do loader do probe, está no `<head>`, linha 9, fora da janela de busca). CSS da folha (`#shortcuts-sheet`, `.sc-*`, `@keyframes sc-in`) e das microinterações (`@keyframes bt-clip-in`, `.bt-clip.bt-enter`, `@keyframes bt-split-flash`, `.bt-split`, `.bt-playhead.bt-seek`) inseridos imediatamente antes do único `</style>` do arquivo. Bloco `window.SHORTCUTS = [...]` + a IIFE `(() => { const dlg = $('#shortcuts-sheet'); ... })();` inserido logo após o `})();` da IIFE do rodapé colapsável (a que lê/grava `studio-side-collapsed`) e antes do comentário `/* next/prev footers ... */` — conteúdo idêntico ao Step 4. Guard `if (document.querySelector('dialog[open]')) return;` inserido como primeira linha do corpo do handler de `keydown` da TIMELINE (`:3447` antes da edição, o que começa com `const stepEl = document.getElementById('step-beats');`) — confirmado que existem dois `document.addEventListener('keydown', ...)` no arquivo (o novo, da folha de atalhos, que só reage a `?`, e o da TIMELINE) e que o guard foi inserido no da TIMELINE, não no novo.
+
+**Step 5 — microinterações.** Logo após `let selectedClipSet = new Set();` inserido o bloco `let justAdded = null, justSplit = null;` + `function fxClass(track, i) {...}` com o comentário do plano. Tabela de 9 trocas aplicada:
+- `splitBeatAt`: `justSplit = { track: 'beats', idx: idx + 1 };` inserida entre `selected = idx;` e `snapshot(); renderTracks();`.
+- `addClipAt`: `justAdded = { track, idx: clipsFor(track).length - 1 };` inserida logo após `selectedClip = { track, index: clipsFor(track).length - 1 };` (única ocorrência dessa linha dentro de `addClipAt`; a mesma string também existe em `duplicateClip`, tratada separadamente pelo contexto de bloco).
+- `renderBeatsTrack`: `el.className = 'bt-beat' + (i === selected ? ' selected' : '') + fxClass('beats', i);`.
+- `renderClipTrack`: `` `<div class="bt-clip ${track}${sel}${fxClass(track, i)}" data-track="${track}" data-idx="${i}"` ``.
+- `splitClipAt`: `justSplit = { track, idx: i + 1 };` inserida entre `selectedClip = { track, index: i + 1 };` e `if (track === 'video') recomputeDuration();`.
+- `duplicateClip`, ramo `if (track === 'video')`: `justAdded = { track, idx: i + 1 };` inserida logo após `selectedClip = { track, index: i + 1 };` (antes de `clearMultiSelection();`).
+- `duplicateClip`, depois do ramo de vídeo: `justAdded = { track, idx: clipsFor(track).length - 1 };` inserida logo após `selectedClip = { track, index: clipsFor(track).length - 1 };` (a segunda das duas únicas ocorrências dessa string no arquivo).
+- `renderVideoTrack`: `` `<div class="bt-clip video${sel}${fxClass('video', i)}" data-track="video" data-idx="${i}"` ``.
+- `renderTracks`: `justAdded = null; justSplit = null;` inserida logo após `syncPlayer();`, última linha antes do `}` de fechamento.
+
+`glidePlayhead()` inserida imediatamente antes de `function seekTo(t) {`, com o comentário do plano. Assinatura alterada para `function seekTo(t, opts) {`; `if (opts && opts.animate) glidePlayhead();` inserida logo após `t = Math.max(0, Math.min(DURATION, t));`. As 4 chamadas de `seekTo` da tabela final atualizadas com `{ animate: true }`: `onRulerMouseDown` (`seekTo(snapTime(pageXToTime(e.clientX)), { animate: true });`), `case 'Home'` e `case 'End'` do `switch` de teclado, e `row.onclick` de `renderLegendList` (`seekTo(beatStart(selected), { animate: true });`).
+
+**Step 6 — checagem estática.** Reexecução do mesmo script (arquivo, sem heredoc):
+
+```
+PASS: Task 5 estático
+```
+
+`exit=0`. Bate exatamente com o esperado.
+
+**Verificações adicionais (não pedidas explicitamente por nenhum step, feitas por precaução):**
+- `git status --short` → ` M public/index.html`, único caminho alterado; nenhuma outra modificação (`server.js`, `lib/`, `remotion/`, `public/vendor/`, `styles/`, a spec e o restante do plano fora da seção `## Status` intocados).
+- `git diff --stat -- public/index.html` → `public/index.html | 242 ++++++++++++++++++++++++++++++++++++++++++++----------` (1 arquivo, 199 inserções, 43 deleções). `git diff -- public/index.html | grep -c '^@@'` → **23** hunks.
+- Os 21 `id="bt-…"` do transporte (`bt-play`, `bt-time`, `bt-rate`, `bt-j`, `bt-k`, `bt-l`, `bt-frameback`, `bt-frameforward`, `bt-markin`, `bt-markout`, `bt-split`, `bt-merge`, `bt-rename`, `bt-undo`, `bt-redo`, `bt-zoomout`, `bt-zoomlevel`, `bt-zoomin`, `bt-zoomfit`, `bt-save`, `bt-conform`) contados individualmente com `grep -o 'id="<id>"' public/index.html | wc -l` → **1 cada**, nenhum duplicado, nenhum ausente.
+- `.bt-tgroup` (`grep -c 'class="bt-tgroup'`) → **5**; `<kbd class="bt-kbd">` → **16**; `bt-tsep|bt-spacer` → **0** ocorrências residuais.
+- As únicas 3 mudanças em lógica protegida, conferidas por `git diff -- public/index.html`: (a) `function seekTo(t) {` → `function seekTo(t, opts) {` + nova linha `if (opts && opts.animate) glidePlayhead();`; (b) exatamente 4 chamadas ganharam `{ animate: true }` (`onRulerMouseDown`, `case 'Home'`, `case 'End'`, `row.onclick` de `renderLegendList`) — `seekTo(t)` sem `opts` nunca chama `glidePlayhead()`, então o comportamento sem `opts` não muda; (c) o handler de `keydown` da TIMELINE ganhou `if (document.querySelector('dialog[open]')) return;` como primeira linha do corpo, antes de `const stepEl = ...`. Nenhuma outra linha de `wireTracks`, `saveBeats`, `doConform`, ou dos demais `case`s do `switch` aparece no diff.
+- `id=` novos: só os do escopo desta task (`shortcuts-btn`, `shortcuts-sheet`, `shortcuts-title`, `shortcuts-close`, `shortcuts-grid`); nenhum `id` existente renomeado ou removido.
+- `localStorage`: `git diff -- public/index.html | grep -c localStorage` → `0` (nenhuma chave nova, nenhum acesso tocado).
+- Nenhuma duração literal nova fora de `var(--dur-1..4)` e nenhuma fonte < 11px fora de `isento:` — cobertos pelo próprio `PASS` do Step 6 (o script varre essas duas classes de regressão linha a linha).
+
+**Arquivos tocados:** `public/index.html` (modificado). Nenhum outro arquivo tocado — `public/dev/ui-probe.js`, `server.js`, `remotion/`, `public/vendor/`, `styles/` e a spec não foram abertos para edição nesta task. Nenhuma operação git mutante (sem commit, sem branch nova, sem stage) — mudanças permanecem não commitadas sobre a `main` local.
+
+**Desvios:** nenhum desvio de escopo ou de conteúdo em relação ao plano. Todos os trechos "atual" citados pela Task 5 (CSS do transporte, template de `buildDom()`, `wireTransport()`, ponto de inserção do botão no `<header>`, ponto de inserção do `<dialog>` e do script `SHORTCUTS` após a IIFE de `studio-side-collapsed`, `let selectedClipSet = new Set();`, as 9 linhas-alvo da tabela de microinterações, `function seekTo(t) {` e as 4 chamadas de `seekTo`) bateram exatamente com o arquivo antes de cada edição — nenhum precisou de adaptação. Único ponto registrado é o de ambiente (execução do script do Step 1/6 via arquivo em vez de heredoc), mesmo padrão já estabelecido nas Tasks 1–4.
+
+**Pendente / próximos passos (fora do escopo desta execução):** Step 8 (`validator`), Step 9 (Orquestrador roda o probe `E3b` nas duas rotas — Player e canvas — incluindo `transport-ids`, `shortcut-sheet`, `tap-targets` e `transport-overflow`), Step 10 (checklist manual do usuário, incluindo os itens específicos de E3b: B-ROLL anima uma vez, `S` num beat pisca uma vez, clique na régua desliza o playhead, play logo depois sem atraso visível, `?`/`Esc` com foco voltando, `J` com a folha aberta não faz nada, hover em FIT mostra o badge `\`), Step 11 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e3b`).
+
+### Revisão R1 da Task 5 (E3b) — atalhos no padrão do Premiere — executado
+
+Steps R1–R7 executados (R8 é esta atualização; R9–R12 são do Orquestrador/Usuário, não executados aqui). Base: `main` local em `88d19f0`, igual a `origin/main`, com as mudanças não commitadas da Task 5 original (Steps 1–7) já presentes em `public/index.html`, e com `docs/plans/ui-premium-timeline.md` e a spec já atualizados pelo Orquestrador para esta revisão (não editados por este executor, exceto esta seção `## Status`). Único arquivo de código alterado nesta execução: `public/index.html`.
+
+**Ambiente:** o script do Step R1 (e do Step R7, mesmo script reexecutado) tem literais com barra invertida e um needle multilinha; rodado **de arquivo**, não via heredoc — mesmo motivo já registrado nas Tasks 1–5 (o Git Bash deste ambiente colapsa `\\` → `\` dentro de `node - <<'NODE' ... NODE'`). Extraído com `sed -n '1693,1765p' docs/plans/ui-premium-timeline.md` (as linhas do JS entre `node - <<'NODE'` e o `NODE` de fechamento, sem essas duas linhas) para `task5-r1-step-check.js` no scratchpad da sessão, fora do repo, e rodado com `node task5-r1-step-check.js` a partir da raiz do repo. Conferido por leitura de volta que o arquivo extraído bate com o bloco do plano (inclusive `\\\\` em `\\.` e as barras em `<\\/kbd>`/regex).
+
+**Step R1 — checagem estática, confirmar falha.** Saída (`node task5-r1-step-check.js`, `exit=1`):
+
+```
+FAIL
+ausente: case 'ArrowLeft': e.preventDefault(); frameStep(-1); break;
+ausente: case 'ArrowRight': e.preventDefault(); frameStep(1); break;
+ausente: case 'Delete':
+        if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); }
+ausente: let clipboard = null;
+ausente: function copySelection() {
+ausente: function pasteClipboard() {
+ausente: e.key.toLowerCase() === 'c' && selectedClip) { e.preventDefault(); copySelection(); return; }
+ausente: e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); return; }
+ausente: { group: 'Edição', keys: ['Ctrl+C'], desc: 'copiar o clipe selecionado' },
+ausente: { group: 'Edição', keys: ['Ctrl+V'], desc: 'colar no playhead, na mesma track' },
+ausente: { group: 'Edição', keys: ['Delete'], desc: 'apagar o clipe selecionado' },
+ausente: { group: 'Reprodução', keys: ['←'], desc: 'voltar 1 frame' },
+ausente: { group: 'Reprodução', keys: ['→'], desc: 'avançar 1 frame' },
+ausente: .sc-head h2{flex:1;
+ausente: <kbd class="bt-kbd">←</kbd>
+ausente: <kbd class="bt-kbd">→</kbd>
+resto do esquema antigo: case ',':
+resto do esquema antigo: case '.':
+resto do esquema antigo: case 'Backspace'
+resto do esquema antigo: .sc-note
+resto do esquema antigo: group: 'Geral'
+resto do esquema antigo: keys: ['Delete', 'Backspace']
+resto do esquema antigo: <kbd class="bt-kbd">,</kbd>
+resto do esquema antigo: <kbd class="bt-kbd">.</kbd>
+SHORTCUTS lista atalho que o handler não registra: ?
+pasteClipboard não encontrada
+```
+
+28 linhas (`FAIL` + 26 itens, com o item do `case 'Delete'` ocupando duas linhas) — bate exatamente com a checagem prévia do Orquestrador (16 `ausente:`, 8 `resto do esquema antigo:`, `SHORTCUTS lista … ?`, `pasteClipboard não encontrada`), sem nenhuma linha de `id ausente no transporte` nem de fonte/duração/compilação.
+
+**Step R2 — folha sem a nota e sem o grupo "Geral" (3 trocas).** `<span class="sc-note">atalhos da TIMELINE valem na etapa 04</span>` removida do `<dialog id="shortcuts-sheet">` (única ocorrência, entre `<h2 id="shortcuts-title">` e `<button id="shortcuts-close">`, agora `:810`). Regra `.sc-note{flex:1; font:400 var(--fs-micro) var(--mono); color:var(--faint); letter-spacing:.04em}` apagada do CSS (única ocorrência). `.sc-head h2{font:400 22px var(--disp); letter-spacing:.14em}` → `.sc-head h2{flex:1; font:400 22px var(--disp); letter-spacing:.14em}` (`:557`).
+
+**Step R3 — `window.SHORTCUTS` (3 trocas).** Bloco único `window.SHORTCUTS = [...]` localizado (`:859` antes da edição). (1) `keys: [',']`/`keys: ['.']` de "voltar/avançar 1 frame" → `keys: ['←']`/`keys: ['→']` (agora `:864-865`). (2) `keys: ['Delete', 'Backspace']` (desc "apagar os clipes selecionados") → `keys: ['Delete']` (desc "apagar o clipe selecionado") seguida de duas linhas novas `Ctrl+C`/`Ctrl+V` antes de `Ctrl+Z`/`Ctrl+⇧+Z` (agora `:873-877`). (3) As duas linhas do grupo `'Geral'` (`?` e `Esc`) removidas, deixando `Ctrl+roda` (`:881`) como último item antes do `];` de fechamento.
+
+**Step R4 — handler de `keydown` da TIMELINE (3 trocas).** Localizado o único `if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redo(); return; }` (linha do redo, antes da edição). (1) Inseridos os dois ramos novos de Ctrl+C/Ctrl+V com o comentário do plano, logo após essa linha e antes do `switch (e.key) {` (agora `:3536-3538`). (2) No `switch`, `case ',':`/`case '.':` → `case 'ArrowLeft':`/`case 'ArrowRight':` (agora `:3544-3545`), mesmo `frameStep(...)`. (3) `case 'Delete': case 'Backspace':` → `case 'Delete':` (agora `:3557`), corpo do `case` (`if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); } break;`) intocado.
+
+**Step R5 — `clipboard`/`copySelection()`/`pasteClipboard()`.** Bloco inserido imediatamente antes do único `function deleteSelection() {` do arquivo (agora começa em `:3228`, `deleteSelection` empurrada para depois do novo bloco), conteúdo idêntico ao do plano (comentário, `let clipboard = null;`, `copySelection()`, `pasteClipboard()` com os três ramos `video`/`broll`/demais tracks). Confirmado antes de escrever que todos os helpers usados (`clipsFor`, `findGapAt`, `segIndexAt`, `snapTime`, `reconcileToDuration`, `clearMultiSelection`, `snapshot`, `renderTracks`, `lockedTracks`, `justAdded`, `MIN_BEAT_DUR`, `stage`, `VIDEO`, `DURATION`, `playhead`, `selectedClip`) já existem no closure/escopo global (checado por grep individual antes da edição).
+
+**Step R6 — `<kbd>` dos botões de frame no template do transporte.** As únicas duas ocorrências de `id="bt-frameback"`/`id="bt-frameforward"` no template (`title=","`/`title="."` e `<kbd class="bt-kbd">,</kbd>`/`<kbd class="bt-kbd">.</kbd>`) trocadas para `title="←"`/`title="→"` e `<kbd class="bt-kbd">←</kbd>`/`<kbd class="bt-kbd">→</kbd>` (agora `:1873-1874`); as chamadas `$q('#bt-frameback').onclick = ...`/`$q('#bt-frameforward').onclick = ...` em `wireTransport()` (`:3423-3424`) não tocadas.
+
+Total: **11 trocas** aplicadas (R2=3, R3=3, R4=3, R5=1 bloco, R6=1 bloco de 2 linhas), como esperado pelo Orquestrador.
+
+**Step R7 — checagem estática, reexecutar.** Saída (`node task5-r1-step-check.js`, mesmo arquivo do Step R1, `exit=1`):
+
+```
+FAIL
+ausente: case 'Delete':
+        if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); }
+```
+
+**Não bate com o esperado `PASS: Task 5 R1 estático`.** Investigado antes de parar, sem adaptar o código-fonte além do que os Steps R2–R6 pediam:
+
+- O item que falha é exatamente o mesmo texto do `case 'Delete':` que o Step R4.3 pede para produzir, e cujo corpo (`if (selectedClip || selectedClipSet.size) { ... }`) o próprio plano diz que "não muda". Não há diferença de conteúdo.
+- Isolado com um teste de bytes (`fs.readFileSync(..., 'utf8')`, `indexOf`/`slice`/`JSON.stringify`): o arquivo `public/index.html` é **100% CRLF** (`\r\n`) — contagem automatizada deu 3591 quebras `\r\n` e **0** quebras `\n` isoladas no arquivo inteiro (consistente com `core.autocrlf=true` e ausência de `.gitattributes`; `docs/plans/ui-premium-timeline.md` também é 100% CRLF, 2510/2510). O needle do Step R1/R7 para esse item, `"case 'Delete':\n        if (...)"`, é uma string JS com um único `\n` de escape — que **sempre** vale LF puro (0x0A) na avaliação do Node, independente de como o `.md` do plano está salvo em disco — e por isso não pode casar com o `\r\n` real do arquivo.
+- Confirmação direta: `src.includes(needle)` → `false`; `src.replace(/\r\n/g, '\n').includes(needle)` (mesmo needle, com o arquivo normalizado para LF) → `true`. Ou seja, o conteúdo é byte-a-byte idêntico ao esperado pelo Step R4.3, exceto pelo separador de linha `\r` vs nenhum `\r` naquele único ponto — uma diferença de terminador de linha do ambiente CRLF deste repositório, não de conteúdo ou de lógica.
+- A edição foi feita com a ferramenta de edição de texto do executor (não heredoc, não `sed`), que preserva o CRLF já existente nas duas linhas envolvidas (a linha `case 'Delete': case 'Backspace':` original e a linha `if (...)` seguinte, ambas já CRLF antes desta revisão); o resultado é um `case 'Delete':` seguido de `\r\n` como todo o resto do arquivo — consistente e sem mistura de terminadores. Não alterei manualmente esse separador para forçar o `PASS`, porque isso não estava pedido por nenhum Step R2–R6 e seria adaptar o conteúdo além do que o plano especifica.
+
+**Conclusão do desvio:** Step R7 deu `FAIL` com exatamente 1 item (não `PASS: Task 5 R1 estático`), por um artefato de terminador de linha (CRLF vs. LF) no needle multilinha do próprio script de checagem do Step R1/R7 face a um repositório 100% CRLF — não por um erro nas 11 trocas dos Steps R2–R6, cujo conteúdo textual foi verificado byte-a-byte correto (inclusive contra o mesmo needle, após normalizar `\r\n`→`\n`). Parando aqui conforme instruído, sem tentar mais nada; devolvendo ao Orquestrador para decidir (ex.: ajustar o needle do script para tolerar `\r\n`, ou aceitar o resultado com essa ressalva).
+
+**Verificações adicionais (evidência para o Orquestrador/Validador):**
+- `git status --short` → só `docs/plans/ui-premium-timeline.md`, `docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md` (ambos já modificados pelo Orquestrador antes desta execução, não tocados aqui além desta seção `## Status`) e `public/index.html`.
+- `git diff --stat -- public/index.html` → `300 +++++++++++++++++++++++++++++++++++++++++++++---------` · **254 inserções, 46 deleções** (acumulado desde `HEAD`, incluindo a Task 5 original não commitada + esta revisão); `git diff -- public/index.html | grep -c '^@@'` → **25** hunks (acumulado).
+- Os 21 `id="bt-…"` do transporte, contados individualmente com `grep -o 'id="<id>"' public/index.html | wc -l` → **1 cada**, nenhum duplicado, nenhum ausente. `<kbd class="bt-kbd">` → **16** (contagem inalterada — só o conteúdo textual de 2 delas mudou, de `,`/`.` para `←`/`→`). `.bt-tgroup` → **5**.
+- `.sc-note` → 0 ocorrências residuais (removida a linha HTML e a regra CSS). `case ',':`/`case '.':`/`case 'Backspace'`/`group: 'Geral'`/`keys: ['Delete', 'Backspace']`/`<kbd class="bt-kbd">,</kbd>`/`<kbd class="bt-kbd">.</kbd>` → 0 ocorrências residuais (conferido pelo próprio Step R1/R7, seção "resto do esquema antigo" ausente da saída do R7).
+- Nenhuma outra mudança em lógica protegida: não toquei `wireTracks`, `saveBeats`, `doConform`, handlers de arraste, os outros `case`s do `switch` (só os 3 previstos: `ArrowLeft`, `ArrowRight`, `Delete`), `seekTo`/`glidePlayhead`, ids existentes ou `localStorage`. `pasteClipboard` usa só os helpers já existentes no closure (nenhum novo helper criado), conferido antes de escrever o bloco.
+
+**Arquivos tocados:** `public/index.html` (modificado, Steps R2–R6). `docs/plans/ui-premium-timeline.md` (só esta seção `## Status`, Step R8). Nenhum outro arquivo tocado — `public/dev/ui-probe.js`, `server.js`, `remotion/`, `public/vendor/`, `styles/` e a spec não foram abertos para edição nesta execução.
+
+**Desvios:** um único desvio, de ambiente/ferramenta, descrito acima em detalhe — Step R7 deu `FAIL` (1 item) em vez de `PASS: Task 5 R1 estático`, por diferença de terminador de linha (`\r\n` vs `\n`) entre o arquivo (100% CRLF) e o needle multilinha do próprio script de checagem, não por conteúdo incorreto. Nenhum trecho "antes" citado pelos Steps R2–R6 precisou de adaptação — todos foram encontrados exatamente como citados, cada um em ocorrência única, antes de cada edição.
+
+**Pendente / próximos passos (fora do escopo desta execução):** Step R9 (`validator`), Step R10 (Orquestrador roda o probe `E3b` nas duas rotas), Step R11 (checklist manual do usuário), Step R12 (`git-workflow` `prepare`/`publish`, branch `feat/ui-premium-e3b`) — todos ainda pendentes da Task 5 original também, já que esta revisão antecede o commit.

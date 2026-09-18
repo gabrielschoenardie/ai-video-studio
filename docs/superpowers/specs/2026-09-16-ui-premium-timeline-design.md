@@ -5,6 +5,7 @@
 **Arquivos-alvo:** `public/index.html` (tokens, tipografia, contraste, largura da coluna de rótulos, controles de track, playhead, transporte, folha de atalhos, microinterações, loader do probe), `public/dev/ui-probe.js` (novo), `server.js` (rota estática `GET /dev/*.js`).
 **Base:** `main` em `3f47ec9`. Todo número de linha citado aqui se refere a esse commit.
 **Revisão R1 (2026-09-16), decisão do usuário:** **densidade única, compacta** (`--tap` 30px, `--tap-sm` 24px, `--gap-ctl` 2px, `--bt-labelw` 204px). O toggle `compact`/`comfortable` (G1) chegou a ser implementado e medido no E2 — os dois modos passaram no probe e no checklist —, mas foi removido antes do commit. Sem `data-density`, sem `studio.density`, sem evento `studio:density`, sem check `density` no probe. As seções abaixo já refletem a revisão; o plano (`docs/plans/ui-premium-timeline.md`, Task 3, Revisão R1) guarda o registro do que foi feito e desfeito.
+**Revisão R2 (2026-09-17), decisão do usuário** (no plano: "Revisão R1 da Task 5"): **atalhos no padrão do Premiere**. `←`/`→` andam frame a frame no lugar de `,`/`.`; só `Delete` apaga (sem `Backspace`), e a descrição diz que apaga clipe, não track; a folha perde a nota do cabeçalho e o grupo "Geral" (`?` e Esc continuam funcionando, fora da lista); e entram **Ctrl+C / Ctrl+V** copiando e colando clipe na track de origem, no playhead. As seções abaixo já refletem a revisão.
 
 ---
 
@@ -88,7 +89,7 @@ Registrada aqui porque os sub-projetos B, C e D vão precisar dela.
 | `aria-label` dos controles de track | Fixo; estado em `aria-pressed` (diverge do mockup, que trocava o label) |
 | Área de pega das handles | 4px **para dentro** do clipe |
 | Flash do split | 2px, `--dur-3` (não 1px / `--dur-1`, invisível) |
-| Folha de atalhos | `<dialog>` nativo; `SHORTCUTS` só com atalhos que o handler registra |
+| Folha de atalhos | `<dialog>` nativo; `SHORTCUTS` só com atalhos que o handler registra (exceto `?` e Esc, fora da lista desde a Revisão R2) |
 
 ---
 
@@ -204,17 +205,19 @@ Regra: **nenhum pixel muda.**
    | Zoom | `#bt-zoomout`, `#bt-zoomlevel`, `#bt-zoomin`, `#bt-zoomfit` |
    | Projeto (`margin-left:auto`) | `#bt-save`, `#bt-conform` |
 
-   - Rótulos: texto visível sem a letra (`◀◀ J` → `◀◀`, `L ▶▶` → `▶▶`), mais `<kbd class="bt-kbd">` de `--fs-micro`: Espaço, J, K, L, `,`, `.`, I, O, S, M, R, `Ctrl+Z`, `Ctrl+⇧+Z`, `-`, `+`, `\`.
+   - Rótulos: texto visível sem a letra (`◀◀ J` → `◀◀`, `L ▶▶` → `▶▶`), mais `<kbd class="bt-kbd">` de `--fs-micro`: Espaço, J, K, L, `←`, `→`, I, O, S, M, R, `Ctrl+Z`, `Ctrl+⇧+Z`, `-`, `+`, `\` (as setas eram `,`/`.` antes da Revisão R2).
    - `.bt-kbd{position:absolute; bottom:calc(100% + 4px); opacity:0}`, visível em `:hover`/`:focus-visible` — sem deslocar layout.
    - `#bt-play` passa a `<span class="lbl">▶</span><kbd class="bt-kbd">Espaço</kbd>`; os quatro `textContent` de `:3149, 3150, 3156, 3157` passam a escrever em `#bt-play .lbl`.
 
 2. **Folha de atalhos (O3).**
-   - `window.SHORTCUTS` no escopo global do script, `{keys:[...], desc, group}`, exatamente: **Reprodução** Espaço, J, K, L, `,`, `.`, Home, End · **Edição** I, O, S, M, R, Delete/Backspace, Ctrl+Z, Ctrl+⇧+Z · **Zoom** `+`/`=`, `-`, `\`, Ctrl+roda · **Geral** `?`, Esc.
-   - `<dialog id="shortcuts-sheet" aria-labelledby="shortcuts-title">`, renderizado a partir de `SHORTCUTS` na primeira abertura; cabeçalho informa "atalhos da TIMELINE valem na etapa 04". Abre com `showModal()`; guarda `document.activeElement` ao abrir e o restaura no evento `close`.
+   - `window.SHORTCUTS` no escopo global do script, `{keys:[...], desc, group}`, exatamente: **Reprodução** Espaço, J, K, L, `←`, `→`, Home, End · **Edição** I, O, S, M, R, Delete, Ctrl+C, Ctrl+V, Ctrl+Z, Ctrl+⇧+Z · **Zoom** `+`/`=`, `-`, `\`, Ctrl+roda. `?` e Esc funcionam mas ficam fora da lista (Revisão R2).
+   - `<dialog id="shortcuts-sheet" aria-labelledby="shortcuts-title">`, renderizado a partir de `SHORTCUTS` na primeira abertura; cabeçalho só com o título (a nota "atalhos da TIMELINE valem na etapa 04" saiu na Revisão R2, e o `flex:1` passou para o `h2`). Abre com `showModal()`; guarda `document.activeElement` ao abrir e o restaura no evento `close`.
    - Gatilhos: listener global de `keydown` para `e.key === '?'`, ignorando alvo `INPUT`/`TEXTAREA`/`SELECT`/`isContentEditable` e dialog já aberto; botão `? ATALHOS` no header, antes de `#port`.
-   - Única alteração no handler da TIMELINE (`:3220`): `if (document.querySelector('dialog[open]')) return;` no topo.
+   - Alterações no handler da TIMELINE (`:3220`): `if (document.querySelector('dialog[open]')) return;` no topo; e, pela Revisão R2, `case 'ArrowLeft'`/`case 'ArrowRight'` no lugar de `case ','`/`case '.'`, `case 'Delete'` sem `case 'Backspace'`, e dois ramos de Ctrl+C/Ctrl+V antes do `switch`.
 
-3. **Microinterações (Y1, só timeline).**
+3. **Copiar e colar clipes (Revisão R2).** `Ctrl+C` guarda uma cópia profunda do clipe selecionado em `clipboard = {track, clip}`; `Ctrl+V` cola no playhead **na track de origem**, nunca entre tracks: B-ROLL procura espaço livre com `findGapAt` (avisa pelo `stage()` se não houver), TRILHA encurta a cópia até o fim da timeline, VÍDEO entra como segmento depois do que está sob o playhead e a timeline cresce (`reconcileToDuration`). Colar em track travada avisa e não escreve. Os dois caminhos passam por `snapshot()`, então entram no undo/redo, e marcam `justAdded` para a animação de entrada. As teclas só são sequestradas quando há clipe selecionado (Ctrl+C) ou algo copiado (Ctrl+V), para não atrapalhar o copiar/colar do navegador.
+
+4. **Microinterações (Y1, só timeline).**
    - **Clipe entrando:** `addClipAt(track, asset)` (`:1913`) e `duplicateClip` (`:2017`), os dois caminhos que fazem um clipe surgir na timeline, gravam `justAdded = {track, idx}`; o próximo `renderTracks()` aplica `.bt-enter` a esse clipe e zera a marca. `@keyframes bt-clip-in{from{opacity:0; transform:scale(.96)}}`, `var(--dur-2) var(--ease-out)`. A marca de uso único é necessária porque `renderTracks` reconstrói por `innerHTML`.
    - **Split:** `splitBeatAt` (`:1395`) e `splitClipAt` (`:1987`) gravam `justSplit = {track, idx}` da peça da direita; `.bt-split` anima `box-shadow: inset 2px 0 0 var(--go)` → transparente em `var(--dur-3) linear`.
    - **Seek:** `seekTo(t, opts)` aceita `{animate:true}`, usado **só** por `onRulerMouseDown` (`:3068`), Home/End (`:3238-3239`) e o `onclick` de `.bt-legend-row` (`:1888`). Liga `.bt-seek` (`transition:left var(--dur-1) var(--ease-in-out)`) em `#bt-playhead`, removida em `transitionend`. Chamadas sem `opts` (play, scrub, J/K/L, frame a frame) seguem sem transição.
@@ -276,7 +279,7 @@ Regra: **nenhum pixel muda.**
 | E1 | Todos os checks visuais **idênticos ao baseline**; `labelw-sync` PASS; `motion-literals` = 0; `console-errors` = 0 | Nenhum `192` literal no closure da TIMELINE; tokens declarados; nenhuma duração literal fora dos isentos |
 | E2 | `text-floor` = 0 e isentos com o tamanho do baseline; `contrast` ≥ 4,5 nos 6 pares; `tap-targets` 30/24; `label-truncate` e `labelw-sync` PASS | Nenhum px < 11 fora dos seletores isentos (CSS e JS); `--fs-*` em ≥ 90% das declarações de 11 a 15px; nenhum resto de densidade (`data-density`, `studio.density`, `#density-toggle`, `studio:density`) |
 | E3a | `tctl-a11y` completo; `playhead-tc` PASS; `label-truncate` PASS | Nenhum `.bt-tctl` com texto no markup; `applyTrackVisibility` sincroniza `aria-pressed` e `<use>` |
-| E3b | `transport-overflow` PASS; `transport-ids` PASS; `shortcut-sheet` PASS | `case`s do `switch`, os dois ramos Ctrl+Z e o Ctrl+roda ↔ `SHORTCUTS` 1:1; guard do dialog presente; `motion-literals` = 0 |
+| E3b | `transport-overflow` PASS; `transport-ids` PASS; `shortcut-sheet` PASS (linhas = `SHORTCUTS.length`) | `case`s do `switch`, os ramos Ctrl+Z, Ctrl+C, Ctrl+V e o Ctrl+roda ↔ `SHORTCUTS` 1:1 (com `?` e Esc isentos); `pasteClipboard` com `lockedTracks`, `snapshot()` e `justAdded`; guard do dialog presente; `motion-literals` = 0 |
 
 Em todo estágio: `console-errors` = 0; checklist manual sem regressão.
 

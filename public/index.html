@@ -329,7 +329,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 
 /* ---------------- BEATS timeline ---------------- */
 #bt-root{display:flex; flex-direction:column; gap:14px; margin-top:8px}
-.bt-transport{display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+.bt-transport{display:flex; align-items:center; gap:10px 18px; flex-wrap:wrap;
   background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
   padding:9px 12px}
 /* all:unset deixa o botão em content-box com borda de 1px: a altura renderizada
@@ -340,11 +340,20 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   color:var(--dim); border:1px solid var(--line); border-radius:6px; text-align:center}
 .bt-tbtn:hover:not([disabled]){color:var(--go); border-color:rgba(251,191,36,.5)}
 .bt-tbtn[disabled]{opacity:.3; cursor:default}
-.bt-tsep{width:1px; height:18px; background:var(--line)}
+/* Atalho no próprio botão: flutua acima só em hover/foco, sem mexer no layout. */
+.bt-tbtn{position:relative}
+.bt-kbd{position:absolute; left:50%; bottom:calc(100% + 4px); transform:translateX(-50%); z-index:8;
+  font:500 var(--fs-micro)/1.4 var(--mono); color:var(--ink); background:var(--panel2);
+  border:1px solid var(--line); border-radius:4px; padding:0 4px; white-space:nowrap;
+  opacity:0; pointer-events:none; transition:opacity var(--dur-1)}
+.bt-tbtn:hover .bt-kbd,.bt-tbtn:focus-visible .bt-kbd{opacity:1}
+/* Transporte em grupos por função. flex-wrap nos dois níveis: numa janela estreita
+   um grupo desce de linha inteiro — nada é cortado nem escondido atrás de menu. */
+.bt-tgroup{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.bt-tgroup-end{margin-left:auto}
 .bt-time{font:400 var(--fs-body) var(--mono); color:var(--ink)}
 .bt-zoomlevel{font:400 var(--fs-micro) var(--mono); color:var(--faint); min-width:38px; text-align:center}
 .bt-time .d{color:var(--faint); margin:0 3px}
-.bt-spacer{flex:1}
 .bt-toggle{all:unset; cursor:pointer; font:500 var(--fs-micro) var(--sans); color:var(--dim);
   border:1px solid var(--line); border-radius:6px; padding:5px 10px}
 .bt-toggle.on{color:var(--go); border-color:rgba(251,191,36,.5); background:var(--go-dim)}
@@ -536,6 +545,29 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   justify-content:center; text-align:center; padding:16px; font:400 var(--fs-sm) var(--sans);
   color:var(--warn); background:rgba(7,7,15,.92); line-height:1.5}
 .bt-preview-error[hidden]{display:none}
+
+/* ---------------- folha de atalhos (?) */
+#shortcuts-sheet{margin:auto; width:min(680px, calc(100vw - 48px)); max-height:80vh; overflow:auto; padding:22px;
+  color:var(--ink); background:linear-gradient(180deg, rgba(28,29,64,.97), rgba(12,13,30,.98));
+  border:1px solid rgba(251,191,36,.35); border-radius:16px; box-shadow:0 40px 80px -30px rgba(0,0,0,.9)}
+#shortcuts-sheet::backdrop{background:rgba(5,5,12,.72); backdrop-filter:blur(6px)}
+#shortcuts-sheet[open]{animation:sc-in var(--dur-2) var(--ease-out)}
+@keyframes sc-in{from{opacity:0; transform:scale(.96)}}
+.sc-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px}
+.sc-head h2{flex:1; font:400 22px var(--disp); letter-spacing:.14em}
+.sc-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px}
+.sc-group h3{font:600 var(--fs-micro) var(--sans); letter-spacing:.18em; color:var(--go); margin-bottom:4px}
+.sc-row{display:flex; align-items:center; gap:6px; margin-top:6px}
+.sc-row kbd{font:500 var(--fs-micro) var(--mono); color:var(--ink); border:1px solid var(--line); border-radius:6px;
+  padding:2px 7px; min-width:30px; text-align:center; background:rgba(10,11,26,.8)}
+.sc-row span{margin-left:4px; font:400 var(--fs-sm) var(--sans); color:var(--dim)}
+
+/* ---------------- microinterações da TIMELINE (marcas de uso único no JS) */
+@keyframes bt-clip-in{from{opacity:0; transform:scale(.96)}}
+.bt-clip.bt-enter{transform-origin:left center; animation:bt-clip-in var(--dur-2) var(--ease-out)}
+@keyframes bt-split-flash{from{box-shadow:inset 2px 0 0 var(--go)}to{box-shadow:inset 2px 0 0 transparent}}
+.bt-split{animation:bt-split-flash var(--dur-3) linear}
+.bt-playhead.bt-seek{transition:left var(--dur-1) var(--ease-in-out)}
 </style>
 </head>
 <body>
@@ -559,6 +591,7 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   <h1>AI <b>VIDEO</b> STUDIO</h1>
   <span class="rec"><i></i>LOCAL&nbsp;·&nbsp;PRIVATE&nbsp;·&nbsp;$0/USE</span>
   <span class="spacer"></span>
+  <button type="button" id="shortcuts-btn" class="hdr-btn" title="Folha de atalhos (?)">? ATALHOS</button>
   <span class="tag" id="port">…</span>
 </header>
 
@@ -772,6 +805,14 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
   <div class="blk" id="blk-console"><h3>CONSOLE</h3><div id="console"></div></div>
 </aside>
 
+<dialog id="shortcuts-sheet" aria-labelledby="shortcuts-title">
+  <div class="sc-head">
+    <h2 id="shortcuts-title">ATALHOS</h2>
+    <button type="button" class="hdr-btn" id="shortcuts-close">FECHAR · ESC</button>
+  </div>
+  <div class="sc-grid" id="shortcuts-grid"></div>
+</dialog>
+
 <script>
 'use strict';
 const $ = s => document.querySelector(s);
@@ -810,6 +851,87 @@ $$('nav button').forEach(b => b.onclick = () => goStep(b.dataset.step));
     apply(collapsed);
     try { localStorage.setItem('studio-side-collapsed', collapsed ? '1' : '0'); } catch {}
   };
+})();
+
+/* ---------------- folha de atalhos (?)
+   SHORTCUTS lista exatamente o que o handler de teclado da TIMELINE registra,
+   mais `?` e Esc. Ao mexer no `switch` de keydown da TIMELINE, mexer aqui. */
+window.SHORTCUTS = [
+  { group: 'Reprodução', keys: ['Espaço'], desc: 'tocar / pausar' },
+  { group: 'Reprodução', keys: ['J'], desc: 'voltar (repetir acelera)' },
+  { group: 'Reprodução', keys: ['K'], desc: 'parar' },
+  { group: 'Reprodução', keys: ['L'], desc: 'avançar (repetir acelera)' },
+  { group: 'Reprodução', keys: ['←'], desc: 'voltar 1 frame' },
+  { group: 'Reprodução', keys: ['→'], desc: 'avançar 1 frame' },
+  { group: 'Reprodução', keys: ['Home'], desc: 'ir para o início' },
+  { group: 'Reprodução', keys: ['End'], desc: 'ir para o fim' },
+  { group: 'Edição', keys: ['I'], desc: 'marcar entrada' },
+  { group: 'Edição', keys: ['O'], desc: 'marcar saída' },
+  { group: 'Edição', keys: ['S'], desc: 'dividir o beat no playhead' },
+  { group: 'Edição', keys: ['M'], desc: 'unir o beat selecionado ao próximo' },
+  { group: 'Edição', keys: ['R'], desc: 'renomear o beat selecionado' },
+  { group: 'Edição', keys: ['Delete'], desc: 'apagar o clipe selecionado' },
+  { group: 'Edição', keys: ['Ctrl+C'], desc: 'copiar o clipe selecionado' },
+  { group: 'Edição', keys: ['Ctrl+V'], desc: 'colar no playhead, na mesma track' },
+  { group: 'Edição', keys: ['Ctrl+Z'], desc: 'desfazer' },
+  { group: 'Edição', keys: ['Ctrl+⇧+Z'], desc: 'refazer' },
+  { group: 'Zoom', keys: ['+', '='], desc: 'aproximar' },
+  { group: 'Zoom', keys: ['-'], desc: 'afastar' },
+  { group: 'Zoom', keys: ['\\'], desc: 'caber na janela' },
+  { group: 'Zoom', keys: ['Ctrl+roda'], desc: 'zoom no ponteiro do mouse' },
+];
+(() => {
+  const dlg = $('#shortcuts-sheet');
+  if (!dlg || typeof dlg.showModal !== 'function') return;
+  let opener = null, rendered = false;
+  // DOM em vez de innerHTML: as teclas incluem '\' e não precisam de escape
+  function render() {
+    const grid = $('#shortcuts-grid');
+    const groups = new Map();
+    for (const s of window.SHORTCUTS) {
+      if (!groups.has(s.group)) {
+        const g = document.createElement('div');
+        g.className = 'sc-group';
+        const h = document.createElement('h3');
+        h.textContent = s.group.toUpperCase();
+        g.appendChild(h);
+        groups.set(s.group, g);
+        grid.appendChild(g);
+      }
+      const row = document.createElement('div');
+      row.className = 'sc-row';
+      for (const k of s.keys) {
+        const kbd = document.createElement('kbd');
+        kbd.textContent = k;
+        row.appendChild(kbd);
+      }
+      const d = document.createElement('span');
+      d.textContent = s.desc;
+      row.appendChild(d);
+      groups.get(s.group).appendChild(row);
+    }
+    rendered = true;
+  }
+  function open() {
+    if (dlg.open) return;
+    if (!rendered) render();
+    opener = document.activeElement;
+    dlg.showModal();
+  }
+  // o foco volta a quem abriu, sem depender de o navegador fazer isso sozinho
+  dlg.addEventListener('close', () => {
+    if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+    opener = null;
+  });
+  $('#shortcuts-close').onclick = () => dlg.close();
+  $('#shortcuts-btn').onclick = open;
+  document.addEventListener('keydown', e => {
+    if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    e.preventDefault();
+    open();
+  });
 })();
 
 /* next/prev footers on pipeline steps — guides first-time users through the flow */
@@ -1189,6 +1311,16 @@ window.sendToClipper = (p) => {
   let selected = -1;
   let selectedClip = null; // {track:'broll'|'music'|'video', index} | null — âncora/único item quando não há multi-seleção
   let selectedClipSet = new Set(); // multi-seleção de clipes B-ROLL/TRILHA: chaves 'track:index'
+  // Marcas de uso único para microinteração: o próximo renderTracks() anima só o
+  // item marcado e as zera. renderTracks reconstrói por innerHTML — sem a marca,
+  // a animação repetiria a cada render (a cada frame de arraste).
+  let justAdded = null, justSplit = null; // {track: 'beats'|'broll'|'music'|'video', idx}
+  function fxClass(track, i) {
+    let c = '';
+    if (justAdded && justAdded.track === track && justAdded.idx === i) c += ' bt-enter';
+    if (justSplit && justSplit.track === track && justSplit.idx === i) c += ' bt-split';
+    return c;
+  }
   function clipKey(track, i) { return track + ':' + i; }
   let hist = [], histPos = -1;
   let hiddenTracks = {}, lockedTracks = {};
@@ -1479,6 +1611,7 @@ window.sendToClipper = (p) => {
       { label: b.label, dur: d1, color: b.color },
       { label: b.label, dur: d2, color: colorFor(idx + 1) });
     selected = idx;
+    justSplit = { track: 'beats', idx: idx + 1 };
     snapshot(); renderTracks();
   }
   function mergeWithNext(i) {
@@ -1728,34 +1861,37 @@ window.sendToClipper = (p) => {
     const r = $('#bt-root');
     r.innerHTML = `
       <div class="bt-transport">
-        <button class="bt-tbtn" id="bt-play" title="Espaço">▶</button>
-        <div class="bt-tsep"></div>
-        <button class="bt-tbtn" id="bt-j" title="J">◀◀ J</button>
-        <button class="bt-tbtn" id="bt-k" title="K">❚❚ K</button>
-        <button class="bt-tbtn" id="bt-l" title="L">L ▶▶</button>
-        <div class="bt-tsep"></div>
-        <button class="bt-tbtn" id="bt-frameback" title=",">-1f</button>
-        <button class="bt-tbtn" id="bt-frameforward" title=".">+1f</button>
-        <div class="bt-tsep"></div>
-        <button class="bt-tbtn" id="bt-markin" title="I">IN</button>
-        <button class="bt-tbtn" id="bt-markout" title="O">OUT</button>
-        <div class="bt-tsep"></div>
-        <button class="bt-tbtn" id="bt-split" title="S">SPLIT</button>
-        <button class="bt-tbtn" id="bt-merge" title="M">MERGE</button>
-        <button class="bt-tbtn" id="bt-rename" title="R">RENAME</button>
-        <div class="bt-tsep"></div>
-        <button class="bt-tbtn" id="bt-undo" title="Ctrl+Z">UNDO</button>
-        <button class="bt-tbtn" id="bt-redo" title="Ctrl+Shift+Z">REDO</button>
-        <div class="bt-tsep"></div>
-        <button class="bt-tbtn" id="bt-zoomout" title="-">−</button>
-        <span class="bt-zoomlevel" id="bt-zoomlevel">100%</span>
-        <button class="bt-tbtn" id="bt-zoomin" title="+">+</button>
-        <button class="bt-tbtn" id="bt-zoomfit" title="\">FIT</button>
-        <div class="bt-time" id="bt-time">00:00.0<span class="d">/</span>00:00.0</div>
-        <span class="bt-rate" id="bt-rate" style="display:none"></span>
-        <div class="bt-spacer"></div>
-        <button class="bt-toggle" id="bt-save">SALVAR BEATS</button>
-        <button class="bt-toggle" id="bt-conform" title="Achata a timeline (cortes de V1 + B-ROLL + TRILHA) num mezanino e manda para o EXPORT">CONFORMAR → EXPORT</button>
+        <div class="bt-tgroup" role="group" aria-label="Reprodução">
+          <button class="bt-tbtn" id="bt-play" title="Espaço"><span class="lbl">▶</span><kbd class="bt-kbd">Espaço</kbd></button>
+          <div class="bt-time" id="bt-time">00:00.0<span class="d">/</span>00:00.0</div>
+          <span class="bt-rate" id="bt-rate" style="display:none"></span>
+        </div>
+        <div class="bt-tgroup" role="group" aria-label="Navegação">
+          <button class="bt-tbtn" id="bt-j" title="J">◀◀<kbd class="bt-kbd">J</kbd></button>
+          <button class="bt-tbtn" id="bt-k" title="K">❚❚<kbd class="bt-kbd">K</kbd></button>
+          <button class="bt-tbtn" id="bt-l" title="L">▶▶<kbd class="bt-kbd">L</kbd></button>
+          <button class="bt-tbtn" id="bt-frameback" title="←">-1f<kbd class="bt-kbd">←</kbd></button>
+          <button class="bt-tbtn" id="bt-frameforward" title="→">+1f<kbd class="bt-kbd">→</kbd></button>
+          <button class="bt-tbtn" id="bt-markin" title="I">IN<kbd class="bt-kbd">I</kbd></button>
+          <button class="bt-tbtn" id="bt-markout" title="O">OUT<kbd class="bt-kbd">O</kbd></button>
+        </div>
+        <div class="bt-tgroup" role="group" aria-label="Edição">
+          <button class="bt-tbtn" id="bt-split" title="S">SPLIT<kbd class="bt-kbd">S</kbd></button>
+          <button class="bt-tbtn" id="bt-merge" title="M">MERGE<kbd class="bt-kbd">M</kbd></button>
+          <button class="bt-tbtn" id="bt-rename" title="R">RENAME<kbd class="bt-kbd">R</kbd></button>
+          <button class="bt-tbtn" id="bt-undo" title="Ctrl+Z">UNDO<kbd class="bt-kbd">Ctrl+Z</kbd></button>
+          <button class="bt-tbtn" id="bt-redo" title="Ctrl+Shift+Z">REDO<kbd class="bt-kbd">Ctrl+⇧+Z</kbd></button>
+        </div>
+        <div class="bt-tgroup" role="group" aria-label="Zoom">
+          <button class="bt-tbtn" id="bt-zoomout" title="-">−<kbd class="bt-kbd">-</kbd></button>
+          <span class="bt-zoomlevel" id="bt-zoomlevel">100%</span>
+          <button class="bt-tbtn" id="bt-zoomin" title="+">+<kbd class="bt-kbd">+</kbd></button>
+          <button class="bt-tbtn" id="bt-zoomfit" title="\\">FIT<kbd class="bt-kbd">\\</kbd></button>
+        </div>
+        <div class="bt-tgroup bt-tgroup-end" role="group" aria-label="Projeto">
+          <button class="bt-toggle" id="bt-save">SALVAR BEATS</button>
+          <button class="bt-toggle" id="bt-conform" title="Achata a timeline (cortes de V1 + B-ROLL + TRILHA) num mezanino e manda para o EXPORT">CONFORMAR → EXPORT</button>
+        </div>
       </div>
       <div class="bt-preview">
         <div class="bt-video-wrap">${USE_RPLAYER
@@ -1908,7 +2044,7 @@ window.sendToClipper = (p) => {
     BEATS.forEach((b, i) => {
       const s = beatStart(i);
       const el = document.createElement('div');
-      el.className = 'bt-beat' + (i === selected ? ' selected' : '');
+      el.className = 'bt-beat' + (i === selected ? ' selected' : '') + fxClass('beats', i);
       el.style.left = timeToX(s) + 'px';
       el.style.width = Math.max(4, timeToX(b.dur)) + 'px';
       el.style.background = b.color;
@@ -1973,7 +2109,7 @@ window.sendToClipper = (p) => {
         </div>`;
     }).join('');
     host.querySelectorAll('.bt-legend-row').forEach(row => {
-      row.onclick = () => { selected = +row.dataset.idx; seekTo(beatStart(selected)); renderTracks(); };
+      row.onclick = () => { selected = +row.dataset.idx; seekTo(beatStart(selected), { animate: true }); renderTracks(); };
     });
   }
 
@@ -2014,6 +2150,7 @@ window.sendToClipper = (p) => {
       : { path: asset.path, name: asset.name, start, dur, volume: 1, srcIn: 0 };
     clipsFor(track).push(clip);
     selectedClip = { track, index: clipsFor(track).length - 1 };
+    justAdded = { track, idx: clipsFor(track).length - 1 };
     snapshot();
     renderTracks();
   }
@@ -2039,7 +2176,7 @@ window.sendToClipper = (p) => {
         ensureMiniWave(c.path);
         if (miniWaveCache.get(c.path) instanceof Float32Array) media = `<canvas class="bt-clip-wave" data-idx="${i}"></canvas>`;
       }
-      return `<div class="bt-clip ${track}${sel}" data-track="${track}" data-idx="${i}"
+      return `<div class="bt-clip ${track}${sel}${fxClass(track, i)}" data-track="${track}" data-idx="${i}"
           style="left:${timeToX(c.start)}px;width:${Math.max(4, timeToX(c.dur))}px">
           ${media}
           <div class="bt-handle left" data-track="${track}" data-idx="${i}" data-side="left"></div>
@@ -2082,6 +2219,7 @@ window.sendToClipper = (p) => {
     arr.splice(i, 1, Object.assign({}, c, { dur: d1 }), second);
     clearMultiSelection();
     selectedClip = { track, index: i + 1 };
+    justSplit = { track, idx: i + 1 };
     if (track === 'video') recomputeDuration();
     snapshot();
     renderTracks();
@@ -2109,6 +2247,7 @@ window.sendToClipper = (p) => {
     if (track === 'video') {
       VIDEO.splice(i + 1, 0, Object.assign({}, c));
       selectedClip = { track, index: i + 1 };
+      justAdded = { track, idx: i + 1 };
       clearMultiSelection();
       reconcileToDuration();   // a timeline cresceu — beats esticam pela cauda
       snapshot();
@@ -2118,6 +2257,7 @@ window.sendToClipper = (p) => {
     clipsFor(track).push(Object.assign({}, c, { start: start }));
     clearMultiSelection();
     selectedClip = { track, index: clipsFor(track).length - 1 };
+    justAdded = { track, idx: clipsFor(track).length - 1 };
     snapshot();
     renderTracks();
     return true;
@@ -2143,7 +2283,7 @@ window.sendToClipper = (p) => {
         || selectedClipSet.has(clipKey('video', i)) ? ' selected' : '';
       // o rótulo mostra de ONDE na fonte o segmento vem: é a única pista visual
       // de que um corte aconteceu, já que a mídia é sempre a mesma
-      return `<div class="bt-clip video${sel}" data-track="video" data-idx="${i}"
+      return `<div class="bt-clip video${sel}${fxClass('video', i)}" data-track="video" data-idx="${i}"
           style="left:${timeToX(segStart(i))}px;width:${Math.max(4, timeToX(s.dur))}px">
           ${media}
           <div class="bt-handle left" data-track="video" data-idx="${i}" data-side="left"></div>
@@ -2399,6 +2539,7 @@ window.sendToClipper = (p) => {
     // com ripple, trim, add/remove de clipe, undo/redo, hide/lock) já passa por
     // aqui, então o preview nunca fica atrasado em relação à timeline
     syncPlayer();
+    justAdded = null; justSplit = null;
   }
 
   /* ---------------- transport / shuttle ---------------- */
@@ -2467,12 +2608,24 @@ window.sendToClipper = (p) => {
     activeSeg = segIndexAt(playhead);
     renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); updatePreviewOverlay();
   }
+  /* Seek discreto (clique na régua, Home/End, linha da legenda) desliza em vez de
+     saltar. É opt-in: play, scrub, J/K/L e frame a frame chamam seekTo sem opts e
+     não ganham transição — senão o playhead atrasaria em relação ao vídeo. */
+  function glidePlayhead() {
+    const ph = $q('#bt-playhead');
+    if (!ph) return;
+    ph.classList.add('bt-seek');
+    const done = () => { ph.classList.remove('bt-seek'); ph.removeEventListener('transitionend', done); };
+    ph.addEventListener('transitionend', done);
+    setTimeout(done, 250); // reduced-motion zera a transição e o transitionend pode não chegar
+  }
   /* Único caminho de escrita do playhead vindo da UI. `t` é sempre tempo de
      TIMELINE. No canvas o <video> recebe o tempo de FONTE correspondente; no
      Player basta o tempo de timeline, porque o <Series> já faz esse mapa. */
-  function seekTo(t) {
+  function seekTo(t, opts) {
     if (!engineReady()) return;
     t = Math.max(0, Math.min(DURATION, t));
+    if (opts && opts.animate) glidePlayhead();
     if (USE_RPLAYER) {
       echoGuard = true;
       PLAYER.seek(t);
@@ -3067,6 +3220,56 @@ window.sendToClipper = (p) => {
     if (selectedClipSet.has(key)) selectedClipSet.delete(key); else selectedClipSet.add(key);
     selectedClip = selectedClipSet.size ? { track, index: i } : null;
   }
+  /* ---------------- copiar / colar (Ctrl+C / Ctrl+V) ----------------
+     Guarda uma cópia profunda do clipe selecionado e cola no playhead, sempre
+     na track de origem: as três tracks têm formatos diferentes (B-ROLL disputa
+     espaço livre, TRILHA tem volume, VÍDEO é EDL sem `start`), então colar
+     entre tracks mudaria o clipe em vez de copiá-lo. */
+  let clipboard = null; // { track, clip } | null
+  function copySelection() {
+    if (!selectedClip) return false;
+    const c = clipsFor(selectedClip.track)[selectedClip.index];
+    if (!c) return false;
+    clipboard = { track: selectedClip.track, clip: JSON.parse(JSON.stringify(c)) };
+    stage('clipe copiado — Ctrl+V cola no playhead');
+    return true;
+  }
+  function pasteClipboard() {
+    if (!clipboard) return false;
+    const track = clipboard.track;
+    if (lockedTracks[track]) { stage('track travada — destrave para colar', true); return false; }
+    const src = clipboard.clip;
+    if (track === 'video') {
+      // V1 é EDL: a cópia entra depois do segmento sob o playhead e empurra o
+      // resto, como em duplicateClip. Sempre cabe.
+      const at = segIndexAt(playhead);
+      VIDEO.splice(at + 1, 0, Object.assign({}, src));
+      clearMultiSelection();
+      selectedClip = { track, index: at + 1 };
+      justAdded = { track, idx: at + 1 };
+      reconcileToDuration();
+      snapshot();
+      renderTracks();
+      return true;
+    }
+    const t = snapTime(playhead);
+    let start = t, dur = src.dur;
+    if (track === 'broll') {
+      const gap = findGapAt('broll', t, src.dur);
+      if (!gap) { stage('sem espaço livre no B-ROLL nesse ponto — mova o playhead', true); return false; }
+      start = gap.start; dur = gap.dur;
+    } else {
+      dur = Math.min(src.dur, DURATION - t);
+      if (dur <= MIN_BEAT_DUR) { stage('sem espaço até o fim da timeline', true); return false; }
+    }
+    clipsFor(track).push(Object.assign({}, src, { start, dur }));
+    clearMultiSelection();
+    selectedClip = { track, index: clipsFor(track).length - 1 };
+    justAdded = { track, idx: clipsFor(track).length - 1 };
+    snapshot();
+    renderTracks();
+    return true;
+  }
   function deleteSelection() {
     if (selectedClipSet.size) {
       const byTrack = { broll: [], music: [], video: [] };
@@ -3165,7 +3368,7 @@ window.sendToClipper = (p) => {
     const beatEl = e.target.closest('.bt-beat');
     if (beatEl) openPopover(+beatEl.dataset.idx, beatEl);
   }
-  function onRulerMouseDown(e) { seekTo(snapTime(pageXToTime(e.clientX))); }
+  function onRulerMouseDown(e) { seekTo(snapTime(pageXToTime(e.clientX)), { animate: true }); }
   function onFlagMouseDown(e) {
     e.preventDefault();
     function onMove(ev) { seekTo(snapTime(pageXToTime(ev.clientX))); }
@@ -3246,15 +3449,15 @@ window.sendToClipper = (p) => {
         applyPlayhead(typeof t === 'number' ? t : PLAYER.getTime());
         renderLegendList();
       }));
-      offPlayer.push(PLAYER.on('play', () => { $q('#bt-play').textContent = '❚❚'; }));
-      offPlayer.push(PLAYER.on('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; updateRateBadge(); }));
+      offPlayer.push(PLAYER.on('play', () => { $q('#bt-play .lbl').textContent = '❚❚'; }));
+      offPlayer.push(PLAYER.on('pause', () => { $q('#bt-play .lbl').textContent = '▶'; jklLevel = 0; updateRateBadge(); }));
       // fim da timeline: zera o shuttle para o badge não ficar mentindo "4×"
       offPlayer.push(PLAYER.on('ended', () => { jklLevel = 0; updateRateBadge(); }));
       return;
     }
     video.addEventListener('timeupdate', () => { renderPlayhead(); updateTimeDisplay(); highlightActiveWord(); updatePreviewOverlay(); renderLegendList(); });
-    video.addEventListener('play', () => { $q('#bt-play').textContent = '❚❚'; });
-    video.addEventListener('pause', () => { $q('#bt-play').textContent = '▶'; jklLevel = 0; });
+    video.addEventListener('play', () => { $q('#bt-play .lbl').textContent = '❚❚'; });
+    video.addEventListener('pause', () => { $q('#bt-play .lbl').textContent = '▶'; jklLevel = 0; });
   }
 
   /* ---------------- load a video into the editor ---------------- */
@@ -3318,6 +3521,7 @@ window.sendToClipper = (p) => {
 
   /* ---------------- keyboard shortcuts (scoped to #step-beats.on) ---------------- */
   document.addEventListener('keydown', (e) => {
+    if (document.querySelector('dialog[open]')) return; // folha de atalhos aberta: nada de J/K/L por trás
     const stepEl = document.getElementById('step-beats');
     if (!stepEl || !stepEl.classList.contains('on')) return;
     if (!built) return;
@@ -3328,15 +3532,19 @@ window.sendToClipper = (p) => {
     }
     if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
     if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redo(); return; }
+    // Sem clipe selecionado (ou sem nada copiado) o navegador segue com o seu
+    // próprio copiar/colar — só sequestramos a tecla quando há o que fazer.
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'c' && selectedClip) { e.preventDefault(); copySelection(); return; }
+    if (e.ctrlKey && !e.shiftKey && e.key.toLowerCase() === 'v' && clipboard) { e.preventDefault(); pasteClipboard(); return; }
     switch (e.key) {
       case 'j': case 'J': e.preventDefault(); shuttleReverse(); break;
       case 'k': case 'K': e.preventDefault(); shuttleStop(); break;
       case 'l': case 'L': e.preventDefault(); shuttleForward(); break;
       case ' ': e.preventDefault(); togglePlay(); break;
-      case ',': e.preventDefault(); frameStep(-1); break;
-      case '.': e.preventDefault(); frameStep(1); break;
-      case 'Home': e.preventDefault(); seekTo(0); break;
-      case 'End': e.preventDefault(); seekTo(DURATION); break;
+      case 'ArrowLeft': e.preventDefault(); frameStep(-1); break;
+      case 'ArrowRight': e.preventDefault(); frameStep(1); break;
+      case 'Home': e.preventDefault(); seekTo(0, { animate: true }); break;
+      case 'End': e.preventDefault(); seekTo(DURATION, { animate: true }); break;
       case 'i': case 'I': e.preventDefault(); markIn(); break;
       case 'o': case 'O': e.preventDefault(); markOut(); break;
       case 's': case 'S': e.preventDefault(); splitBeatAt(snapTime(playhead)); break;
@@ -3346,7 +3554,7 @@ window.sendToClipper = (p) => {
       case '-': e.preventDefault(); zoomAtCenter(PX_PER_SEC / ZOOM_STEP); break;
       case '\\': e.preventDefault(); fitToWindow(); break;
       case 'Escape': closePopover(); break;
-      case 'Delete': case 'Backspace':
+      case 'Delete':
         if (selectedClip || selectedClipSet.size) { e.preventDefault(); deleteSelection(); }
         break;
     }
