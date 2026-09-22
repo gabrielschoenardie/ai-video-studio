@@ -1,23 +1,23 @@
 # Mixagem de áudio da TIMELINE (sub-projeto B) — Implementation Plan
 
-> **Para workers agênticos:** este plano segue o fluxo do `CLAUDE.md`: Orquestrador → subagente `executor` → subagente `validator` → `git-workflow`. **Uma task por invocação do executor**, na ordem 1 → 6. Steps usam checkbox (`- [ ]`). Steps marcados **[Orquestrador]** ou **[Usuário]** não são do executor: o executor para no último step marcado **[Executor]** e atualiza `## Status`.
+> **Para workers agênticos:** este plano segue o fluxo do `CLAUDE.md`: Orquestrador → subagente `executor` → subagente `validator` → `git-workflow`. **Uma task por invocação do executor**, na ordem 1 → 7. Steps usam checkbox (`- [ ]`). Steps marcados **[Orquestrador]** ou **[Usuário]** não são do executor: o executor para no último step marcado **[Executor]** e atualiza `## Status`.
 
-**Goal:** Acrescentar à TIMELINE uma track SFX e transformar mudo/solo em controles de mixagem de verdade, com o arquivo exportado soando como o preview; medir o loudness do export contra o alvo de Reels (−14 a −16 LUFS), entregar a voz no nível-alvo desde o ASSEMBLE e mostrar o pico do master num medidor à direita da timeline.
+**Goal:** Acrescentar à TIMELINE uma track SFX e transformar mudo/solo em controles de mixagem de verdade, com o arquivo exportado soando como o preview; segurar o true peak do master em −2 dBTP com um limitador de segurança; medir loudness, LRA e true peak do export contra o alvo de Reels (−14 a −16 LUFS, LRA até 9 LU); entregar a voz no nível-alvo desde o ASSEMBLE; mostrar o pico do master num medidor à direita da timeline; e avisar dos efeitos de SFX acima de −10 dBFS.
 
-**Architecture:** Seis etapas, um PR cada. B0 corrige dois bugs de preview da TRILHA que a SFX herdaria. B1 muda só o servidor: sidecar v4 (`sfx`, `mix`), a regra de mudo/solo no conform, mono sem os −3 dB e a medição de pico e LUFS (`ebur128`). Não mexe na UI, e um sidecar antigo gera exatamente o mesmo grafo de hoje. B2 põe a lane SFX nas duas rotas de preview, troca a prop do Player por `audible` (o bundle muda aqui e só aqui) e passa o slider de ganho para dB. B3 troca as chaves da TRILHA por `MIX` persistido, com M/S/L nas três tracks de áudio, e a mensagem do CONFORMAR diz o que ficou fora, o pico e o LUFS. B4 normaliza a voz no ASSEMBLE (loudnorm em duas passadas, −16 LUFS, true peak −1,5). B5 põe o medidor de pico do master: o mix é renderizado offline com as regras do conform, e o envelope serve play e scrub nas duas rotas.
+**Architecture:** Sete etapas, um PR cada. B0 corrige dois bugs de preview da TRILHA que a SFX herdaria. B1 muda só o servidor: sidecar v4 (`sfx`, `mix`), a regra de mudo/solo no conform, mono sem os −3 dB, o limitador do master (−2 dBTP, com oversampling) e a medição do mix antes do limitador (`astats`) e do arquivo (LUFS, LRA e true peak, `ebur128`). Não mexe na UI, e um sidecar antigo conformado com `limiter: false` gera exatamente o mesmo grafo de hoje. B2 põe a lane SFX nas duas rotas de preview, troca a prop do Player por `audible` (o bundle muda aqui e só aqui) e passa o slider de ganho para dB. B3 troca as chaves da TRILHA por `MIX` persistido, com M/S/L nas três tracks de áudio, e a mensagem do CONFORMAR diz o que ficou fora, o pico real, o LUFS, o LRA e quanto o limitador cortou. B4 normaliza a voz no ASSEMBLE (loudnorm em duas passadas, −16 LUFS, true peak −2). B5 põe o medidor de pico do master: o mix é renderizado offline com as regras do conform, antes do limitador, e o envelope serve play e scrub nas duas rotas; o vermelho começa no teto do limitador. B6 marca os clipes de SFX com pico acima de −10 dBFS e conta quantos vão para o export.
 
 **Tech Stack:** HTML/CSS/JS vanilla num arquivo só (`public/index.html`, sem build); Node ≥18 sem npm (`server.js`, `lib/`); ffmpeg 6.1; Remotion 4.0.494 + esbuild (`remotion/`, só para o bundle do Player); Chrome (verificação de runtime).
 
 **Spec:** `docs/superpowers/specs/2026-09-21-mixagem-audio-design.md`. O executor lê a spec antes da Task 1. Números de linha citados referem-se a `c3c8012`; **localize sempre pelo trecho citado**, não pelo número, porque cada task desloca as linhas das seguintes.
 
-**Como este plano foi escrito:** toda troca e todo script abaixo foram aplicados e rodados numa cópia do repo antes de entrar aqui, na ordem das tasks (B0 → B1 → B2 → B3 → B4 → B5): cada checagem estática com FAIL antes e PASS depois; o bundle reconstruído; o `tsc` sem erro novo; os testes do B1 e do B4 com ffmpeg, ASSEMBLE e servidor reais; e a UI de B2, B3, B4 e B5 no navegador, com o probe passando — inclusive com som tocando de verdade nas duas rotas, a 1280×800, e o bug do B0 reproduzido no `HEAD`. Os blocos são cópia literal do que foi testado. A Revisão R2 da spec (referência de mixagem para Reels, medidor, voz) passou pelo mesmo processo antes da execução.
+**Como este plano foi escrito:** toda troca e todo script abaixo foram aplicados e rodados numa cópia do repo antes de entrar aqui, na ordem das tasks (B0 → B1 → B2 → B3 → B4 → B5 → B6): cada checagem estática com FAIL antes e PASS depois; o bundle reconstruído; o `tsc` sem erro novo; os testes do B1 e do B4 com ffmpeg, ASSEMBLE e servidor reais; e a UI de B2, B3, B4 e B5 no navegador, com o probe passando — inclusive com som tocando de verdade nas duas rotas, a 1280×800, e o bug do B0 reproduzido no `HEAD`. Os blocos são cópia literal do que foi testado. A Revisão R2 da spec (referência de mixagem para Reels, medidor, voz) e a Revisão R3 (limitador do master, LRA, aviso de SFX) passaram pelo mesmo processo antes da execução: na R3, o plano inteiro foi reaplicado de um clone limpo por script, troca a troca, e os arquivos resultantes conferidos byte a byte contra a cópia testada.
 
 ## Global Constraints
 
 - Zero dependência nova (npm ou outra). O B2 usa o `esbuild` que `remotion/` já tem para `npm run build:player`.
 - Tocar só os arquivos listados em cada task. `lib/encode.js`, `lib/color.js`, `lib/captions.js`, `styles/` e a parte de vídeo do grafo do conform ficam intocados. `lib/ffmpeg.js` só ganha o campo `channels` no `mediaInfo` (Task 2). `lib/assemble.js` só muda no áudio, na Task 5: a cadeia de vídeo, a transcrição e o `.ass` ficam como estão.
-- O mix nunca é processado para o alvo de loudness: o app mede (Task 2), mostra (Tasks 4 e 6) e normaliza só a voz, na origem (Task 5).
-- O medidor (Task 6) nunca se liga ao áudio que está tocando: nada de `AnalyserNode` nem `createMediaElementSource`; ele renderiza uma cópia do mix num `OfflineAudioContext`.
+- O mix não é normalizado para o alvo de loudness. O único processamento do master é o limitador de segurança de true peak (−2 dBTP, Task 2). O app mede (Task 2), mostra (Tasks 4, 6 e 7) e normaliza só a voz, na origem (Task 5). Nenhum limitador, compressor ou ganho automático por track: a SFX só recebe aviso (Task 7).
+- O medidor (Task 6) e o aviso de SFX (Task 7) nunca se ligam ao áudio que está tocando: nada de `AnalyserNode` nem `createMediaElementSource`; o medidor renderiza uma cópia do mix num `OfflineAudioContext`, e o aviso lê os buffers já decodificados.
 - Os handlers de arraste só ganham `'sfx'` nas listas de tracks e o mapa `CLIP_HOST`; nenhuma regra de arraste muda para as tracks existentes.
 - `normalize=0` continua no `amix`; o áudio de B-ROLL continua descartado; todo caminho de clipe do sidecar continua passando por `resolveInput()`.
 - Sidecar antigo (v2/v3, sem `sfx`/`mix`) nunca gera erro de leitura e soa como antes.
@@ -34,15 +34,15 @@
 
 | Arquivo | Responsabilidade | Tasks |
 |---|---|---|
-| `public/index.html` | `<audio>` por ocorrência e slider ao vivo (B0); lane SFX, `audibleNow`, teto de 16, fragmento por clipe, slider em dB (B2); `MIX`, M/S/L, `.silent`, persistência, mensagem do conform com LUFS (B3); chip da voz no ASSEMBLE (B4); medidor de pico do master (B5) | 1, 3, 4, 5, 6 |
-| `lib/timeline.js` | `normalizeMix`, `audible`, SFX no grafo, mono sem −3 dB, `measureLoudness`, `parseLoudness`, `peakWarnOf`, `loudWarnOf`, retorno com `sfx`/`mix`/`excluded`/`peakDb`/`peakWarn`/`lufs`/`loudWarn` | 2 |
+| `public/index.html` | `<audio>` por ocorrência e slider ao vivo (B0); lane SFX, `audibleNow`, teto de 16, fragmento por clipe, slider em dB (B2); `MIX`, M/S/L, `.silent`, persistência, `measuresMsg` e a mensagem do conform (B3); chip da voz no ASSEMBLE (B4); medidor de pico do master (B5); aviso de SFX acima de −10 dBFS (B6) | 1, 3, 4, 5, 6, 7 |
+| `lib/timeline.js` | `normalizeMix`, `audible`, SFX no grafo, mono sem −3 dB, limitador do master, `measureLoudness`, `parseLoudness`, `parseMixPeak`, `loudWarnOf`, `tpWarnOf`, `lraWarnOf`, retorno com `sfx`/`mix`/`excluded`/`mixPeakDb`/`limiter`/`truePeakDb`/`tpWarn`/`lufs`/`loudWarn`/`lra`/`lraWarn` | 2 |
 | `lib/assemble.js` | voz normalizada: `parseLoudnormJson`, `measureVoice`, `VOICE_TARGET`, `normalizeVoice`, retorno com `voice` | 5 |
 | `lib/ffmpeg.js` | `mediaInfo` com `channels` | 2 |
-| `server.js` | sidecar v4 (`sfx`, `mix` saneado); conform lê `sfx` e `mix` (Task 2); `/api/assemble` repassa `normalizeVoice` (Task 5) | 2, 5 |
+| `server.js` | sidecar v4 (`sfx`, `mix` saneado); conform lê `sfx` e `mix` e repassa `limiter` do corpo (Task 2); `/api/assemble` repassa `normalizeVoice` (Task 5) | 2, 5 |
 | `remotion/src/scenes/TimelinePreview.tsx` | props `sfx` e `audible`; `<Audio>` só de track audível | 3 |
 | `remotion/src/player-entry.tsx` | `numberOfSharedAudioTags={16}` | 3 |
 | `public/vendor/studio-player.js` | bundle regenerado por `npm run build:player` | 3 |
-| `public/dev/ui-probe.js` | estágios `B2`/`B3`/`B5`, `track-order` e `text-floor` por estágio, `motion-literals` sem a sobreposição da extensão, checks `sfx-lane`, `audio-controls`, `solo-exclusive`, `silent-lanes`, `meter` | 3, 4, 6 |
+| `public/dev/ui-probe.js` | estágios `B2`/`B3`/`B5`/`B6`, `track-order` e `text-floor` por estágio, `motion-literals` sem a sobreposição da extensão, checks `sfx-lane`, `audio-controls`, `solo-exclusive`, `silent-lanes`, `meter`, `sfx-peak` | 3, 4, 6, 7 |
 
 ## Checklist manual de regressão
 
@@ -114,6 +114,22 @@ window.T = {
   },
   playerBroken: () => !!document.querySelector('#bt-player') && document.querySelector('#bt-player').innerText.includes('⚠'),
   stage: () => [...document.querySelectorAll('[aria-live]')].map(e => e.textContent).join(' | '),
+  // espião no fetch: guarda o id do último job de conform; conformResult() lê o resultado
+  // completo (mixPeakDb, limiter…) em /api/jobs/:id — a mensagem mostra só parte dele
+  spyConform() {
+    if (window.fetch.__spy) return;
+    const orig = window.fetch;
+    window.fetch = async function (url) {
+      const res = await orig.apply(this, arguments);
+      if (String(url).includes('/api/timeline/conform')) res.clone().json().then(j => { T.conformJob = j.job; });
+      return res;
+    };
+    window.fetch.__spy = true;
+  },
+  async conformResult() {
+    const j = await (await fetch('/api/jobs/' + T.conformJob)).json();
+    return j.state === 'done' ? j.result : { state: j.state, error: j.error };
+  },
   async sidecar() {
     const j = await (await fetch('/api/beats?video=' + encodeURIComponent('output/assembled-4545f906507a.mp4'))).json();
     return j.beats && { version: j.beats.version, sfx: (j.beats.sfx || []).length, music: (j.beats.music || []).length, mix: j.beats.mix };
@@ -126,13 +142,17 @@ window.T = {
 
 ### Task 0: Preparo (Orquestrador, antes de qualquer execução)
 
-- [ ] **[Orquestrador]** Spec e plano commitados pelo `git-workflow` (`prepare` → OK do usuário → `publish`), num PR só de documentação: branch `docs/audio-mix-plan`, arquivos `docs/superpowers/specs/2026-09-21-mixagem-audio-design.md` e `docs/plans/mixagem-audio.md`, commit `Add design spec and plan for audio mixing (sub-project B)`.
+- [x] **[Orquestrador]** Spec e plano commitados pelo `git-workflow` (`prepare` → OK do usuário → `publish`), num PR só de documentação por revisão: `docs/audio-mix-plan` (PR #16), `docs/audio-mix-plan-r2` (PR #17) e `docs/audio-mix-plan-r3` (Revisão R3), com os arquivos `docs/superpowers/specs/2026-09-21-mixagem-audio-design.md` e `docs/plans/mixagem-audio.md`.
 - [ ] **[Orquestrador]** Mídia de teste (fora do git, em `jobs/b-check/`):
 
 ```bash
 mkdir -p jobs/b-check
 ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=1000:d=0.8" jobs/b-check/whoosh.wav   # mono, 0,8s
 ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=330:d=10" -ac 2 jobs/b-check/bed.wav  # estéreo, 10s
+# (R3) quase escala cheia (−0,1 dBFS), 1s: dois empilhados passam de 0 e o limitador do master corta (Task 4)
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=f=1000:d=1" -af volume=18dB jobs/b-check/loud.wav
+# (R3) 0,3s a −3,1 dBFS e 0,5s a −20 dBFS, mono: o aviso de SFX acima de −10 (Task 7) e o pico só do trecho usado
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i "aevalsrc='if(lt(t,0.3),0.7,0.1)*sin(2*PI*1000*t)':s=44100:d=0.8" jobs/b-check/hit.wav
 cp output/assembled-4545f906507a.beats.json jobs/b-check/fixture.beats.json.bak                  # sidecar v3 da fixture
 ```
 
@@ -369,10 +389,10 @@ por:
 
 ---
 
-### Task 2 (B1): Conform com SFX, mudo/solo, pico e LUFS; sidecar v4
+### Task 2 (B1): Conform com SFX, mudo/solo, limitador do master e medição; sidecar v4
 
 **Files:**
-- Modify: `lib/timeline.js` — cabeçalho, bloco novo depois de `normalizeClips()`, `buildConformGraph()`, `buildConformArgs()`, `probeClips()`, bloco novo antes de `conform()`, corpo e retorno de `conform()`, `module.exports`.
+- Modify: `lib/timeline.js` — cabeçalho, constantes, bloco novo depois de `normalizeClips()`, `buildConformGraph()`, `buildConformArgs()`, `probeClips()`, bloco novo antes de `conform()`, corpo e retorno de `conform()`, `module.exports`.
 - Modify: `lib/ffmpeg.js` — retorno de `mediaInfo()`.
 - Modify: `server.js` — `require` de `./lib/timeline`, `POST /api/beats`, `POST /api/timeline/conform`.
 
@@ -381,12 +401,15 @@ por:
 - Produces (usados nas Tasks 3 e 4):
   - `normalizeMix(mix) → { mute: string[], solo: 'audio'|'music'|'sfx'|null }` — `mute` em ordem canônica `['audio','music','sfx']`, sem duplicatas;
   - `audible(mix, track) → boolean` — `!m.mute.includes(track) && (m.solo === null || m.solo === track)`;
-  - `parseLoudness(stderr) → { lufs, peakDb }` (resumo do `ebur128`, uma casa; `null` em silêncio digital ou saída sem resumo);
-  - `measureLoudness(file, onLog) → Promise<{ lufs, peakDb }>` (nunca lança);
-  - `peakWarnOf(peakDb) → 'clip' | 'hot' | null` (`> 0` → `'clip'`; `≥ −1` → `'hot'`);
+  - `parseLoudness(stderr) → { lufs, lra, truePeakDb }` (resumo do `ebur128=peak=true`, uma casa; os três `null` em silêncio digital ou saída sem resumo);
+  - `measureLoudness(file, onLog) → Promise<{ lufs, lra, truePeakDb }>` (nunca lança);
+  - `parseMixPeak(stderr) → number | null` (último `Peak level dB:` do `astats`, uma casa; `null` com `-inf` ou sem o bloco);
   - `loudWarnOf(lufs) → 'low' | 'high' | null` (`< −16` → `'low'`; `> −14` → `'high'`);
-  - `conform({ …, sfx = [], mix = null })` devolve, além do de hoje, `sfx` (contagem), `mix` (normalizado), `excluded` (tracks com conteúdo silenciadas pelo mix), `peakDb`, `peakWarn`, `lufs`, `loudWarn`;
-  - `buildConformGraph({ …, sfx = [] })` e `buildConformArgs({ …, sfx = [] })`; clipe de áudio com `channels === 1` ganha `pan=stereo|c0=c0|c1=c0`;
+  - `tpWarnOf(truePeakDb) → 'over' | null` (`> −1` → `'over'`); `lraWarnOf(lra) → 'high' | null` (`> 9` → `'high'`);
+  - `MASTER_CEIL_DB = -2` (exportada);
+  - `conform({ …, sfx = [], mix = null, limiter = true })` devolve, além do de hoje, `sfx` (contagem), `mix` (normalizado), `excluded` (tracks com conteúdo silenciadas pelo mix), `mixPeakDb`, `limiter` (`{ ceilingDb: -2, cutDb }` ou `null` com `limiter: false`), `truePeakDb`, `tpWarn`, `lufs`, `loudWarn`, `lra`, `lraWarn`;
+  - `buildConformGraph({ …, sfx = [], limiter = true })` e `buildConformArgs({ …, sfx = [] })`; clipe de áudio com `channels === 1` ganha `pan=stereo|c0=c0|c1=c0`; com o limitador, o rótulo de áudio é `[amaster]`;
+  - `POST /api/timeline/conform` aceita `limiter` no corpo (ligado quando ausente);
   - sidecar v4: `{ version: 4, …, sfx: [...], mix: { mute, solo } }`;
   - `mediaInfo(file).channels` (número de canais do primeiro áudio, `0` sem áudio).
 
@@ -417,7 +440,8 @@ const H = (() => {
   return m.exports;
 })();
 
-// 1 — não-regressão: sem sfx/mix, grafo e args idênticos ao HEAD.
+// 1 — não-regressão: sem sfx/mix e com limiter: false, grafo e args idênticos ao HEAD.
+//     Com o limitador (o padrão): o mesmo grafo mais a cadeia do master, e o -map de áudio nela.
 const segs = [{ srcIn: 0, dur: 4 }, { srcIn: 6, dur: 3.5 }];
 const music = [{ path: 'm1.wav', start: 0.5, dur: 3, srcIn: 0, volume: 0.8 },
   { path: 'm2.wav', start: 4, dur: 2, srcIn: 1.25, volume: 1 }];
@@ -429,13 +453,22 @@ const fixtures = {
   'plate sem áudio': { segments: segs, broll, music, hasAudio: false, fit: 'blur', duration: 7.5 },
 };
 for (const [name, fx] of Object.entries(fixtures)) {
-  let gN, gH;
-  try { gN = T.buildConformGraph(fx); gH = H.buildConformGraph(fx); }
+  let gN, gH, gL;
+  try { gN = T.buildConformGraph({ ...fx, limiter: false }); gH = H.buildConformGraph(fx); gL = T.buildConformGraph(fx); }
   catch (e) { fail.push(name + ': grafo lançou ' + e.message); continue; }
-  ok(eq(gN, gH), name + ': grafo difere do HEAD');
+  ok(eq(gN, gH), name + ': grafo (limiter: false) difere do HEAD');
   const argIn = { base: 'base.mp4', broll: fx.broll, music: fx.music, output: 'out.mp4', duration: fx.duration };
-  ok(eq(T.buildConformArgs({ ...argIn, graph: gN }), H.buildConformArgs({ ...argIn, graph: gH })),
-    name + ': args diferem do HEAD');
+  const aH = H.buildConformArgs({ ...argIn, graph: gH });
+  ok(eq(T.buildConformArgs({ ...argIn, graph: gN }), aH), name + ': args (limiter: false) diferem do HEAD');
+  const master = `[aout]atrim=end=${fx.duration.toFixed(6)},asplit=2[mpre][mlim];` +
+    '[mpre]astats=measure_perchannel=none:measure_overall=Peak_level,anullsink;' +
+    '[mlim]aresample=176400,alimiter=limit=0.794328:attack=5:release=50:level=disabled:latency=1,aresample=44100[amaster]';
+  ok(gL.filter === gH.filter + ';' + master && gL.vlabel === gH.vlabel && gL.alabel === '[amaster]',
+    name + ': cadeia do master ausente ou diferente');
+  const aL = T.buildConformArgs({ ...argIn, graph: gL });
+  ok(eq(aL.map(a => (a === gL.filter ? 'FILTER' : a)),
+    aH.map(a => (a === gH.filter ? 'FILTER' : a === '[aout]' ? '[amaster]' : a))),
+    name + ': args com o limitador deveriam diferir do HEAD só no filtro e no -map de áudio');
 }
 
 // 2 — SFX no grafo: depois da TRILHA, mesma cadeia, amix com todos.
@@ -494,36 +527,60 @@ if (typeof T.normalizeMix !== 'function' || typeof T.audible !== 'function') {
     'solo deveria deixar só a própria track');
 }
 
-// 5 — limiares de pico.
-if (typeof T.peakWarnOf !== 'function') fail.push('peakWarnOf não exportada');
+// 5 — limiares de true peak e LRA, e o teto exportado.
+if (typeof T.tpWarnOf !== 'function' || typeof T.lraWarnOf !== 'function') fail.push('tpWarnOf/lraWarnOf não exportadas');
 else {
-  const pw = [[0.1, 'clip'], [5.5, 'clip'], [0, 'hot'], [-0.4, 'hot'], [-1, 'hot'], [-1.1, null], [-18, null], [null, null]];
-  pw.forEach(([v, want]) => ok(T.peakWarnOf(v) === want, `peakWarnOf(${v}) = ${T.peakWarnOf(v)}, esperado ${want}`));
+  const tw = [[-2, null], [-1.3, null], [-1, null], [-0.9, 'over'], [2.6, 'over'], [null, null]];
+  tw.forEach(([v, want]) => ok(T.tpWarnOf(v) === want, `tpWarnOf(${v}) = ${T.tpWarnOf(v)}, esperado ${want}`));
+  const rw = [[1.5, null], [4.3, null], [9, null], [9.1, 'high'], [15.4, 'high'], [null, null]];
+  rw.forEach(([v, want]) => ok(T.lraWarnOf(v) === want, `lraWarnOf(${v}) = ${T.lraWarnOf(v)}, esperado ${want}`));
 }
+ok(T.MASTER_CEIL_DB === -2, 'MASTER_CEIL_DB = ' + T.MASTER_CEIL_DB + ', esperado -2');
 
-// 6 — parse do ebur128 com a saída real do ffmpeg 6.1 (CRLF, como no Windows), e limiares de LUFS.
-const SUM = (i, peak) => '[Parsed_ebur128_0 @ 0000025afab74180] Summary:\r\n\r\n  Integrated loudness:\r\n' +
-  `    I:         ${i} LUFS\r\n    Threshold: -35.6 LUFS\r\n\r\n  Loudness range:\r\n    LRA:         4.3 LU\r\n` +
-  '    Threshold: -45.6 LUFS\r\n    LRA low:   -27.9 LUFS\r\n    LRA high:  -23.5 LUFS\r\n\r\n  Sample peak:\r\n' +
-  `    Peak:       ${peak} dBFS\r\n`;
-// linha por frame antes do resumo: o parse não pode pegar o I dela
-const FRAME = '[Parsed_ebur128_0 @ 0000025afab74180] t: 38.2  TARGET:-23 LUFS    M: -24.0 S: -25.1     I: -30.0 LUFS' +
-  '       LRA:   4.3 LU  SPK:  -9.0  -9.1 dBFS\r\n';
+// 6 — parse do ebur128=peak=true com a saída real do ffmpeg 6.1 (CRLF, como no Windows), e limiares de LUFS.
+const SUM = (i, lra, tp) => '[Parsed_ebur128_0 @ 0000026b83919940] Summary:\r\n\r\n  Integrated loudness:\r\n' +
+  `    I:         ${i} LUFS\r\n    Threshold: -35.6 LUFS\r\n\r\n  Loudness range:\r\n    LRA:         ${lra} LU\r\n` +
+  '    Threshold: -45.6 LUFS\r\n    LRA low:   -27.9 LUFS\r\n    LRA high:  -23.5 LUFS\r\n\r\n  True peak:\r\n' +
+  `    Peak:       ${tp} dBFS\r\n`;
+// linha por frame antes do resumo: o parse não pode pegar o I, o LRA nem o TPK dela
+const FRAME = '[Parsed_ebur128_0 @ 0000026b83919940] t: 38.2       TARGET:-23 LUFS    M: -30.1 S: -26.9     I: -30.0 LUFS' +
+  '       LRA:   7.7 LU  FTPK: -63.6 -63.6 dBFS  TPK:  -1.0  -1.0 dBFS\r\n';
+const NONE = { lufs: null, lra: null, truePeakDb: null };
 if (typeof T.parseLoudness !== 'function' || typeof T.loudWarnOf !== 'function') {
   fail.push('parseLoudness/loudWarnOf não exportadas');
 } else {
   const pl = [
-    ['fixture', FRAME + SUM('-25.4', '-8.3'), { lufs: -25.4, peakDb: -8.3 }],
-    ['fixture em LF', (FRAME + SUM('-25.4', '-8.3')).replace(/\r\n/g, '\n'), { lufs: -25.4, peakDb: -8.3 }],
-    ['dois tons altos', SUM('-6.6', '5.5'), { lufs: -6.6, peakDb: 5.5 }],
-    ['silêncio', SUM('-70.0', '-inf'), { lufs: null, peakDb: null }],
-    ['saída truncada', FRAME, { lufs: null, peakDb: null }],
-    ['vazio', '', { lufs: null, peakDb: null }],
+    ['fixture', FRAME + SUM('-25.4', '4.3', '-8.3'), { lufs: -25.4, lra: 4.3, truePeakDb: -8.3 }],
+    ['fixture em LF', (FRAME + SUM('-25.4', '4.3', '-8.3')).replace(/\r\n/g, '\n'), { lufs: -25.4, lra: 4.3, truePeakDb: -8.3 }],
+    ['tons altos limitados', SUM('-6.6', '0.0', '-1.8'), { lufs: -6.6, lra: 0, truePeakDb: -1.8 }],
+    ['sem limitador', SUM('-6.6', '0.0', '5.9'), { lufs: -6.6, lra: 0, truePeakDb: 5.9 }],
+    ['silêncio', SUM('-70.0', '0.0', '-inf'), NONE],
+    ['saída truncada', FRAME, NONE],
+    ['vazio', '', NONE],
   ];
   pl.forEach(([name, txt, want]) => ok(eq(T.parseLoudness(txt), want),
     'parseLoudness(' + name + ') = ' + JSON.stringify(T.parseLoudness(txt)) + ', esperado ' + JSON.stringify(want)));
   const lw = [[-25.4, 'low'], [-16.1, 'low'], [-16, null], [-15, null], [-14, null], [-13.9, 'high'], [-6.6, 'high'], [null, null]];
   lw.forEach(([v, want]) => ok(T.loudWarnOf(v) === want, `loudWarnOf(${v}) = ${T.loudWarnOf(v)}, esperado ${want}`));
+}
+
+// 7 — pico antes do limitador: o bloco Overall do astats no fim do log do conform (saída real, CRLF).
+const AST = v => '[Parsed_astats_33 @ 000002656afee840] Overall\r\n' +
+  `[Parsed_astats_33 @ 000002656afee840] Peak level dB: ${v}\r\n`;
+const PROG = 'frame=  181 fps= 60 q=-1.0 Lsize=     512KiB time=00:00:06.00 bitrate= 699.0kbits/s speed=1.99x    \r\n';
+if (typeof T.parseMixPeak !== 'function') fail.push('parseMixPeak não exportada');
+else {
+  const mp = [
+    ['voz', PROG + AST('-8.334512'), -8.3],
+    ['acima de 0', AST('5.912345'), 5.9],
+    ['logo abaixo de 0', AST('-0.063921'), -0.1],
+    ['silêncio', AST('-inf'), null],
+    ['dois blocos: vale o último', AST('-20.000000') + AST('-3.040000'), -3],
+    ['sem astats', PROG, null],
+    ['vazio', '', null],
+  ];
+  mp.forEach(([name, txt, want]) => ok(T.parseMixPeak(txt) === want,
+    'parseMixPeak(' + name + ') = ' + T.parseMixPeak(txt) + ', esperado ' + want));
 }
 
 console.log(fail.length ? 'FAIL\n' + fail.join('\n') : 'PASS: B1 unidade');
@@ -564,6 +621,15 @@ function rms(file, a, b) {
   return /inf/.test(m[1]) ? -Infinity : parseFloat(m[1]);
 }
 const SOM = v => v > -40, SILENCIO = v => v < -60;
+// Instante (s) da amostra de maior |valor| no áudio de `file`, entre os dois canais.
+function peakAt(file) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-map', '0:a:0',
+    '-f', 'f32le', '-ac', '2', '-ar', '44100', '-'], { maxBuffer: 1 << 28 });
+  const a = new Float32Array(r.stdout.buffer, r.stdout.byteOffset, r.stdout.length >> 2);
+  let best = 0, at = 0;
+  for (let i = 0; i < a.length; i++) { const v = Math.abs(a[i]); if (v > best) { best = v; at = i >> 1; } }
+  return at / 44100;
+}
 // Janelas: A = tom do plate (0–1s); S = SFX (2,0–2,5s); M = TRILHA (3,5–4,5s); Q = nada.
 const WIN = { A: [0.1, 0.9], S: [2.1, 2.4], M: [3.6, 4.4], Q: [5.0, 5.9] };
 function windows(file) {
@@ -592,6 +658,10 @@ async function main() {
   ff(['-f', 'lavfi', '-i', 'sine=f=440:d=1', '-af', 'volume=17.5dB', P('hot.wav')]);
   // 6s a +3,5 dB: calibrado na cópia de teste para o conform cair em ~-15 LUFS (dentro de -14..-16)
   ff(['-f', 'lavfi', '-i', 'sine=f=440:d=6', '-af', 'volume=3.5dB', P('mid.wav')]);
+  // 3s alto e 3s 20 dB abaixo: LRA acima de 9 LU
+  ff(['-f', 'lavfi', '-i', 'sine=f=440:d=6', '-af', "volume='if(lt(t,3),2,0.2)':eval=frame", P('dyn.wav')]);
+  // um clique de uma amostra em 2,000s, a -0,9 dBFS (acima do teto): prova que o lookahead não desloca o som
+  ff(['-f', 'lavfi', '-i', "aevalsrc='if(eq(n,88200),0.9,0)':s=44100:d=6", P('click.wav')]);
 
   const { conform } = require(path.join(ROOT, 'lib', 'timeline.js'));
   const SFX = [{ path: P('sfx.wav'), name: 'sfx.wav', start: 2, dur: 0.5, srcIn: 0, volume: 1 }];
@@ -610,8 +680,12 @@ async function main() {
   ok(w1.S > -22.5 && w1.M > -22.5, 'C1: mono perdeu 3 dB no export — RMS S ' + w1.S + ', M ' + w1.M);
   ok(r.sfx === 1 && r.music === 1, 'C1: contagens sfx/music ' + r.sfx + '/' + r.music);
   ok(JSON.stringify(r.excluded) === '[]', 'C1: excluded ' + JSON.stringify(r.excluded));
-  ok(typeof r.peakDb === 'number' && r.peakDb < -12 && r.peakWarn === null, 'C1: pico ' + r.peakDb + ' / ' + r.peakWarn);
+  // tons de -18 dBFS que não se sobrepõem: o limitador não corta nada
+  ok(typeof r.mixPeakDb === 'number' && r.mixPeakDb < -12 && r.limiter && r.limiter.ceilingDb === -2 && r.limiter.cutDb === 0,
+    'C1: mix ' + r.mixPeakDb + ' / limitador ' + JSON.stringify(r.limiter));
+  ok(typeof r.truePeakDb === 'number' && r.truePeakDb < -12 && r.tpWarn === null, 'C1: pico real ' + r.truePeakDb + ' / ' + r.tpWarn);
   ok(typeof r.lufs === 'number' && r.lufs < -16 && r.loudWarn === 'low', 'C1: loudness ' + r.lufs + ' / ' + r.loudWarn + ', esperado low');
+  ok(typeof r.lra === 'number', 'C1: LRA ' + r.lra);
 
   // C2 — SFX muda.
   r = await run({ music: MUS, sfx: SFX, mix: { mute: ['sfx'] } });
@@ -627,23 +701,45 @@ async function main() {
   r = await run({ music: MUS, sfx: SFX, mix: { mute: ['audio'], solo: 'audio' } });
   expectWin('C4 mute+solo audio', windows(r.output), { A: 'silêncio', S: 'silêncio', M: 'silêncio' });
   ok(JSON.stringify(r.excluded) === '["audio","music","sfx"]', 'C4: excluded ' + JSON.stringify(r.excluded));
-  ok(r.peakDb === null && r.peakWarn === null, 'C4: silêncio deveria dar pico null, deu ' + r.peakDb);
-  ok(r.lufs === null && r.loudWarn === null, 'C4: silêncio deveria dar lufs null, deu ' + r.lufs + ' / ' + r.loudWarn);
+  ok(r.mixPeakDb === null && r.truePeakDb === null && r.tpWarn === null,
+    'C4: silêncio deveria dar picos null, deu ' + r.mixPeakDb + ' / ' + r.truePeakDb);
+  ok(r.limiter && r.limiter.cutDb === null, 'C4: silêncio deveria dar corte null, deu ' + JSON.stringify(r.limiter));
+  ok(r.lufs === null && r.loudWarn === null && r.lra === null && r.lraWarn === null,
+    'C4: silêncio deveria dar lufs e LRA null, deu ' + r.lufs + ' / ' + r.lra);
 
-  // C5 — dois tons em escala cheia sobrepostos: acima de 0 dBFS.
-  r = await run({ music: [{ ...MUS[0], path: P('loud.wav'), start: 2 }],
-    sfx: [{ ...SFX[0], path: P('loud.wav'), start: 2 }] });
-  ok(r.peakWarn === 'clip' && r.peakDb > 0, 'C5: pico ' + r.peakDb + ' / ' + r.peakWarn + ', esperado clip');
+  // C5 — dois tons em escala cheia sobrepostos (+5,9 dBFS na soma): o limitador segura o true peak.
+  const LOUD = { music: [{ ...MUS[0], path: P('loud.wav'), start: 2 }], sfx: [{ ...SFX[0], path: P('loud.wav'), start: 2 }] };
+  r = await run(LOUD);
+  ok(r.mixPeakDb > 0 && r.limiter?.cutDb > 2, 'C5: mix ' + r.mixPeakDb + ' / corte ' + r.limiter?.cutDb);
+  ok(r.truePeakDb <= -1 && r.tpWarn === null, 'C5: pico real ' + r.truePeakDb + ' / ' + r.tpWarn + ', esperado ≤ -1 sem aviso');
   ok(r.loudWarn === 'high' && r.lufs > -14, 'C5: loudness ' + r.lufs + ' / ' + r.loudWarn + ', esperado high');
 
-  // C6 — um tom a ~−0,6 dBFS: sem folga.
-  r = await run({ music: [{ ...MUS[0], path: P('hot.wav'), start: 2 }] });
-  ok(r.peakWarn === 'hot' && r.peakDb <= 0 && r.peakDb >= -1, 'C6: pico ' + r.peakDb + ' / ' + r.peakWarn + ', esperado hot');
+  // C5b — o mesmo sem o limitador: passa de 0 e avisa.
+  r = await run({ ...LOUD, limiter: false });
+  ok(r.limiter === null && r.mixPeakDb === null, 'C5b: limitador ' + JSON.stringify(r.limiter) + ' / mix ' + r.mixPeakDb);
+  ok(r.truePeakDb > 0 && r.tpWarn === 'over', 'C5b: pico real ' + r.truePeakDb + ' / ' + r.tpWarn + ', esperado > 0 e over');
 
-  // C7 — TRILHA de 6s no nível calibrado: loudness dentro do alvo, sem aviso.
+  // C6 — um tom a ~−0,6 dBFS: corte entre 1 e 2 dB, true peak no teto.
+  r = await run({ music: [{ ...MUS[0], path: P('hot.wav'), start: 2 }] });
+  ok(r.limiter?.cutDb > 1 && r.limiter?.cutDb < 2 && r.truePeakDb <= -1.5 && r.tpWarn === null,
+    'C6: corte ' + r.limiter?.cutDb + ' / pico real ' + r.truePeakDb);
+
+  // C7 — TRILHA de 6s no nível calibrado: loudness dentro do alvo, sem aviso; tom constante, LRA baixo.
   r = await run({ music: [{ ...MUS[0], path: P('mid.wav'), start: 0, dur: 6 }] });
   ok(typeof r.lufs === 'number' && r.lufs >= -16 && r.lufs <= -14 && r.loudWarn === null,
     'C7: loudness ' + r.lufs + ' / ' + r.loudWarn + ', esperado entre -16 e -14 sem aviso');
+  ok(typeof r.lra === 'number' && r.lra < 9 && r.lraWarn === null, 'C7: LRA ' + r.lra + ' / ' + r.lraWarn);
+
+  // C8 — 3s alto e 3s 20 dB abaixo: LRA acima de 9.
+  r = await run({ music: [{ ...MUS[0], path: P('dyn.wav'), start: 0, dur: 6 }] });
+  ok(r.lra > 9 && r.lraWarn === 'high', 'C8: LRA ' + r.lra + ' / ' + r.lraWarn + ', esperado > 9 e high');
+
+  // C9 — alinhamento: o clique sai na mesma posição com e sem o limitador (±1 ms), e em 2,000s.
+  const CLICK = { music: [{ ...MUS[0], path: P('click.wav'), start: 0, dur: 6 }] };
+  const tOn = peakAt((await run(CLICK)).output);
+  const tOff = peakAt((await run({ ...CLICK, limiter: false })).output);
+  ok(Math.abs(tOn - tOff) <= 0.001 && Math.abs(tOn - 2) <= 0.001,
+    `C9: clique em ${tOn.toFixed(4)}s com o limitador, ${tOff.toFixed(4)}s sem, esperado 2,000 ± 0,001`);
 
   // Servidor numa porta de teste: sidecar v4 saneado e a rota de conform lendo sfx + mix.
   const srv = spawn(process.execPath, ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT) } });
@@ -677,8 +773,8 @@ async function main() {
     ok(Array.isArray(sc.sfx) && sc.sfx.length === 1, 'sidecar: sfx não gravado');
     ok(JSON.stringify(sc.mix) === '{"mute":["sfx"],"solo":null}', 'sidecar: mix não saneado ' + JSON.stringify(sc.mix));
 
-    const conformVia = async () => {
-      const c = await req('POST', '/api/timeline/conform', { video });
+    const conformVia = async (extra = {}) => {
+      const c = await req('POST', '/api/timeline/conform', { video, ...extra });
       if (c.status !== 200) throw new Error('POST conform: ' + c.status + ' ' + JSON.stringify(c.body));
       for (let i = 0; i < 600; i++) {
         const j = await req('GET', '/api/jobs/' + c.body.job);
@@ -693,9 +789,15 @@ async function main() {
     };
     let res1 = await conformVia();
     ok(res1.sfx === 0 && JSON.stringify(res1.excluded) === '["sfx"]', 'rota: mix do sidecar ignorado ' + JSON.stringify(res1));
+    ok(res1.limiter && res1.limiter.ceilingDb === -2, 'rota: limitador deveria vir ligado por padrão, veio ' + JSON.stringify(res1.limiter));
     const out1 = path.join(ROOT, res1.output);
     expectWin('rota mute sfx', windows(out1), { A: 'som', S: 'silêncio' });
     fs.rmSync(out1, { force: true });
+
+    // limiter: false no corpo da requisição desliga o limitador.
+    const resOff = await conformVia({ limiter: false });
+    ok(resOff.limiter === null && resOff.mixPeakDb === null, 'rota limiter:false: ' + JSON.stringify({ limiter: resOff.limiter, mixPeakDb: resOff.mixPeakDb }));
+    fs.rmSync(path.join(ROOT, resOff.output), { force: true });
 
     // sidecar v3 (sem sfx/mix) conforma sem erro, com tudo audível.
     const v3 = { ...sc, version: 3 }; delete v3.sfx; delete v3.mix;
@@ -717,9 +819,9 @@ async function main() {
 main().catch(e => { console.log('FAIL\n' + (e.stack || e)); process.exitCode = 1; });
 ```
 
-Rodar `node jobs/checks/b1-unit.js`. Esperado: `FAIL` com as 5 linhas de "SFX…" (cadeia do primeiro clipe, segundo clipe, amix, ordem dos `-i`, SFX sem TRILHA), `mono: pan só no clipe de 1 canal`, `normalizeMix/audible não exportadas`, `peakWarnOf não exportada` e `parseLoudness/loudWarnOf não exportadas`. Os 4 fixtures de não-regressão **não** aparecem (o grafo de hoje é igual ao do `HEAD`).
+Rodar `node jobs/checks/b1-unit.js`. Esperado: `FAIL` com, para cada um dos 4 fixtures, `cadeia do master ausente ou diferente` e `args com o limitador deveriam diferir do HEAD só no filtro e no -map de áudio`; as 5 linhas de "SFX…" (cadeia do primeiro clipe, segundo clipe, amix, ordem dos `-i`, SFX sem TRILHA); `mono: pan só no clipe de 1 canal`; `normalizeMix/audible não exportadas`; `tpWarnOf/lraWarnOf não exportadas`; `MASTER_CEIL_DB = undefined, esperado -2`; `parseLoudness/loudWarnOf não exportadas`; e `parseMixPeak não exportada`. As linhas de não-regressão com `limiter: false` **não** aparecem (o grafo de hoje é igual ao do `HEAD`).
 
-Rodar `node jobs/checks/b1-e2e.js` (≈ 25s). Esperado: `FAIL` que inclui `C1: mono perdeu 3 dB no export — RMS S -Infinity, M -24.09…`, janelas de C3/C4 com som onde deveria haver silêncio, as linhas de pico e de loudness (`C1: loudness undefined / undefined, esperado low`, `C4`, `C5`, `C7: loudness undefined / undefined, esperado entre -16 e -14 sem aviso`), `sidecar: version 3` e `(arquivos mantidos em jobs/b1-check/)`. Apagar `jobs/b1-check/` depois (`rm -rf jobs/b1-check`) e qualquer `output/conformed-*.mp4` criado por esta rodada (o script lista o caminho na linha `rota: mix do sidecar ignorado`).
+Rodar `node jobs/checks/b1-e2e.js` (≈ 40s). Esperado: `FAIL` que inclui `C1: mono perdeu 3 dB no export — RMS S -Infinity, M -24.09…`, janelas de C3/C4 com som onde deveria haver silêncio, as linhas de medição com `undefined` (`C1: mix undefined / limitador undefined`, `C1: pico real undefined / undefined`, `C1: loudness undefined / undefined, esperado low`, `C4`, `C5`, `C5b`, `C6`, `C7`, `C8: LRA undefined / undefined, esperado > 9 e high`), `sidecar: version 3`, `rota: limitador deveria vir ligado por padrão, veio undefined` e `(arquivos mantidos em jobs/b1-check/)`. O `C9` (alinhamento) passa já no código de hoje, que não tem limitador: ele protege contra o lookahead deslocar o som. Apagar `jobs/b1-check/` depois (`rm -rf jobs/b1-check`) e qualquer `output/conformed-*.mp4` criado por esta rodada (o script lista o caminho na linha `rota: mix do sidecar ignorado`).
 
 - [ ] **Step 2 [Executor]: `lib/ffmpeg.js`**
 
@@ -738,9 +840,9 @@ por:
     channels: a.channels || 0,
 ```
 
-- [ ] **Step 3 [Executor]: `lib/timeline.js` — 11 trocas, nesta ordem**
+- [ ] **Step 3 [Executor]: `lib/timeline.js` — 12 trocas, nesta ordem**
 
-**lib/timeline.js · troca 1 — cabeçalho: SFX e mix.** Substituir:
+**lib/timeline.js · troca 1 — cabeçalho: SFX, master e mix.** Substituir:
 
 ```js
 //   TRILHA  each clip trimmed, gain-staged, delayed to its timeline position
@@ -757,14 +859,38 @@ por:
 //           attenuate the base by 1/N and quietly duck the voice).
 //   SFX     the TRILHA chain again, one input per clip: the same whoosh used
 //           five times is five inputs, with no state shared between them.
+//   MASTER  a true-peak safety limiter on the sum, ceiling -2 dBTP: three AAC
+//           encodes stand between this file and a phone (this mezzanine, the
+//           Export, the platform), and each one can push a peak up.
 //
 // The mix follows the preview (export = preview): a track the user muted, or
 // that another track's solo silences, never becomes an input. `mix` comes from
 // the sidecar, so normalizeMix() drops anything unexpected before it is read.
+// The limiter is the one declared exception: the preview cannot run it, so
+// above the ceiling the export sounds more contained than what the user heard
+// (the timeline meter shows where). `limiter: false` leaves the sum untouched.
 //
 ```
 
-**lib/timeline.js · troca 2 — normalizeMix + audible depois de normalizeClips.** Substituir:
+**lib/timeline.js · troca 2 — constantes do limitador do master.** Substituir:
+
+```js
+const MEZZANINE_CRF = 12;   // matches assemble.js — visually lossless working file
+const OUT_FPS = 30;
+```
+
+por:
+
+```js
+const MEZZANINE_CRF = 12;   // matches assemble.js — visually lossless working file
+// Master limiter ceiling. -2, not -1: measured, this file's AAC 192k plus the
+// Export's AAC 128k pushed a -1 dBTP ceiling to +0.3 dBTP; -2 held at -1.3.
+const MASTER_CEIL_DB = -2;
+const MASTER_LIMIT = '0.794328';   // 10^(-2/20): alimiter takes the ceiling as linear gain
+const OUT_FPS = 30;
+```
+
+**lib/timeline.js · troca 3 — normalizeMix + audible depois de normalizeClips.** Substituir:
 
 ```js
     if (withVolume) clip.volume = Math.max(0, Math.min(1, num(c.volume, 1)));
@@ -800,7 +926,7 @@ function audible(mix, track) {
 }
 ```
 
-**lib/timeline.js · troca 3 — buildConformGraph: comentário e assinatura.** Substituir:
+**lib/timeline.js · troca 4 — buildConformGraph: comentário e assinatura.** Substituir:
 
 ```js
 // Pure: no fs, no child_process. Inputs are positional and the caller must
@@ -815,10 +941,10 @@ por:
 // Pure: no fs, no child_process. Inputs are positional and the caller must
 // pass them to ffmpeg in exactly this order — base, B-ROLL, TRILHA, then SFX.
 function buildConformGraph({ segments, broll = [], music = [], sfx = [], hasAudio = true,
-  fit = 'blur', duration }) {
+  fit = 'blur', duration, limiter = true }) {
 ```
 
-**lib/timeline.js · troca 4 — buildConformGraph: TRILHA + SFX no amix.** Substituir:
+**lib/timeline.js · troca 5 — buildConformGraph: TRILHA + SFX no amix, e o master.** Substituir:
 
 ```js
   g.push('[ca]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[ab]');
@@ -835,6 +961,8 @@ function buildConformGraph({ segments, broll = [], music = [], sfx = [], hasAudi
   } else {
     g.push('[ab]anull[aout]');
   }
+
+  return { filter: g.join(';'), vlabel, alabel: '[aout]' };
 ```
 
 por:
@@ -862,9 +990,24 @@ por:
   } else {
     g.push('[ab]anull[aout]');
   }
+  if (!limiter) return { filter: g.join(';'), vlabel, alabel: '[aout]' };
+
+  // 4 — MASTER: the sum splits in two. One branch only measures the peak
+  // before the limiter (astats is float, so it reads above 0 dBFS; conform()
+  // parses it from the log). The other is the limiter: alimiter limits sample
+  // peaks, so it runs 4× oversampled to hold the ceiling as a true peak;
+  // level=disabled turns off its automatic make-up gain; latency=1 removes the
+  // lookahead delay, keeping the sound on the picture. The atrim bounds the sum:
+  // the measuring branch ends only when its input does, and an endless input
+  // would hang ffmpeg past -t.
+  g.push(`[aout]atrim=end=${ts(duration)},asplit=2[mpre][mlim]`);
+  g.push('[mpre]astats=measure_perchannel=none:measure_overall=Peak_level,anullsink');
+  g.push(`[mlim]aresample=176400,alimiter=limit=${MASTER_LIMIT}:attack=5:release=50:` +
+    'level=disabled:latency=1,aresample=44100[amaster]');
+  return { filter: g.join(';'), vlabel, alabel: '[amaster]' };
 ```
 
-**lib/timeline.js · troca 5 — buildConformArgs: inputs de SFX.** Substituir:
+**lib/timeline.js · troca 6 — buildConformArgs: inputs de SFX.** Substituir:
 
 ```js
 function buildConformArgs({ base, broll, music, graph, output, duration }) {
@@ -883,7 +1026,7 @@ function buildConformArgs({ base, broll, music, sfx = [], graph, output, duratio
   for (const c of sfx) args.push('-i', c.path);
 ```
 
-**lib/timeline.js · troca 6 — probeClips: guardar canais do áudio.** Substituir:
+**lib/timeline.js · troca 7 — probeClips: guardar canais do áudio.** Substituir:
 
 ```js
       const ok = kind === 'video' ? !!info.vcodec : !!info.acodec;
@@ -900,7 +1043,7 @@ por:
       usable.push(kind === 'audio' ? { ...c, channels: info.channels } : c);
 ```
 
-**lib/timeline.js · troca 7 — measureLoudness e limiares antes de conform().** Substituir:
+**lib/timeline.js · troca 8 — medição e limiares antes de conform().** Substituir:
 
 ```js
 async function conform({ base, segments = [], broll = [], music = [], output, workDir,
@@ -911,41 +1054,45 @@ async function conform({ base, segments = [], broll = [], music = [], output, wo
 por:
 
 ```js
-// The mix sums with normalize=0 and nothing downstream limits it (the Export
-// hands the audio straight to AAC), so a peak over 0 dBFS reaches delivery, and
-// nothing checks loudness against the -14..-16 LUFS a Reel is mixed for. One
-// ebur128 pass over the finished file (what the Export reads) gives both: the
-// integrated loudness and the sample peak — the same peak the timeline meter
-// shows. Never fatal: a failed run or unexpected output gives nulls, and so does
-// digital silence (I at the -70 LUFS gate floor, peak -inf; JSON has no -Infinity).
+// Nothing checked the mix before this: a Reel is mixed for -14..-16 LUFS
+// integrated, a loudness range a phone speaker can carry, and a true peak of
+// -1..-2 dBTP after encoding. Two readings, both never fatal (a failed run or
+// unexpected output gives nulls):
+//   - the sum before the limiter: the master chain's astats branch prints it at
+//     the end of the conform's own log. Same sample peak as the timeline meter,
+//     read before any AAC.
+//   - the finished file (what the Export reads): one ebur128 pass gives the
+//     integrated loudness, the LRA and the true peak. Digital silence (I at the
+//     -70 LUFS gate floor, peak -inf; JSON has no -Infinity) gives nulls.
+const num1 = v => (/inf/.test(v) ? null : Math.round(parseFloat(v) * 10) / 10);
+function parseMixPeak(stderr) {
+  const all = [...String(stderr || '').matchAll(/Peak level dB:\s*(-?(?:inf|[\d.]+))/g)];
+  return all.length ? num1(all[all.length - 1][1]) : null;
+}
 function parseLoudness(stderr) {
+  const none = { lufs: null, lra: null, truePeakDb: null };
   const s = String(stderr || '');
   const at = s.lastIndexOf('Summary:');
-  if (at < 0) return { lufs: null, peakDb: null };
+  if (at < 0) return none;
   const sum = s.slice(at);
-  const num = v => (/inf/.test(v) ? null : Math.round(parseFloat(v) * 10) / 10);
   const i = /\bI:\s*(-?(?:inf|[\d.]+))\s*LUFS/.exec(sum);
-  const p = /Sample peak:\s*Peak:\s*(-?(?:inf|[\d.]+))\s*dBFS/.exec(sum);
-  let lufs = i ? num(i[1]) : null;
-  if (lufs != null && lufs <= -70) lufs = null;
-  return { lufs, peakDb: p ? num(p[1]) : null };
+  const lufs = i ? num1(i[1]) : null;
+  if (lufs == null || lufs <= -70) return none;
+  const l = /\bLRA:\s*(-?(?:inf|[\d.]+))\s*LU\b/.exec(sum);
+  const p = /True peak:\s*Peak:\s*(-?(?:inf|[\d.]+))\s*dBFS/.exec(sum);
+  return { lufs, lra: l ? num1(l[1]) : null, truePeakDb: p ? num1(p[1]) : null };
 }
 async function measureLoudness(file, onLog = () => {}) {
   let log = '';
   try {
     await runFfmpeg(['-nostats', '-i', file, '-map', '0:a:0',
-      '-af', 'ebur128=peak=sample', '-f', 'null', '-'],
+      '-af', 'ebur128=peak=true', '-f', 'null', '-'],
       { onLog: s => { log += s; } });
   } catch (e) {
     onLog(`[conform] loudness não medida — ${String(e.message || e).split('\n')[0]}\n`);
-    return { lufs: null, peakDb: null };
+    return { lufs: null, lra: null, truePeakDb: null };
   }
   return parseLoudness(log);
-}
-function peakWarnOf(peakDb) {
-  if (peakDb == null) return null;
-  if (peakDb > 0) return 'clip';
-  return peakDb >= -1 ? 'hot' : null;
 }
 // Target for a Reel: -14..-16 LUFS integrated. Reported, never applied to the mix.
 function loudWarnOf(lufs) {
@@ -953,13 +1100,22 @@ function loudWarnOf(lufs) {
   if (lufs < -16) return 'low';
   return lufs > -14 ? 'high' : null;
 }
+// True peak above -1 dBTP: the AAC pushed the file out of the delivery range.
+function tpWarnOf(truePeakDb) {
+  return truePeakDb != null && truePeakDb > -1 ? 'over' : null;
+}
+// LRA above 9 LU swings too wide for a phone speaker. Below 4 is not flagged:
+// nearly every voice-led reel measures 1-4.
+function lraWarnOf(lra) {
+  return lra != null && lra > 9 ? 'high' : null;
+}
 
 async function conform({ base, segments = [], broll = [], music = [], sfx = [], mix = null,
-  output, workDir, fit = 'blur', words = null, captionStyle = 'impact',
+  limiter = true, output, workDir, fit = 'blur', words = null, captionStyle = 'impact',
   onLog = () => {}, onStage = () => {}, onProgress = () => {} }) {
 ```
 
-**lib/timeline.js · troca 8 — conform(): regra antes do grafo.** Substituir:
+**lib/timeline.js · troca 9 — conform(): regra antes do grafo.** Substituir:
 
 ```js
   const brollAll = normalizeClips(broll, duration);
@@ -1002,13 +1158,13 @@ por:
 
   const graph = buildConformGraph({
     segments: segs, broll: b.usable, music: m.usable, sfx: x.usable,
-    hasAudio: !!info.acodec && audible(mixN, 'audio'), fit, duration,
+    hasAudio: !!info.acodec && audible(mixN, 'audio'), fit, duration, limiter,
   });
   const args = buildConformArgs({ base, broll: b.usable, music: m.usable, sfx: x.usable,
     graph, output, duration });
 ```
 
-**lib/timeline.js · troca 9 — conform(): medir pico e loudness depois do ffmpeg.** Substituir:
+**lib/timeline.js · troca 10 — conform(): pico antes do limitador e medição do arquivo depois do ffmpeg.** Substituir:
 
 ```js
   onStage('conform', 'Conformando a timeline num mezanino');
@@ -1022,18 +1178,27 @@ por:
 
 ```js
   onStage('conform', 'Conformando a timeline num mezanino');
+  // the tail of this run's log carries the master chain's pre-limiter peak
+  let runLog = '';
   await runFfmpeg(args, {
-    onLog,
+    onLog: s => { runLog = (runLog + s).slice(-16000); onLog(s); },
     onProgress: p => onProgress({ ...p, pct: Math.min(99, (p.time / duration) * 100) }),
   });
+  const mixPeakDb = limiter ? parseMixPeak(runLog) : null;
+  // how far the loudest peak went over the ceiling (approximate: the limiter
+  // acts on the true peak, mixPeakDb is a sample peak)
+  const cutDb = mixPeakDb == null ? null
+    : Math.max(0, Math.round((mixPeakDb - MASTER_CEIL_DB) * 10) / 10);
 
-  onStage('loudness', 'Medindo pico e loudness da mixagem');
-  const { lufs, peakDb } = await measureLoudness(output, onLog);
-  onLog(`[conform] pico da mixagem: ${peakDb == null ? 'n/d' : peakDb.toFixed(1) + ' dBFS'} · ` +
-    `loudness: ${lufs == null ? 'n/d' : lufs.toFixed(1) + ' LUFS'}\n`);
+  onStage('loudness', 'Medindo pico real, loudness e LRA');
+  const { lufs, lra, truePeakDb } = await measureLoudness(output, onLog);
+  const f1 = (v, unit) => (v == null ? 'n/d' : v.toFixed(1) + unit);
+  onLog('[conform] ' + (limiter ? `mix antes do limitador: ${f1(mixPeakDb, ' dBFS')}` +
+      (cutDb == null ? '' : ` (corte ${cutDb.toFixed(1)} dB)`) + ' · ' : '') +
+    `pico real: ${f1(truePeakDb, ' dBTP')} · loudness: ${f1(lufs, ' LUFS')} · LRA: ${f1(lra, ' LU')}\n`);
 ```
 
-**lib/timeline.js · troca 10 — conform(): retorno.** Substituir:
+**lib/timeline.js · troca 11 — conform(): retorno.** Substituir:
 
 ```js
     broll: b.usable.length, music: m.usable.length,
@@ -1045,10 +1210,13 @@ por:
 ```js
     broll: b.usable.length, music: m.usable.length, sfx: x.usable.length,
     skipped: [...b.skipped, ...m.skipped, ...x.skipped],
-    mix: mixN, excluded, peakDb, peakWarn: peakWarnOf(peakDb), lufs, loudWarn: loudWarnOf(lufs),
+    mix: mixN, excluded,
+    mixPeakDb, limiter: limiter ? { ceilingDb: MASTER_CEIL_DB, cutDb } : null,
+    truePeakDb, tpWarn: tpWarnOf(truePeakDb),
+    lufs, loudWarn: loudWarnOf(lufs), lra, lraWarn: lraWarnOf(lra),
 ```
 
-**lib/timeline.js · troca 11 — exports.** Substituir:
+**lib/timeline.js · troca 12 — exports.** Substituir:
 
 ```js
 module.exports = {
@@ -1063,7 +1231,8 @@ por:
 module.exports = {
   conform, buildConformGraph, buildConformArgs,
   normalizeSegments, normalizeClips, timelineDuration, remapWords,
-  normalizeMix, audible, measureLoudness, parseLoudness, peakWarnOf, loudWarnOf,
+  normalizeMix, audible, measureLoudness, parseLoudness, parseMixPeak,
+  loudWarnOf, tpWarnOf, lraWarnOf, MASTER_CEIL_DB,
 };
 ```
 
@@ -1149,7 +1318,7 @@ por:
         sfx = resolveClips(tl.sfx);
 ```
 
-**server.js · troca 5 — conform: passar sfx e mix.** Substituir:
+**server.js · troca 5 — conform: passar sfx, mix e limiter.** Substituir:
 
 ```js
           base, segments: tl.segments || [], broll, music,
@@ -1160,6 +1329,7 @@ por:
 
 ```js
           base, segments: tl.segments || [], broll, music, sfx, mix: tl.mix,
+          limiter: b.limiter !== false,
           output: out, workDir: dir, fit: b.fit || 'blur',
 ```
 
@@ -1167,11 +1337,11 @@ por:
 
 - [ ] **Step 6 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 5. Parar aqui.
 
-- [ ] **Step 7 [Orquestrador]: `validator`** — "validar a Task 2 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b1-unit.js` e `node jobs/checks/b1-e2e.js`; conferir que a regra de `audible` em `lib/timeline.js` é exatamente a da spec; que todo caminho de `tl.sfx` passa por `resolveInput`; que `lib/ffmpeg.js` só ganhou o campo `channels`; que a parte de vídeo de `buildConformGraph` (passos 1 e 2) é idêntica ao `HEAD`; e que `measureLoudness` nunca faz o conform falhar".
+- [ ] **Step 7 [Orquestrador]: `validator`** — "validar a Task 2 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b1-unit.js` e `node jobs/checks/b1-e2e.js`; conferir que a regra de `audible` em `lib/timeline.js` é exatamente a da spec; que a cadeia do master é exatamente a da spec (seção do conform, item 5), com `atrim=end=<duração>` antes do `asplit`; que todo caminho de `tl.sfx` passa por `resolveInput`; que `lib/ffmpeg.js` só ganhou o campo `channels`; que a parte de vídeo de `buildConformGraph` (passos 1 e 2) é idêntica ao `HEAD`; que o `limiter` do conform vem do corpo da requisição (`b.limiter`), não do sidecar; e que `measureLoudness` e `parseMixPeak` nunca fazem o conform falhar".
 
-- [ ] **Step 8 [Usuário]: Conferência rápida** — num projeto que já tenha TRILHA, CONFORMAR → EXPORT conclui como antes (item 11 do checklist). Se a TRILHA for mono, o export sai 3 dB mais alto que antes: é a correção da decisão 13, agora igual ao preview.
+- [ ] **Step 8 [Usuário]: Conferência rápida** — num projeto que já tenha TRILHA, CONFORMAR → EXPORT conclui como antes (item 11 do checklist). Se a TRILHA for mono, o export sai 3 dB mais alto que antes: é a correção da decisão 13, agora igual ao preview. Com a TRILHA alta, os picos saem contidos pelo limitador do master (−2 dBTP): é a exceção declarada da decisão 21. O log do job mostra a linha `[conform] mix antes do limitador: … · pico real: … · loudness: … · LRA: …`.
 
-- [ ] **Step 9 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b1`; arquivos `lib/timeline.js`, `lib/ffmpeg.js`, `server.js`; commit `Conform SFX and mute/solo, measure peak and LUFS, keep mono level (B1)`) → OK do usuário → `publish`.
+- [ ] **Step 9 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b1`; arquivos `lib/timeline.js`, `lib/ffmpeg.js`, `server.js`; commit `Conform SFX and mute/solo, add master limiter, measure loudness, keep mono level (B1)`) → OK do usuário → `publish`.
 
 ---
 
@@ -2311,15 +2481,15 @@ Pressionar **Espaço**. Depois `await T.sleep(2500); T.pause(); T.stop()`. Esper
 
 ---
 
-### Task 4 (B3): Mudo e solo como controles de mixagem, e o LUFS na mensagem
+### Task 4 (B3): Mudo e solo como controles de mixagem, e as medidas na mensagem
 
 **Files:**
-- Modify: `public/index.html` — CSS depois de `.bt-track-row.hidden …`, estado (`trilhaMuted`/`trilhaSolo` saem), `audibleNow()`, `timelineState()`, `saveBeats()`, `doConform()`, `applySavedBeats()`, `TCTL` e comentário, markup do `buildDom()` (ÁUDIO, TRILHA, SFX), `applyTrackVisibility()`, `wireTracks()`, `loadVideo()`.
+- Modify: `public/index.html` — CSS depois de `.bt-track-row.hidden …`, estado (`trilhaMuted`/`trilhaSolo` saem), `audibleNow()`, `timelineState()`, `saveBeats()`, `measuresMsg()` (nova, antes do comentário do CONFORMAR), `doConform()`, `applySavedBeats()`, `TCTL` e comentário, markup do `buildDom()` (ÁUDIO, TRILHA, SFX), `applyTrackVisibility()`, `wireTracks()`, `loadVideo()`.
 - Modify: `public/dev/ui-probe.js`.
 
 **Interfaces:**
-- Consumes: `audibleNow()`, `SFX`, sidecar v4 e o retorno de `conform()` (`sfx`, `mix`, `excluded`, `peakDb`, `peakWarn`) das Tasks 2 e 3.
-- Produces: `const AUDIO_TRACKS`, `let MIX = { mute: [], solo: null }`, `normalizeMix(mix)`, `audible(track)` — a regra com o mesmo texto de `lib/timeline.js`; classe `.silent` nas linhas de áudio que não vão soar; probe com `TRACK_ACTS_B3`, `soloExclusive()`, `silentLanes()` e os checks `audio-controls`, `solo-exclusive`, `silent-lanes`.
+- Consumes: `audibleNow()`, `SFX`, sidecar v4 e o retorno de `conform()` (`sfx`, `mix`, `excluded`, `truePeakDb`, `tpWarn`, `lufs`, `loudWarn`, `lra`, `lraWarn`, `limiter`) das Tasks 2 e 3.
+- Produces: `const AUDIO_TRACKS`, `let MIX = { mute: [], solo: null }`, `normalizeMix(mix)`, `audible(track)` — a regra com o mesmo texto de `lib/timeline.js`; `measuresMsg(r) → string` (as medidas da mensagem, pura; a Task 7 acrescenta um trecho depois dela); classe `.silent` nas linhas de áudio que não vão soar; probe com `TRACK_ACTS_B3`, `soloExclusive()`, `silentLanes()` e os checks `audio-controls`, `solo-exclusive`, `silent-lanes`.
 
 - [ ] **Step 1 [Executor]: Salvar a checagem estática e confirmar que falha**
 
@@ -2361,7 +2531,7 @@ if (count(lib, RULE_LIB) !== 1) fail.push('lib/timeline.js — regra audible() a
 
 // Estado, persistência, controles.
 none(src, 'index.html', ['trilhaMuted', 'trilhaSolo', 'hiddenTracks.music', "tctlHtml('hide', 'ÁUDIO')", "tctlHtml('hide', 'TRILHA')",
-  'Silenciar trilha', 'Ativar solo da trilha', 'não altera o export\', icons: [\'i-spk']);
+  'Silenciar trilha', 'Ativar solo da trilha', 'não altera o export\', icons: [\'i-spk', 'r.peakWarn', 'r.peakDb']);
 need(src, 'index.html', [
   ".bt-track-row.silent .bt-track-content{opacity:.45}", "const AUDIO_TRACKS = ['audio', 'music', 'sfx'];",
   'let MIX = { mute: [], solo: null };', 'function normalizeMix(mix) {', 'function audible(track) {',
@@ -2377,9 +2547,35 @@ need(src, 'index.html', [
   "row.classList.toggle('silent', AUDIO_TRACKS.includes(track) && !audible(track));",
   "else if (act === 'mute') on = MIX.mute.includes(track);", "else if (act === 'solo') on = MIX.solo === track;",
   "if (act === 'solo') MIX = { mute: MIX.mute, solo: MIX.solo === track ? null : track };",
-  '· ${r.sfx} SFX', 'fora do export: ${fora} (${why})', '— vai distorcer: abaixe TRILHA/SFX', '— sem folga (ideal ≤ −1)',
-  "r.peakWarn === 'clip');", ': abaixo do alvo −14 a −16`', ': acima do alvo −14 a −16`', '${peak}${loud}${skipped}',
+  '· ${r.sfx} SFX', 'fora do export: ${fora} (${why})', '${measuresMsg(r)}${skipped}', "r.tpWarn === 'over');",
+  '  function measuresMsg(r) {',
 ]);
+if (count(src, 'measuresMsg(r)') !== 2) fail.push('measuresMsg(r) deveria aparecer 2× (definição e doConform)');
+
+// A mensagem das medidas: a função pura, extraída do HTML, contra resultados de conform.
+{
+  const m = /  function measuresMsg\(r\) \{\n[\s\S]*?\n  \}\n/.exec(src);
+  if (!m) fail.push('measuresMsg não achada');
+  else {
+    const msg = new Function(m[0] + '\nreturn measuresMsg;')();
+    const cases = [
+      ['fixture', { truePeakDb: -8.3, tpWarn: null, lufs: -25.4, loudWarn: 'low', lra: 4.3, lraWarn: null, limiter: { ceilingDb: -2, cutDb: 0 } },
+        ' · pico real −8,3 dBTP · −25,4 LUFS: abaixo do alvo −14 a −16 · LRA 4,3 LU'],
+      ['no alvo, corte leve', { truePeakDb: -2, tpWarn: null, lufs: -15.1, loudWarn: null, lra: 0.2, lraWarn: null, limiter: { ceilingDb: -2, cutDb: 1.4 } },
+        ' · pico real −2,0 dBTP · −15,1 LUFS · LRA 0,2 LU · limitador −1,4 dB'],
+      ['corte de 3 dB', { truePeakDb: -2, tpWarn: null, lufs: -15, loudWarn: null, lra: 3, lraWarn: null, limiter: { ceilingDb: -2, cutDb: 3 } },
+        ' · pico real −2,0 dBTP · −15,0 LUFS · LRA 3,0 LU · limitador −3,0 dB'],
+      ['mix alto', { truePeakDb: -2, tpWarn: null, lufs: -3.8, loudWarn: 'high', lra: 5.3, lraWarn: null, limiter: { ceilingDb: -2, cutDb: 8 } },
+        ' · pico real −2,0 dBTP · −3,8 LUFS: acima do alvo −14 a −16 · LRA 5,3 LU · limitador −8,0 dB — mix alto: abaixe TRILHA/SFX'],
+      ['AAC passou do teto', { truePeakDb: 0.4, tpWarn: 'over', lufs: -14.2, loudWarn: null, lra: 11.4, lraWarn: 'high', limiter: { ceilingDb: -2, cutDb: 0 } },
+        ' · pico real +0,4 dBTP — acima de −1 depois do AAC: abaixe TRILHA/SFX · −14,2 LUFS · LRA 11,4 LU: dinâmica alta para celular (ideal ≤ 9)'],
+      ['limiter: false', { truePeakDb: 6.4, tpWarn: 'over', lufs: -1.3, loudWarn: 'high', lra: 5.5, lraWarn: null, limiter: null },
+        ' · pico real +6,4 dBTP — acima de −1 depois do AAC: abaixe TRILHA/SFX · −1,3 LUFS: acima do alvo −14 a −16 · LRA 5,5 LU'],
+      ['silêncio', { truePeakDb: null, tpWarn: null, lufs: null, loudWarn: null, lra: null, lraWarn: null, limiter: { ceilingDb: -2, cutDb: null } }, ''],
+    ];
+    cases.forEach(([name, r, want]) => { const got = msg(r); if (got !== want) fail.push(`measuresMsg(${name}) = "${got}", esperado "${want}"`); });
+  }
+}
 if ((src.match(/\$\{tctlHtml\('/g) || []).length !== 19) fail.push('esperadas 19 chamadas ${tctlHtml(…)}, achadas ' + (src.match(/\$\{tctlHtml\('/g) || []).length);
 if (count(src, 'mix: MIX') !== 2) fail.push('mix: MIX deveria aparecer 2× (timelineState e saveBeats)');
 // snapshot() não leva o mix: Ctrl+Z não desfaz chave de mixagem
@@ -2393,9 +2589,9 @@ console.log(fail.length ? 'FAIL\n' + fail.join('\n') : 'PASS: B3 estático');
 process.exitCode = fail.length ? 1 : 0;
 ```
 
-Rodar `node jobs/checks/b3-static.js`. Esperado: `FAIL` com `index.html — regra audible() ausente ou duplicada`, as linhas `não deveria existir:` de `trilhaMuted`, `trilhaSolo`, `hiddenTracks.music`, dos H de ÁUDIO/TRILHA e dos textos antigos de M/S, as linhas `ausente:`, `esperadas 19 chamadas ${tctlHtml(…)}, achadas 17`, `mix: MIX deveria aparecer 2×` e as linhas `ausente:` do probe. A linha da regra em `lib/timeline.js` **não** aparece (a Task 2 já a criou).
+Rodar `node jobs/checks/b3-static.js`. Esperado: `FAIL` com `index.html — regra audible() ausente ou duplicada`, as linhas `não deveria existir:` de `trilhaMuted`, `trilhaSolo`, `hiddenTracks.music`, dos H de ÁUDIO/TRILHA e dos textos antigos de M/S, as linhas `ausente:`, `esperadas 19 chamadas ${tctlHtml(…)}, achadas 17`, `mix: MIX deveria aparecer 2×`, `measuresMsg(r) deveria aparecer 2× (definição e doConform)`, `measuresMsg não achada` e as linhas `ausente:` do probe. A linha da regra em `lib/timeline.js` **não** aparece (a Task 2 já a criou).
 
-- [ ] **Step 2 [Executor]: `public/index.html` — 18 trocas, nesta ordem**
+- [ ] **Step 2 [Executor]: `public/index.html` — 19 trocas, nesta ordem**
 
 As trocas 3, 4, 5, 7, 13 e 18 usam como âncora o texto deixado pela Task 3: a Task 3 precisa estar aplicada.
 
@@ -2491,7 +2687,36 @@ por:
       });
 ```
 
-**public/index.html · troca 6 — doConform: SFX, o que ficou de fora e pico.** Substituir:
+**public/index.html · troca 6 — measuresMsg antes do CONFORMAR.** Substituir:
+
+```html
+  /* CONFORMAR: achata a timeline num mezanino de verdade e o entrega ao EXPORT.
+```
+
+por:
+
+```html
+  /* Medidas do arquivo conformado, na ordem da mensagem: pico real, LUFS, LRA e
+     o corte do limitador do master. Informam; só o pico real acima de −1 dBTP
+     (o AAC empurrou para fora da faixa) vira erro, no stage() de doConform. */
+  function measuresMsg(r) {
+    const sg = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1).replace('.', ',');
+    const un = v => v.toFixed(1).replace('.', ',');
+    let s = '';
+    if (r.truePeakDb != null) s += ` · pico real ${sg(r.truePeakDb)} dBTP` +
+      (r.tpWarn === 'over' ? ' — acima de −1 depois do AAC: abaixe TRILHA/SFX' : '');
+    if (r.lufs != null) s += ` · ${sg(r.lufs)} LUFS` +
+      (r.loudWarn === 'low' ? ': abaixo do alvo −14 a −16' : r.loudWarn === 'high' ? ': acima do alvo −14 a −16' : '');
+    if (r.lra != null) s += ` · LRA ${un(r.lra)} LU` + (r.lraWarn === 'high' ? ': dinâmica alta para celular (ideal ≤ 9)' : '');
+    // acima de 3 dB de corte, um limitador de pico já achata os transientes
+    const cut = r.limiter ? r.limiter.cutDb : null;
+    if (cut > 0) s += ` · limitador −${un(cut)} dB` + (cut > 3 ? ' — mix alto: abaixe TRILHA/SFX' : '');
+    return s;
+  }
+  /* CONFORMAR: achata a timeline num mezanino de verdade e o entrega ao EXPORT.
+```
+
+**public/index.html · troca 7 — doConform: SFX, o que ficou de fora e as medidas.** Substituir:
 
 ```html
       stage(`timeline conformada — ${r.duration.toFixed(1)}s · ${r.broll} B-ROLL · ${r.music} TRILHA` +
@@ -2501,27 +2726,16 @@ por:
 por:
 
 ```html
-      // export = preview: diz o que o mix deixou fora e se a soma passou do teto
+      // export = preview: diz o que o mix deixou fora; depois, as medidas do arquivo
       const NAME = { audio: 'ÁUDIO', music: 'TRILHA', sfx: 'SFX' };
       const fora = (r.excluded || []).map(t => NAME[t]).join(', ');
       const why = r.mix && r.mix.solo ? 'solo: ' + NAME[r.mix.solo] : 'mudo';
-      const db = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1).replace('.', ',') + ' dBFS';
-      const peak = r.peakDb == null ? ''
-        : r.peakWarn === 'clip' ? ` · pico ${db(r.peakDb)} — vai distorcer: abaixe TRILHA/SFX`
-        : r.peakWarn === 'hot' ? ` · pico ${db(r.peakDb)} — sem folga (ideal ≤ −1)`
-        : ` · pico ${db(r.peakDb)}`;
-      // loudness do arquivo contra o alvo de um Reel: informa, não bloqueia
-      const lufs = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(1).replace('.', ',') + ' LUFS';
-      const loud = r.lufs == null ? ''
-        : r.loudWarn === 'low' ? ` · ${lufs(r.lufs)}: abaixo do alvo −14 a −16`
-        : r.loudWarn === 'high' ? ` · ${lufs(r.lufs)}: acima do alvo −14 a −16`
-        : ` · ${lufs(r.lufs)}`;
       stage(`timeline conformada — ${r.duration.toFixed(1)}s · ${r.broll} B-ROLL · ${r.music} TRILHA · ${r.sfx} SFX` +
-        ` · ${r.captionedWords} palavras${fora ? ` · fora do export: ${fora} (${why})` : ''}${peak}${loud}${skipped}`,
-        r.peakWarn === 'clip');
+        ` · ${r.captionedWords} palavras${fora ? ` · fora do export: ${fora} (${why})` : ''}${measuresMsg(r)}${skipped}`,
+        r.tpWarn === 'over');
 ```
 
-**public/index.html · troca 7 — applySavedBeats lê mix.** Substituir:
+**public/index.html · troca 8 — applySavedBeats lê mix.** Substituir:
 
 ```html
     SFX = Array.isArray(saved.sfx) ? saved.sfx.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
@@ -2536,7 +2750,7 @@ por:
     VIDEO = normalizeSegments(saved.segments);
 ```
 
-**public/index.html · troca 8 — TCTL: comentário e textos de M/S.** Substituir:
+**public/index.html · troca 9 — TCTL: comentário e textos de M/S.** Substituir:
 
 ```html
      faria o leitor de tela anunciar a ação duas vezes, invertida. H/M/S são só
@@ -2551,7 +2765,7 @@ por:
      qual é qual. */
 ```
 
-**public/index.html · troca 9 — TCTL: mute.** Substituir:
+**public/index.html · troca 10 — TCTL: mute.** Substituir:
 
 ```html
     mute: { label: 'Silenciar trilha', title: 'mudo no preview — não altera o export', icons: ['i-spk', 'i-spk-off'] },
@@ -2563,7 +2777,7 @@ por:
     mute: { label: 'Silenciar track', title: 'mudo — vale no export', icons: ['i-spk', 'i-spk-off'] },
 ```
 
-**public/index.html · troca 10 — TCTL: solo.** Substituir:
+**public/index.html · troca 11 — TCTL: solo.** Substituir:
 
 ```html
     solo: { label: 'Ativar solo da trilha', title: 'solo da TRILHA: silencia o áudio do vídeo no preview — não altera o export', icons: ['i-solo', 'i-solo'] },
@@ -2575,7 +2789,7 @@ por:
     solo: { label: 'Solo da track', title: 'solo — só esta track soa, também no export', icons: ['i-solo', 'i-solo'] },
 ```
 
-**public/index.html · troca 11 — buildDom: ÁUDIO com M S L.** Substituir:
+**public/index.html · troca 12 — buildDom: ÁUDIO com M S L.** Substituir:
 
 ```html
                 ${tctlHtml('hide', 'ÁUDIO')}${tctlHtml('lock', 'ÁUDIO')}</div>
@@ -2587,7 +2801,7 @@ por:
                 ${tctlHtml('mute', 'ÁUDIO')}${tctlHtml('solo', 'ÁUDIO')}${tctlHtml('lock', 'ÁUDIO')}</div>
 ```
 
-**public/index.html · troca 12 — buildDom: TRILHA sem H.** Substituir:
+**public/index.html · troca 13 — buildDom: TRILHA sem H.** Substituir:
 
 ```html
                 ${tctlHtml('add', 'TRILHA')}${tctlHtml('mute', 'TRILHA')}${tctlHtml('solo', 'TRILHA')}${tctlHtml('hide', 'TRILHA')}${tctlHtml('lock', 'TRILHA')}</div>
@@ -2599,7 +2813,7 @@ por:
                 ${tctlHtml('add', 'TRILHA')}${tctlHtml('mute', 'TRILHA')}${tctlHtml('solo', 'TRILHA')}${tctlHtml('lock', 'TRILHA')}</div>
 ```
 
-**public/index.html · troca 13 — buildDom: SFX com M S.** Substituir:
+**public/index.html · troca 14 — buildDom: SFX com M S.** Substituir:
 
 ```html
                 ${tctlHtml('add', 'SFX')}${tctlHtml('lock', 'SFX')}</div>
@@ -2611,7 +2825,7 @@ por:
                 ${tctlHtml('add', 'SFX')}${tctlHtml('mute', 'SFX')}${tctlHtml('solo', 'SFX')}${tctlHtml('lock', 'SFX')}</div>
 ```
 
-**public/index.html · troca 14 — applyTrackVisibility: .silent.** Substituir:
+**public/index.html · troca 15 — applyTrackVisibility: .silent.** Substituir:
 
 ```html
       row.classList.toggle('locked', !!lockedTracks[track]);
@@ -2624,7 +2838,7 @@ por:
       row.classList.toggle('silent', AUDIO_TRACKS.includes(track) && !audible(track));
 ```
 
-**public/index.html · troca 15 — applyTrackVisibility: estado de M/S.** Substituir:
+**public/index.html · troca 16 — applyTrackVisibility: estado de M/S.** Substituir:
 
 ```html
         else if (act === 'mute') on = trilhaMuted;
@@ -2638,7 +2852,7 @@ por:
         else if (act === 'solo') on = MIX.solo === track;
 ```
 
-**public/index.html · troca 16 — wireTracks: clique em M/S.** Substituir:
+**public/index.html · troca 17 — wireTracks: clique em M/S.** Substituir:
 
 ```html
           if (act === 'mute') trilhaMuted = !trilhaMuted;
@@ -2654,7 +2868,7 @@ por:
           if (act === 'solo') MIX = { mute: MIX.mute, solo: MIX.solo === track ? null : track };
 ```
 
-**public/index.html · troca 17 — loadVideo: zera MIX.** Substituir:
+**public/index.html · troca 18 — loadVideo: zera MIX.** Substituir:
 
 ```html
     hiddenTracks = {}; lockedTracks = {}; trilhaMuted = false; trilhaSolo = false;
@@ -2666,7 +2880,7 @@ por:
     hiddenTracks = {}; lockedTracks = {}; MIX = { mute: [], solo: null };
 ```
 
-**public/index.html · troca 18 — loadVideo: lê mix do sidecar.** Substituir:
+**public/index.html · troca 19 — loadVideo: lê mix do sidecar.** Substituir:
 
 ```html
     SFX = (saved && Array.isArray(saved.sfx)) ? saved.sfx.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
@@ -2793,7 +3007,7 @@ por:
 
 - [ ] **Step 5 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 4. Parar aqui.
 
-- [ ] **Step 6 [Orquestrador]: `validator`** — "validar a Task 4 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b3-static.js`; conferir que `audible()` em `public/index.html` e em `lib/timeline.js` são a mesma regra; que `MIX` entra em `timelineState()` e em `saveBeats()` mas não em `snapshot()`; que clicar S sempre deixa no máximo um solo; e que o H continua em MARKERS, B-ROLL e LEGENDA com o title de sempre".
+- [ ] **Step 6 [Orquestrador]: `validator`** — "validar a Task 4 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b3-static.js`; conferir que `audible()` em `public/index.html` e em `lib/timeline.js` são a mesma regra; que `MIX` entra em `timelineState()` e em `saveBeats()` mas não em `snapshot()`; que clicar S sempre deixa no máximo um solo; que `measuresMsg` segue as tabelas de pico real, LUFS, LRA e limitador da spec (B3), com o estilo de erro só no `tpWarn === 'over'`; e que o H continua em MARKERS, B-ROLL e LEGENDA com o title de sempre".
 
 - [ ] **Step 7 [Orquestrador]: Rota Player** — condições de medição, auxiliares colados, sidecar da fixture restaurado.
 
@@ -2822,7 +3036,7 @@ a
 
 Esperado: rótulos `Silenciar track ÁUDIO` / `Solo da track ÁUDIO` (e o mesmo para TRILHA e SFX); títulos `mudo — vale no export` e `solo — só esta track soa, também no export`; `audible: { audio: false, music: false, sfx: true }`; `silent: ["audio","music"]`; `depoisDoUndo: { mudoTrilha: "true", sfx: 0 }`; `depoisDoRedo: { mudoTrilha: "false", sfx: 1 }`.
 
-Esperar o fim do conform em chamadas separadas (`T.stage()`). Esperado: "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 1 SFX · … palavras · fora do export: ÁUDIO (solo: SFX) · pico −18,… dBFS" (o tom mono de −18 dBFS sozinho), seguido do LUFS com "abaixo do alvo −14 a −16" (um efeito de 0,8 s num arquivo de 38 s). No reteste do plano: "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 1 SFX · 100 palavras · fora do export: ÁUDIO (solo: SFX) · pico −18,0 dBFS · −19,4 LUFS: abaixo do alvo −14 a −16". Medir o arquivo:
+Esperar o fim do conform em chamadas separadas (`T.stage()`). Esperado: "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 1 SFX · … palavras · fora do export: ÁUDIO (solo: SFX) · pico real −18,… dBTP" (o tom mono de −18 dBFS sozinho, abaixo do teto: o limitador não corta e o trecho do limitador não aparece), seguido do LUFS com "abaixo do alvo −14 a −16" (um efeito de 0,8 s num arquivo de 38 s) e do LRA. No reteste do plano (R3): "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 1 SFX · 100 palavras · fora do export: ÁUDIO (solo: SFX) · pico real −18,0 dBTP · −19,4 LUFS: abaixo do alvo −14 a −16 · LRA 4,3 LU". Medir o arquivo:
 
 ```bash
 F=$(ls -t output/conformed-*.mp4 | head -1)
@@ -2836,6 +3050,25 @@ done
 Esperado: `5:6` → `-inf` (a voz do plate não está no export, e o preview também a calou); `2.1:2.7` → cerca de −21 dB (o efeito). No reteste do plano: `-inf` e −21,1. Apagar o conformado.
 
 Persistência: `await T.sidecar()` → `mix: { mute: [], solo: "sfx" }`; recarregar, `load`, auxiliares: `T.btn('sfx', 'solo').getAttribute('aria-pressed')` → `"true"` e `.silent` em `audio` e `music`. Restaurar o sidecar da fixture.
+
+Limitador na mensagem (R3): recarregar, `load`, auxiliares; dois `loud.wav` (−0,1 dBFS) empilhados na TRILHA sobre a voz:
+
+```js
+T.asset('loud.wav', 1); T.key('Home'); await T.sleep(200); await T.steps(150, 'ArrowRight');
+await T.add('music', 'loud.wav'); await T.add('music', 'loud.wav');     // os dois em 5,0–6,0s
+document.getElementById('bt-conform').click();
+await T.sleep(40000);
+T.stage()
+```
+
+Em outra chamada:
+
+```js
+for (let i = 0; i < 40 && !/timeline conformada|erro/i.test(T.stage()); i++) await T.sleep(1000);
+({ stage: T.stage(), estilo: document.getElementById('stage').className })
+```
+
+Esperado: a mensagem traz "· limitador −… dB — mix alto: abaixe TRILHA/SFX" (a soma passa de +6 dBFS), o pico real fica entre −2 e −1 dBTP (o teto é −2; o AAC do conform soma alguns décimos) e `estilo: "run"`, não `"err"`. No reteste do plano: "timeline conformada — 38.2s · 0 B-ROLL · 2 TRILHA · 0 SFX · 100 palavras · pico real −1,9 dBTP · −14,9 LUFS · LRA 20,8 LU: dinâmica alta para celular (ideal ≤ 9) · limitador −8,4 dB — mix alto: abaixe TRILHA/SFX". Apagar o conformado e restaurar o sidecar da fixture.
 
 - [ ] **Step 8 [Orquestrador + Usuário]: Rota canvas** — usuário bloqueia o bundle e recarrega; `load`, auxiliares; `await uiProbe.run('B3')` → `ok: true`. Depois, TRILHA com a cama dividida e dois efeitos empilhados, com o solo da SFX:
 
@@ -2852,9 +3085,9 @@ T.record(() => 'trilha[' + T.state('bed.wav') + '] sfx[' + T.state('whoosh.wav')
 
 Esperado: `["audio","music"]`. Pressionar **Espaço**; depois `await T.sleep(2500); T.pause(); T.stop()`. Esperado: `trilha[pp]` o tempo todo, `sfx[▶▶]` na janela dos efeitos e `plateMudo=true` o tempo todo. No reteste do plano: `00:00.2 trilha[pp] sfx[pp] plateMudo=true` · `00:00.4 trilha[pp] sfx[▶▶] plateMudo=true` · `00:01.2 trilha[pp] sfx[pp] plateMudo=true`. Desligar o solo: `T.btn('sfx', 'solo').click(); await T.sleep(100); document.getElementById('bt-video').muted` → `false`. Restaurar o sidecar da fixture.
 
-- [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12 do A, com o item 8 trocado) + M em ÁUDIO, TRILHA e SFX cala a track e esmaece a lane (que continua editável); S deixa só aquela track soar e troca de track com um clique; mudo vence solo; CONFORMAR com um solo ligado mostra "fora do export: …" e o arquivo exportado soa como o preview; o pico aparece na mensagem, em vermelho se passar de 0 dBFS (testar com dois clipes de TRILHA altos sobrepostos), e o LUFS aparece depois dele, com "abaixo do alvo" num projeto com a voz antiga.
+- [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12 do A, com o item 8 trocado) + M em ÁUDIO, TRILHA e SFX cala a track e esmaece a lane (que continua editável); S deixa só aquela track soar e troca de track com um clique; mudo vence solo; CONFORMAR com um solo ligado mostra "fora do export: …" e o arquivo exportado soa como o preview; a mensagem mostra pico real, LUFS (com "abaixo do alvo" num projeto com a voz antiga) e LRA; com dois clipes altos sobrepostos (TRILHA + SFX), aparece "limitador −… dB — mix alto: abaixe TRILHA/SFX", o pico real fica entre −2 e −1 dBTP e a mensagem não fica vermelha; **ouvir o arquivo** contra o preview nesse trecho: no export os picos saem contidos pelo limitador.
 
-- [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b3`; arquivos `public/index.html`, `public/dev/ui-probe.js`; commit `Make mute and solo real mix controls on the audio tracks (B3)`) → OK do usuário → `publish`.
+- [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b3`; arquivos `public/index.html`, `public/dev/ui-probe.js`; commit `Make mute and solo real mix controls, report loudness and limiter on conform (B3)`) → OK do usuário → `publish`.
 
 ---
 
@@ -2872,7 +3105,7 @@ Esperado: `["audio","music"]`. Pressionar **Espaço**; depois `await T.sleep(250
 - Produces:
   - `assemble({ …, normalizeVoice = true })` devolve, além do de hoje, `voice: { normalized: boolean, lufsIn, lufsOut, mode: 'linear' | 'dynamic' | null, reason }`, com `reason` em `'desligada'`, `'sem faixa de voz'`, `'medição falhou'`, `'voz em silêncio'` ou `'loudnorm falhou na montagem'`;
   - `parseLoudnormJson(stderr) → object | null` (o último bloco JSON do loudnorm);
-  - `VOICE_TARGET = 'I=-16:TP=-1.5:LRA=11'`;
+  - `VOICE_TARGET = 'I=-16:TP=-2:LRA=9'`;
   - `POST /api/assemble` aceita `normalizeVoice` (ligado quando ausente).
 
 - [ ] **Step 1 [Executor]: Salvar as duas checagens e confirmar que falham**
@@ -2892,8 +3125,8 @@ const need = (s, where, list) => list.forEach(t => { if (!s.includes(t)) fail.pu
 // 1 — parse do JSON do loudnorm, com a saída real do ffmpeg 6.1 (linha do filtro, tabs, CRLF).
 const block = (o) => '[Parsed_loudnorm_0 @ 00000242e693b9c0] \r\n{\r\n' +
   Object.entries(o).map(([k, v]) => `\t"${k}" : "${v}"`).join(',\r\n') + '\r\n}\r\n';
-const PASS1 = { input_i: '-25.54', input_tp: '-8.33', input_lra: '3.10', input_thresh: '-35.76', output_i: '-16.07',
-  output_tp: '-1.50', output_lra: '3.20', output_thresh: '-26.30', normalization_type: 'dynamic', target_offset: '0.07' };
+const PASS1 = { input_i: '-25.54', input_tp: '-8.33', input_lra: '3.10', input_thresh: '-35.76', output_i: '-16.16',
+  output_tp: '-2.00', output_lra: '3.10', output_thresh: '-26.38', normalization_type: 'dynamic', target_offset: '0.16' };
 const PASS2 = { ...PASS1, output_i: '-16.02' };
 let A = null;
 try { A = require(path.resolve('lib/assemble.js')); } catch (e) { fail.push('lib/assemble.js não carrega: ' + e.message); }
@@ -2901,13 +3134,13 @@ if (A && typeof A.parseLoudnormJson === 'function') {
   const P = A.parseLoudnormJson;
   const prog = 'size=N/A time=00:00:35.47 bitrate=N/A speed=32.7x    \r\n';
   const r1 = P(prog + block(PASS1));
-  ok(r1 && r1.input_i === '-25.54' && r1.input_thresh === '-35.76' && r1.target_offset === '0.07', 'parse: 1ª passada ' + JSON.stringify(r1));
+  ok(r1 && r1.input_i === '-25.54' && r1.input_thresh === '-35.76' && r1.target_offset === '0.16', 'parse: 1ª passada ' + JSON.stringify(r1));
   const r2 = P(block(PASS1) + prog + block(PASS2));
   ok(r2 && r2.output_i === '-16.02', 'parse: com dois blocos, vale o último ' + JSON.stringify(r2));
   ok(P((prog + block(PASS1)).replace(/\r\n/g, '\n')).input_i === '-25.54', 'parse: saída em LF');
   ok(P(prog) === null && P('') === null && P(undefined) === null, 'parse: sem JSON deveria dar null');
   ok(P('[Parsed_loudnorm_0 @ 1] \r\n{\r\n\t"input_i" : "-25.54",\r\n\t"input_tp" : \r\n}\r\n') === null, 'parse: JSON quebrado deveria dar null');
-  ok(A.VOICE_TARGET === 'I=-16:TP=-1.5:LRA=11', 'VOICE_TARGET = ' + A.VOICE_TARGET);
+  ok(A.VOICE_TARGET === 'I=-16:TP=-2:LRA=9', 'VOICE_TARGET = ' + A.VOICE_TARGET);
 } else if (A) {
   fail.push('parseLoudnormJson não exportada');
 }
@@ -2915,7 +3148,7 @@ if (A && typeof A.parseLoudnormJson === 'function') {
 // 2 — pontos de código.
 const asm = read('lib/assemble.js');
 need(asm, 'lib/assemble.js', [
-  "const VOICE_TARGET = 'I=-16:TP=-1.5:LRA=11';", 'function parseLoudnormJson(stderr) {', 'async function measureVoice(src) {',
+  "const VOICE_TARGET = 'I=-16:TP=-2:LRA=9';", 'function parseLoudnormJson(stderr) {', 'async function measureVoice(src) {',
   "burnCaptions = false, normalizeVoice = true,", "const voiceSrc = voiceover || (vInfo.acodec ? visual : null);",
   "':linear=true:print_format=json'", 'if (audioFilter) args.push(\'-af\', audioFilter);',
   "voice.reason = 'loudnorm falhou na montagem';", 'await runFfmpeg(muxArgs(null), { onLog });', '    voice,\n  };',
@@ -2995,7 +3228,7 @@ async function main() {
   const run = opts => { n++; return assemble({ output: P('out' + n + '.mp4'), workDir: P('w' + n), captions: false, ...opts }); };
   const inTarget = (m, tag) => {
     ok(m && m.i >= -16.5 && m.i <= -15.5, tag + ': LUFS de saída ' + (m && m.i) + ', esperado -16 ± 0,5');
-    ok(m && m.tp != null && m.tp <= -1.4, tag + ': true peak ' + (m && m.tp) + ', esperado ≤ -1,4');
+    ok(m && m.tp != null && m.tp <= -1.9, tag + ': true peak ' + (m && m.tp) + ', esperado ≤ -1,9');
   };
 
   // E1 — narração baixa: sai no alvo.
@@ -3101,7 +3334,8 @@ por:
 // behavior for callers that use this step in isolation.
 //
 // The voice leaves this step at the Reel target level (-16 LUFS integrated,
-// true peak -1.5 dBTP): the TIMELINE sets music and SFX relative to it, and the
+// true peak -2 dBTP, the master limiter's ceiling in lib/timeline.js, so the
+// voice alone never triggers it): the TIMELINE sets music and SFX relative to it, and the
 // voice the pipeline produces comes out 6 to 11 LU below that. Two loudnorm
 // passes — measure, then apply the measured values with linear=true (a fixed
 // gain when it fits under the ceiling; loudnorm falls back to its dynamic mode
@@ -3120,7 +3354,7 @@ por:
 
 ```js
 const MEZZANINE_CRF = 12;   // visualmente lossless; 444 preserva a croma das legendas
-const VOICE_TARGET = 'I=-16:TP=-1.5:LRA=11';
+const VOICE_TARGET = 'I=-16:TP=-2:LRA=9';
 
 // loudnorm prints its measurement as a JSON block on stderr, after a
 // "[Parsed_loudnorm_0 @ …]" line. The last block wins (the apply pass prints one too).
@@ -3334,7 +3568,7 @@ F=$(ls -t output/assembled-*.mp4 | head -1)
 [ "$F" != output/assembled-4545f906507a.mp4 ] && ffmpeg -hide_banner -nostats -i "$F" -map 0:a:0 -af ebur128=peak=true -f null - 2>&1 | grep -E "^\s+(I|Peak):" && rm "$F"
 ```
 
-Esperado: `I:` entre −16,5 e −15,5 LUFS e o `Peak:` de true peak ≤ −1,4 dBFS.
+Esperado: `I:` entre −16,5 e −15,5 LUFS e o `Peak:` de true peak ≤ −1,9 dBFS.
 
 - [ ] **Step 9 [Usuário]: Ouvir** — montar pelo ASSEMBLE um vídeo com uma narração real do VOICE e comparar com um vídeo montado antes desta task: a voz fica mais alta, sem distorção audível, e o chip mostra o nível de entrada e de saída. Um ASSEMBLE sem narração, com um vídeo que tem áudio próprio, também normaliza.
 
@@ -3388,6 +3622,8 @@ need(src, 'index.html', [
   '<div class="bt-mixrow">\n      <div class="bt-scroll" id="bt-scroll">',
   '<div class="bt-meter" id="bt-meter" data-state="pending" role="img" aria-label="Medidor de pico do master"',
   '<canvas id="bt-meter-canvas"></canvas>', '<div class="bt-meter-peak" id="bt-meter-peak"',
+  'title="pico do mix antes do limitador — acima de −2 o limitador do master corta no export; o CONFORMAR mede o mesmo"',
+  'amarelo até −2, vermelho a partir de −2 (o limitador corta no export)">',
   'let plateBuf = null;', 'let plateAudio = true;', 'const audioBufCache = new Map();',
   'const METER_SR = 44100, METER_FPS = 60, METER_FLOOR = -60;', 'const METER_RELEASE = 20, METER_HOLD_MS = 1200;',
   'async function renderMaster() {', 'const ctx = new OAC(2, Math.max(1, Math.ceil(DURATION * METER_SR)), METER_SR);',
@@ -3410,7 +3646,7 @@ if (count(src, 'AnalyserNode') || /createMediaElementSource/.test(src)) fail.pus
   if (code.some(c => !c)) fail.push('ampDb/meterZone/fmtDb não achadas numa linha só');
   else {
     const G = new Function(code.join('\n') + '\nreturn { ampDb, meterZone, fmtDb };')();
-    [[-6.1, 'green'], [-6, 'yellow'], [-1.1, 'yellow'], [-1, 'red'], [0.4, 'red'], [-60, 'green']]
+    [[-6.1, 'green'], [-6, 'yellow'], [-2.1, 'yellow'], [-2, 'red'], [-1, 'red'], [0.4, 'red'], [-60, 'green']]
       .forEach(([d, z]) => { if (G.meterZone(d) !== z) fail.push(`meterZone(${d}) = ${G.meterZone(d)}, esperado ${z}`); });
     if (G.ampDb(0) !== -Infinity || Math.abs(G.ampDb(0.5) + 6.0206) > 1e-3) fail.push('ampDb errado');
     [[-8.3, '−8,3'], [0, '0,0'], [1.8, '+1,8']].forEach(([d, t]) => { if (G.fmtDb(d) !== t) fail.push(`fmtDb(${d}) = ${G.fmtDb(d)}`); });
@@ -3484,7 +3720,9 @@ por:
      padrão do Web Audio) e soma direta. Nada se liga ao áudio que está tocando:
      na rota Player ele mora no AudioContext interno do Remotion, e na rota canvas
      não passa por Web Audio. Do mix sai um envelope de pico por 1/60 s que serve
-     play e scrub nas duas rotas — e antecipa o pico que o CONFORMAR vai medir. */
+     play e scrub nas duas rotas — e antecipa o pico que o CONFORMAR mede antes do
+     limitador do master. O limitador fica de fora de propósito: o preview também
+     toca sem ele, e o vermelho mostra onde o export vai soar diferente. */
   let plateBuf = null;               // AudioBuffer do vídeo base, guardado por loadWaveform
   let plateAudio = true;             // o vídeo base tem faixa de áudio? (do probe, em loadVideo)
   const audioBufCache = new Map();   // path -> AudioBuffer | null, guardado por ensureMiniWave
@@ -3494,8 +3732,9 @@ por:
   let meterGen = 0, meterTimer = null, lastMixSig = '', meterRaf = null, meterColors = null;
   const meterDisp = { l: METER_FLOOR, r: METER_FLOOR, hl: METER_FLOOR, hr: METER_FLOOR, htl: 0, htr: 0, last: 0, drawn: '' };
   function ampDb(a) { return a > 0 ? 20 * Math.log10(a) : -Infinity; }
-  // Zonas amarradas aos avisos do conform: a partir de -1 dBFS é 'hot' (e acima de 0, 'clip').
-  function meterZone(db) { return db >= -1 ? 'red' : db >= -6 ? 'yellow' : 'green'; }
+  // Zonas amarradas ao limitador do master: a partir de -2 dBFS (o teto, MASTER_CEIL_DB de
+  // lib/timeline.js) ele corta no export; a voz normalizada (pico -2) fica no limite do amarelo.
+  function meterZone(db) { return db >= -2 ? 'red' : db >= -6 ? 'yellow' : 'green'; }
   function fmtDb(db) { return (db < 0 ? '−' : db > 0 ? '+' : '') + Math.abs(db).toFixed(1).replace('.', ','); }
   function setMeterData(k, v) { const m = $q('#bt-meter'); if (m) m.dataset[k] = v; }
   function scheduleMaster() { clearTimeout(meterTimer); meterTimer = setTimeout(renderMaster, 200); }
@@ -3866,9 +4105,9 @@ por:
         </div>
       </div>
       <div class="bt-meter" id="bt-meter" data-state="pending" role="img" aria-label="Medidor de pico do master"
-        title="pico do master (L/R): verde abaixo de −6 dBFS, amarelo até −1, vermelho acima">
+        title="pico do master (L/R), antes do limitador: verde abaixo de −6 dBFS, amarelo até −2, vermelho a partir de −2 (o limitador corta no export)">
         <canvas id="bt-meter-canvas"></canvas>
-        <div class="bt-meter-peak" id="bt-meter-peak" title="pico do mix inteiro — o CONFORMAR vai medir o mesmo">—</div>
+        <div class="bt-meter-peak" id="bt-meter-peak" title="pico do mix antes do limitador — acima de −2 o limitador do master corta no export; o CONFORMAR mede o mesmo">—</div>
       </div>
       </div>`;
 ```
@@ -4060,6 +4299,7 @@ const m = document.getElementById('bt-meter');
 T.btn('audio', 'mute').click();
 for (let i = 0; i < 40; i++) { await T.sleep(100); if (m.dataset.peak !== '-18.1') break; }
 window.__meterPeak = m.dataset.peak;
+T.spyConform();                                   // guarda o id do job: o mixPeakDb não aparece na mensagem
 document.getElementById('bt-conform').click();
 await T.sleep(40000);
 ({ medidor: window.__meterPeak, stage: T.stage() })
@@ -4069,10 +4309,11 @@ Em outra chamada, até a mensagem final:
 
 ```js
 for (let i = 0; i < 40 && !/timeline conformada|erro/i.test(T.stage()); i++) await T.sleep(1000);
-({ medidor: window.__meterPeak, stage: T.stage() })
+const res = await T.conformResult();
+({ medidor: window.__meterPeak, mixPeakDb: res.mixPeakDb, limiter: res.limiter, stage: T.stage() })
 ```
 
-Esperado: `medidor` e o pico da mensagem a menos de 0,5 dB (no reteste, −8,4 e "pico −8,3 dBFS · −24,9 LUFS: abaixo do alvo −14 a −16"). Apagar o conformado e restaurar o sidecar da fixture.
+Esperado: `medidor` e `mixPeakDb` (o pico do mix antes do limitador, medido pelo conform) a menos de 0,5 dB. Na R2 a comparação era com o pico da mensagem; na R3 a mensagem mostra o pico real depois do limitador, que é outra coisa. No reteste do plano (R3), em dois cenários: −1,6 contra −1,6 (voz + um efeito a −3 dBFS, `cutDb` 0,4) e 6,3 contra 6,4 (voz + dois tons empilhados, `cutDb` 8,4). Apagar o conformado e restaurar o sidecar da fixture.
 
 - [ ] **Step 8 [Orquestrador + Usuário]: Rota canvas** — usuário bloqueia `/vendor/studio-player.js` e recarrega; `load`, auxiliares.
 
@@ -4089,9 +4330,329 @@ T.key('Home'); await T.sleep(200); await T.steps(72, 'ArrowRight'); await T.slee
 
 Esperado: `rota: "canvas"`, `ok: true`, `falhas: []` e os mesmos números da rota Player (`pkInicial` a ±0,5 do pico da fixture, `pkWhoosh: "-18.1"`, `scrubDentro: "-18.1"`): o medidor não depende da rota. Restaurar o sidecar da fixture.
 
-- [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12 do A, com o item 8 da Task 4) + o medidor anda com o som tocando e acompanha o scrub; mexer num slider de ganho muda o pico embaixo do medidor; M e S mudam o medidor; o número embaixo do medidor bate com o pico da mensagem do CONFORMAR; a timeline e a rolagem continuam como antes, só mais estreitas.
+- [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12 do A, com o item 8 da Task 4) + o medidor anda com o som tocando e acompanha o scrub; mexer num slider de ganho muda o pico embaixo do medidor; M e S mudam o medidor; o número fica vermelho a partir de −2 (onde o limitador do master vai cortar no export); a timeline e a rolagem continuam como antes, só mais estreitas.
 
 - [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b5`; arquivos `public/index.html`, `public/dev/ui-probe.js`; commit `Add a master peak meter to the TIMELINE (B5)`) → OK do usuário → `publish`.
+
+---
+
+### Task 7 (B6): Aviso de SFX acima de −10 dB
+
+**Files:**
+- Modify: `public/index.html` — CSS logo depois de `.bt-clip.sfx{…}`, bloco novo depois de `setMeterData()`, listener `input` do slider de ganho e fim do `renderClipTrack()`, `stage()` do `doConform()`.
+- Modify: `public/dev/ui-probe.js`.
+
+**Interfaces:**
+- Consumes: `audioBufCache`, `ampDb()` e `fmtDb()` (Task 6); `audible(track)` e `measuresMsg(r)` (Task 4); `SFX`, `clipsFor()`, `volumeOf()` e o listener do slider (Task 3).
+- Produces: `SFX_PEAK_MAX = -10`; `regionPeak(buf, srcIn, dur) → amplitude` (pura); `clipPeakDb(c) → dBFS com uma casa | null`; `markSfxPeak(el, c)`; `sfxHotMsg() → string`; nos clipes de SFX, `data-peak` (pico conhecido), a classe `over` e o `title` (acima de −10); estágio `B6` do probe com o check `sfx-peak`.
+
+- [ ] **Step 1 [Executor]: Salvar a checagem estática e confirmar que falha**
+
+Salvar como `jobs/checks/b6-static.js`:
+
+```js
+// B6 — checagem estática. Rodar da raiz: node jobs/checks/b6-static.js
+'use strict';
+const fs = require('fs');
+const read = p => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
+const src = read('public/index.html');
+const probe = read('public/dev/ui-probe.js');
+const lines = src.split('\n');
+const fail = [];
+const need = (s, where, list) => list.forEach(t => { if (!s.includes(t)) fail.push(where + ' — ausente: ' + t); });
+
+// Invariantes do sub-projeto A.
+lines.forEach((l, i) => {
+  for (const m of l.matchAll(/font(?:-size)?\s*:\s*([^;}"]*)/g)) {
+    const px = /(\d*\.?\d+)px/.exec(m[1]);
+    if (px && !/var\(--fs-/.test(m[1]) && !/isento:/.test(l) && parseFloat(px[1]) < 11) fail.push('fonte < 11px em :' + (i + 1));
+  }
+  if (/(transition|animation)[\w-]*\s*:/.test(l) && !/\b(drift|blink|bt-pulse)\b|\.001ms/.test(l) &&
+      /(^|[\s,(:])\d*\.?\d+m?s(?![\w-])/.test(l.replace(/var\(--dur-\d\)/g, ''))) fail.push('duração literal em :' + (i + 1));
+});
+[...src.matchAll(/<script>([\s\S]*?)<\/script>/g)].forEach((m, k) => {
+  try { new Function(m[1]); } catch (e) { fail.push('<script> inline #' + k + ' não compila: ' + e.message); }
+});
+try { new Function(probe); } catch (e) { fail.push('ui-probe.js não compila: ' + e.message); }
+
+need(src, 'index.html', [
+  '.bt-clip.sfx.over{box-shadow:inset 0 0 0 1px var(--go)}', ".bt-clip.sfx.over .nm::before{content:'▲ '; color:var(--go)}",
+  'const SFX_PEAK_MAX = -10;', 'const regionPeakCache = new WeakMap();', '  function regionPeak(buf, srcIn, dur) {',
+  '  function clipPeakDb(c) {', '  function markSfxPeak(el, c) {', '  function sfxHotMsg() {',
+  "    if (!audible('sfx')) return '';", '` · ${n} SFX acima de −10 dB`', 'mantenha só se for um elemento dramático',
+  "if (track === 'sfx') markSfxPeak(inp.closest('.bt-clip'), clipsFor(track)[+inp.dataset.idx]);",
+  "if (track === 'sfx') host.querySelectorAll('.bt-clip').forEach(el => markSfxPeak(el, arr[+el.dataset.idx]));",
+  '${measuresMsg(r)}${sfxHotMsg()}${skipped}',
+  // o B5 fica como está: o cache do B6 é um WeakMap por buffer, então as limpezas não mudam
+  'plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();',
+  "if (![...MUSIC, ...SFX].some(c => c.path === path)) { audioBufCache.delete(path); miniWaveCache.delete(path); }",
+]);
+// o aviso só lê: nada de processar ou escutar o áudio
+if (/createMediaElementSource|AnalyserNode|DynamicsCompressor/.test(src)) fail.push('o aviso de SFX não pode processar nem escutar o áudio');
+
+// regionPeak: a função pura, extraída do HTML, contra buffers falsos (10 amostras por segundo).
+{
+  const m = /  function regionPeak\(buf, srcIn, dur\) \{\n[\s\S]*?\n  \}\n/.exec(src);
+  if (!m) fail.push('regionPeak não achada');
+  else {
+    const regionPeak = new Function(m[0] + '\nreturn regionPeak;')();
+    const fake = (sr, chans) => ({ sampleRate: sr, length: chans[0].length, numberOfChannels: chans.length,
+      getChannelData: k => Float32Array.from(chans[k]) });
+    const L = [0, 0.1, -0.7, 0.2, 0, 0, 0.05, -0.1, 0, 0], R = [0, 0, 0, 0, 0, 0.3, 0, 0, 0, 0];
+    const b = fake(10, [L, R]);
+    [[0, 1, 0.7, 'arquivo inteiro, pico negativo'], [0.3, 0.7, 0.3, 'trecho sem o pico da esquerda: vale o da direita'],
+      [0.6, 0.4, 0.1, 'fim do arquivo'], [0.8, 5, 0, 'além do fim, limitado ao buffer'], [0, 0.2, 0.1, 'duas primeiras amostras']]
+      .forEach(([s, d, want, name]) => {
+        const got = regionPeak(b, s, d);
+        if (Math.abs(got - want) > 1e-6) fail.push(`regionPeak(${name}) = ${got}, esperado ${want}`);
+      });
+  }
+}
+
+need(probe, 'ui-probe.js', ["const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6'];", '  function sfxPeak() {', "add('sfx-peak',"]);
+
+console.log(fail.length ? 'FAIL\n' + fail.join('\n') : 'PASS: B6 estático');
+process.exitCode = fail.length ? 1 : 0;
+```
+
+Rodar `node jobs/checks/b6-static.js`. Esperado: `FAIL` com as linhas `index.html — ausente:` dos pontos do B6 (CSS, constante, cache, as quatro funções, a mensagem, o slider, o render e o `${measuresMsg(r)}${sfxHotMsg()}${skipped}`), `regionPeak não achada` e as três linhas `ui-probe.js — ausente:`. As duas linhas do B5 (`plateBuf = null; …` e `if (![...MUSIC, ...SFX]…`) **não** aparecem: o B6 não mexe nelas.
+
+- [ ] **Step 2 [Executor]: `public/index.html` — 5 trocas, nesta ordem**
+
+**public/index.html · troca 1 — CSS: efeito acima de −10.** Substituir:
+
+```html
+.bt-clip.sfx{border-left:3px solid var(--sfx)}
+```
+
+por:
+
+```html
+.bt-clip.sfx{border-left:3px solid var(--sfx)}
+/* efeito com pico acima de −10 dBFS (B6): contorno e ▲, para o aviso não depender só da cor */
+.bt-clip.sfx.over{box-shadow:inset 0 0 0 1px var(--go)}
+.bt-clip.sfx.over .nm::before{content:'▲ '; color:var(--go)}
+```
+
+**public/index.html · troca 2 — pico por efeito depois de setMeterData.** Substituir:
+
+```html
+  function setMeterData(k, v) { const m = $q('#bt-meter'); if (m) m.dataset[k] = v; }
+```
+
+por:
+
+```html
+  function setMeterData(k, v) { const m = $q('#bt-meter'); if (m) m.dataset[k] = v; }
+
+  /* ---------------- pico por efeito da SFX (B6) ----------------
+     A referência de Reels quer cada efeito abaixo de −10 dBFS no medidor de pico
+     tradicional, salvo elemento dramático. O app só avisa: o pico de amostra do
+     trecho usado do arquivo, vezes o ganho do clipe, sem processar nada (o
+     preview não tocaria um limiter só do export). */
+  const SFX_PEAK_MAX = -10;
+  // em cache por buffer: some junto quando o audioBufCache solta o arquivo
+  const regionPeakCache = new WeakMap();
+  function regionPeak(buf, srcIn, dur) {
+    const a = Math.max(0, Math.floor(srcIn * buf.sampleRate));
+    const b = Math.min(buf.length, Math.ceil((srcIn + dur) * buf.sampleRate));
+    let m = 0;
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = a; i < b; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > m) m = v; }
+    }
+    return m;
+  }
+  function clipPeakDb(c) {
+    const buf = audioBufCache.get(c.path);
+    if (!buf) return null;
+    let per = regionPeakCache.get(buf);
+    if (!per) regionPeakCache.set(buf, per = new Map());
+    const key = c.srcIn + '|' + c.dur;
+    if (!per.has(key)) per.set(key, regionPeak(buf, c.srcIn, c.dur));
+    const db = ampDb(per.get(key) * c.volume);
+    return isFinite(db) ? Math.round(db * 10) / 10 : null;
+  }
+  // classe, title e data-peak de um clipe de SFX: no render e, ao vivo, no slider
+  function markSfxPeak(el, c) {
+    const pk = clipPeakDb(c), over = pk != null && pk > SFX_PEAK_MAX;
+    el.classList.toggle('over', over);
+    if (pk == null) delete el.dataset.peak; else el.dataset.peak = pk.toFixed(1);
+    if (over) el.title = `pico ${fmtDb(pk)} dBFS — acima de −10; mantenha só se for um elemento dramático`;
+    else el.removeAttribute('title');
+  }
+  // quantos efeitos acima do limiar vão para o export (só com a SFX soando)
+  function sfxHotMsg() {
+    if (!audible('sfx')) return '';
+    const n = SFX.filter(c => { const pk = clipPeakDb(c); return pk != null && pk > SFX_PEAK_MAX; }).length;
+    return n ? ` · ${n} SFX acima de −10 dB` : '';
+  }
+```
+
+**public/index.html · troca 3 — slider: marca ao vivo.** Substituir:
+
+```html
+          syncPlayer();
+          scheduleMaster();
+        });
+```
+
+por:
+
+```html
+          syncPlayer();
+          scheduleMaster();
+          if (track === 'sfx') markSfxPeak(inp.closest('.bt-clip'), clipsFor(track)[+inp.dataset.idx]);
+        });
+```
+
+**public/index.html · troca 4 — renderClipTrack: marca no render.** Substituir:
+
+```html
+        if (peaksArr instanceof Float32Array) drawPeaksToCanvas(cv, peaksArr, waveColor);
+      });
+    }
+  }
+  function renderBrollTrack() {
+```
+
+por:
+
+```html
+        if (peaksArr instanceof Float32Array) drawPeaksToCanvas(cv, peaksArr, waveColor);
+      });
+      if (track === 'sfx') host.querySelectorAll('.bt-clip').forEach(el => markSfxPeak(el, arr[+el.dataset.idx]));
+    }
+  }
+  function renderBrollTrack() {
+```
+
+**public/index.html · troca 5 — doConform: quantos efeitos acima de −10.** Substituir:
+
+```html
+${measuresMsg(r)}${skipped}`,
+```
+
+por:
+
+```html
+${measuresMsg(r)}${sfxHotMsg()}${skipped}`,
+```
+
+- [ ] **Step 3 [Executor]: `public/dev/ui-probe.js` — 3 trocas**
+
+**public/dev/ui-probe.js · troca 1 — ORDER com B6.** Substituir:
+
+```js
+  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5']; // o B4 não mexe na TIMELINE
+```
+
+por:
+
+```js
+  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6']; // o B4 não mexe na TIMELINE
+```
+
+**public/dev/ui-probe.js · troca 2 — sfxPeak antes de meter.** Substituir:
+
+```js
+  // Espera o primeiro render do master (até 10 s) e mede o lugar do medidor.
+```
+
+por:
+
+```js
+  // B6: em todo clipe de SFX com pico conhecido, a marca segue o limiar de −10 dBFS;
+  // sem pico conhecido (arquivo ainda decodificando), nenhuma marca. Só lê.
+  function sfxPeak() {
+    const clips = $$('#bt-track-sfx .bt-clip'), bad = [];
+    let known = 0;
+    clips.forEach((c, i) => {
+      const over = c.classList.contains('over'), title = !!c.getAttribute('title');
+      if (!('peak' in c.dataset)) { if (over || title) bad.push({ i, peak: null, over, title }); return; }
+      known++;
+      const want = parseFloat(c.dataset.peak) > -10;
+      if (over !== want || title !== want) bad.push({ i, peak: c.dataset.peak, over, title });
+    });
+    return { clips: clips.length, known, bad };
+  }
+  // Espera o primeiro render do master (até 10 s) e mede o lugar do medidor.
+```
+
+**public/dev/ui-probe.js · troca 3 — check do B6.** Substituir:
+
+```js
+          /^-?\d+\.\d$/.test(mt.peak || ''), mt, { rightOfTracks: true, heightDelta: '≤ 2', state: 'ok', token: '#34d399', peak: 'dBFS, uma casa' });
+      }
+```
+
+por:
+
+```js
+          /^-?\d+\.\d$/.test(mt.peak || ''), mt, { rightOfTracks: true, heightDelta: '≤ 2', state: 'ok', token: '#34d399', peak: 'dBFS, uma casa' });
+      }
+      if (at('B6')) {
+        const sp = sfxPeak();
+        add('sfx-peak', sp.bad.length === 0, sp, { bad: [] });
+      }
+```
+
+- [ ] **Step 4 [Executor]: Checagem** — `node jobs/checks/b6-static.js` → `PASS: B6 estático`. (O `b3-static` e o `b5-static` passam a falhar nos pontos que esta task muda de propósito — o trecho da mensagem e o `ORDER` —, como cada checagem estática deste plano vale no estágio dela.)
+
+- [ ] **Step 5 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 4. Parar aqui.
+
+- [ ] **Step 6 [Orquestrador]: `validator`** — "validar a Task 7 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b6-static.js`; conferir que o B6 só lê o áudio (nenhum nó de processamento, nada ligado ao que toca, nenhum ganho mudado); que o pico é o do trecho usado do arquivo (`srcIn`, `dur`) vezes o ganho do clipe; que a marca só existe em clipe da SFX, com a classe, o `▲` e o `title` juntos; que a contagem da mensagem só conta com a SFX audível; e que as limpezas de cache do B5 não mudaram".
+
+- [ ] **Step 7 [Orquestrador]: Rota Player** — condições de medição, auxiliares colados, sidecar da fixture restaurado (v3).
+
+```js
+T.asset('hit.wav', 0.8); T.key('Home'); await T.sleep(200); await T.steps(60, 'ArrowRight');
+await T.add('sfx', 'hit.wav');                                              // 2,0–2,8s, ganho 0 dB
+const el = () => document.querySelector('#bt-track-sfx .bt-clip[data-idx="0"]');
+for (let i = 0; i < 30 && !('peak' in el().dataset); i++) await T.sleep(100);   // espera decodificar
+const antes = { peak: el().dataset.peak, over: el().classList.contains('over'), title: el().title,
+  seta: getComputedStyle(el().querySelector('.nm'), '::before').content };
+const r6 = await uiProbe.run('B6');
+const ref = el(), inp = ref.querySelector('.bt-clip-vol');
+inp.value = '-20'; inp.dispatchEvent(new Event('input'));
+const depois = { mesmoElemento: el() === ref, peak: el().dataset.peak, over: el().classList.contains('over'), title: el().title };
+({ antes, probe: { ok: r6.ok, falhas: r6.results.filter(x => x.status !== 'PASS').map(x => x.id) }, depois })
+```
+
+Esperado: `antes: { peak: "-3.1", over: true, title: "pico −3,1 dBFS — acima de −10; mantenha só se for um elemento dramático", seta: "\"▲ \"" }`; `probe: { ok: true, falhas: [] }`; `depois: { mesmoElemento: true, peak: "-23.1", over: false, title: "" }` (o slider tirou a marca sem re-render). No reteste do plano: exatamente esses valores, com o contorno `rgb(251, 191, 36) 0px 0px 0px 1px inset` no clipe marcado. Um clipe **selecionado** também ganha contorno âmbar (o `outline` de 2px da seleção); o `▲` é o que distingue o aviso. O pico do arquivo, para conferir: `ffmpeg -hide_banner -nostats -i jobs/b-check/hit.wav -af astats=measure_perchannel=none:measure_overall=Peak_level -f null - 2>&1 | grep "Peak level"` → −3,1.
+
+O pico é do trecho usado (continua da cena acima: ganho de volta a 0 dB e o clipe dividido já no trecho baixo do arquivo):
+
+```js
+const inp = document.querySelector('#bt-track-sfx .bt-clip-vol');
+inp.value = '0'; inp.dispatchEvent(new Event('input')); await T.sleep(100);
+T.key('Home'); await T.sleep(200); await T.steps(70, 'ArrowRight');          // 2,33s: o arquivo já está a −20 dBFS
+await T.menu('sfx', 0, 'bt-menu-split'); await T.sleep(300);
+[...document.querySelectorAll('#bt-track-sfx .bt-clip')].map(c => ({ peak: c.dataset.peak, over: c.classList.contains('over') }))
+```
+
+Esperado: `[{ peak: "-3.1", over: true }, { peak: "-20.0", over: false }]` (no reteste do plano, esses valores).
+
+A contagem na mensagem (duas chamadas por conform, como no B3):
+
+```js
+document.getElementById('bt-conform').click();
+await T.sleep(40000);
+T.stage()
+```
+
+```js
+for (let i = 0; i < 40 && !/timeline conformada|erro/i.test(T.stage()); i++) await T.sleep(1000);
+T.stage()
+```
+
+Esperado: a mensagem termina em "· 1 SFX acima de −10 dB" (só a primeira metade passa do limiar). No reteste do plano: "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 2 SFX · 100 palavras · pico real −2,0 dBTP · −21,1 LUFS: abaixo do alvo −14 a −16 · LRA 15,0 LU: dinâmica alta para celular (ideal ≤ 9) · limitador −0,4 dB · 1 SFX acima de −10 dB" — o efeito a −3 dBFS somado à voz passa do teto (o medidor mostra −1,6 em vermelho), e um efeito alto de 0,8 s basta para o LRA do arquivo passar de 9. Depois `T.btn('sfx', 'mute').click()` e conformar de novo: a mensagem mostra "fora do export: SFX (mudo)" e **não** tem o trecho "SFX acima de −10 dB". Apagar os conformados e restaurar o sidecar da fixture.
+
+- [ ] **Step 8 [Orquestrador + Usuário]: Rota canvas** — usuário bloqueia `/vendor/studio-player.js` e recarrega; `load`, auxiliares; repetir o primeiro bloco do Step 7. Esperado: os mesmos valores (`antes`, `probe`, `depois`): o aviso não depende da rota. No reteste do plano (bundle fora do ar, `rota: "canvas"`): iguais. Restaurar o sidecar da fixture.
+
+- [ ] **Step 9 [Usuário]: Checklist manual** (itens 1–12 do A, com o item 8 da Task 4) + pôr um efeito alto na SFX: aparece o `▲` e o contorno, e o `title` diz o pico; baixar o slider até o aviso sumir; um efeito leve (abaixo de −10) fica sem marca; a mensagem do CONFORMAR conta os efeitos marcados.
+
+- [ ] **Step 10 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b6`; arquivos `public/index.html`, `public/dev/ui-probe.js`; commit `Flag SFX clips peaking above -10 dBFS (B6)`) → OK do usuário → `publish`.
 
 ---
 
