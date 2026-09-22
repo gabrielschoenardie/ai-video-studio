@@ -444,6 +444,7 @@ const server = http.createServer(async (req, res) => {
           captions: b.captions !== false, captionStyle: b.captionStyle || 'impact',
           whisperModel: b.whisperModel || 'base', language: b.language || null,
           burnCaptions: b.burnCaptions === true,
+          normalizeVoice: b.normalizeVoice !== false,
           onLog: s => jlog(job, s), onStage: (st, l) => jstage(job, st, l),
         });
         return { ...r, output: path.relative(ROOT, r.output),
