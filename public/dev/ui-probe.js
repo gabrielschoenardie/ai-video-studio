@@ -18,12 +18,17 @@
   const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music', '.bt-clip.sfx'];
   // Classes de estado mudam com playhead/seleção e não dizem nada sobre fonte.
   const STATE_CLASSES = new Set(['on', 'active', 'selected', 'hidden', 'locked', 'done', 'run', 'err',
-    'dragging', 'flip', 'hot', 'over', 'enter', 'collapsed', 'bt-enter', 'bt-split', 'bt-seek']);
+    'dragging', 'flip', 'hot', 'over', 'enter', 'collapsed', 'bt-enter', 'bt-split', 'bt-seek', 'silent']);
   // Loops de ambiente: não são resposta a ação, mantêm duração literal.
   const AMBIENT = /\b(drift|blink|bt-pulse)\b/;
   const TIME_LITERAL = /(?:^|[\s,(])(\d*\.?\d+m?s)(?![\w-])/g;
   const TRACK_ORDER = ['beats', 'broll', 'video', 'legend', 'audio', 'music'];
   const TRACK_ORDER_B = TRACK_ORDER.concat('sfx'); // lane SFX abaixo da TRILHA, do B2 em diante
+  // Controles por track do B3 em diante (spec B, tabela da seção "B3: controles de áudio").
+  const TRACK_ACTS_B3 = { beats: ['hide', 'lock'], broll: ['add', 'hide', 'lock'], video: ['lock'],
+    legend: ['hide', 'lock'], audio: ['mute', 'solo', 'lock'], music: ['add', 'mute', 'solo', 'lock'],
+    sfx: ['add', 'mute', 'solo', 'lock'] };
+  const AUDIO_TRACKS = ['audio', 'music', 'sfx'];
   const TRANSPORT_IDS = ['bt-play', 'bt-time', 'bt-rate', 'bt-j', 'bt-k', 'bt-l', 'bt-frameback',
     'bt-frameforward', 'bt-markin', 'bt-markout', 'bt-split', 'bt-merge', 'bt-rename', 'bt-undo',
     'bt-redo', 'bt-zoomout', 'bt-zoomlevel', 'bt-zoomin', 'bt-zoomfit', 'bt-save', 'bt-conform'];
@@ -210,6 +215,49 @@
     }
     return bad;
   }
+  function trackActs() {
+    const o = {};
+    for (const r of $$('.bt-track-row')) o[r.dataset.track] = $$('.bt-tctl', r).map(b => b.dataset.act);
+    return o;
+  }
+  const audioBtn = (t, act) => $(`.bt-track-row[data-track="${t}"] .bt-tctl[data-act="${act}"]`);
+  const pressed = el => !!el && el.getAttribute('aria-pressed') === 'true';
+  function mixState() {
+    return { mute: AUDIO_TRACKS.filter(t => pressed(audioBtn(t, 'mute'))),
+      solo: AUDIO_TRACKS.find(t => pressed(audioBtn(t, 'solo'))) || null };
+  }
+  // Leva M/S ao estado pedido clicando nos botões, como o usuário faria.
+  function setMix(mute, solo) {
+    for (const t of AUDIO_TRACKS) if (pressed(audioBtn(t, 'mute')) !== mute.includes(t)) audioBtn(t, 'mute').click();
+    const cur = mixState().solo;
+    if (cur !== solo) (solo ? audioBtn(solo, 'solo') : audioBtn(cur, 'solo')).click();
+  }
+  function soloExclusive() {
+    const start = mixState();
+    const soloed = () => $$('.bt-tctl[data-act="solo"]').filter(pressed).map(b => b.closest('.bt-track-row').dataset.track);
+    const steps = [];
+    setMix(start.mute, null);
+    audioBtn('audio', 'solo').click(); steps.push(soloed());
+    audioBtn('sfx', 'solo').click(); steps.push(soloed());
+    audioBtn('sfx', 'solo').click(); steps.push(soloed());
+    setMix(start.mute, start.solo);
+    return { steps, ok: same(steps, [['audio'], ['sfx'], []]) };
+  }
+  function silentLanes() {
+    const start = mixState();
+    const combos = [[[], null], [['music'], null], [['audio', 'sfx'], null], [[], 'sfx'], [['music'], 'music'], [['sfx'], 'audio']];
+    const bad = [];
+    for (const [mute, solo] of combos) {
+      setMix(mute, solo);
+      for (const t of AUDIO_TRACKS) {
+        const want = !(!mute.includes(t) && (solo === null || solo === t));
+        const got = $(`.bt-track-row[data-track="${t}"]`).classList.contains('silent');
+        if (want !== got) bad.push({ mute, solo, track: t, silent: got });
+      }
+    }
+    setMix(start.mute, start.solo);
+    return { combos: combos.length, bad };
+  }
   async function transportIds() {
     const missing = TRANSPORT_IDS.filter(id => !document.getElementById(id));
     const ungrouped = TRANSPORT_IDS.filter(id => {
@@ -324,6 +372,14 @@
         const sc = await shortcutSheet();
         add('shortcut-sheet', sc.present && sc.opened && sc.modal && sc.expected > 0 && sc.rows === sc.expected && sc.focusReturned,
           sc, { opened: true, modal: true, rows: 'SHORTCUTS.length', focusReturned: true });
+      }
+      if (at('B3')) {
+        const acts = trackActs();
+        add('audio-controls', same(acts, TRACK_ACTS_B3), acts, TRACK_ACTS_B3);
+        const se = soloExclusive();
+        add('solo-exclusive', se.ok, se.steps, [['audio'], ['sfx'], []]);
+        const sl = silentLanes();
+        add('silent-lanes', sl.bad.length === 0, sl, { combos: 6, bad: [] });
       }
       if (at('B2')) {
         const s = sfxLane();
