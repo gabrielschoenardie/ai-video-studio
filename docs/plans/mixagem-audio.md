@@ -4691,6 +4691,26 @@ Seção do Orquestrador: resultados de validator, navegador e checklist de cada 
 
 **Correção no Step 9 desta task:** o título de commit escrito na R3 tinha 85 caracteres, acima do limite de 72 do projeto. Encurtado para `Conform SFX and mute/solo, add master limiter, measure loudness (B1)` (68); "keep mono level" continua no corpo do commit. O Step 9 acima já está com o título novo.
 
+**Publicação (Step 9):** PR #20, commit `631e2c0`, merge commit `56d2a04`.
+
+### Task 3 (B2) — 2026-09-22
+
+**Validator (Step 9):** APROVADO, sem achados. `node jobs/checks/b2-static.js` → `PASS: B2 estático` (script idêntico ao bloco do Step 1). Diff = as 35 + 4 + 1 + 9 trocas do plano (33 + 4 + 1 + 9 hunks), sem nada a mais; nenhum ramo `track === 'broll' ? … : <TRILHA>` restante; os três pontos de arraste/trim usam `CLIP_HOST[track]`; `capSimultaneous` arredonda como `TimelinePreview.tsx` (`Math.round(s * fps)`, piso de 1 frame, `FPS = 30` nos dois lados); o bundle tem `numberOfSharedAudioTags:16` e `audible` e não tem `trilhaSolo`; `lib/`, `server.js` e `styles/` intocados; no plano só `## Status` mudou.
+
+**Bundle reproduzível (Step 10):** `sha256` antes e depois de um `npm run build:player` das mesmas fontes: `32999dfdc5bb96d48283fbf00117c8ad91149a445523c009993c9c1a90f8de7a` nas duas vezes.
+
+**Rota Player (Step 11):** condições de medição (1280×800, `?probe=1`, fixture carregada, sidecar v3 restaurado).
+- `await uiProbe.run('B2')` → `ok: true`, `falhas: []`, `sfxAntes: 0`.
+- Lane e clipe: `titulo: "ADICIONAR SFX"`, `width: "48px"`, `border: "rgb(34, 211, 238)"`, `nm: "9.5px"`, `props: ["sfx0"]`, `audible` todo `true`, `empilhados: ["sfx0","sfx1"]`, `slider: { updates: 1, vol: 0.0631, title: "−24,0 dB", faixa: ["-40","0","0.5"] }`, `undo: 1` — todos os valores esperados pelo plano.
+- Som de verdade, dois efeitos idênticos empilhados em 0,53s: `00:00.0 [] plateMudo=false` · `00:00.6 [▶sfx0 ▶sfx1] plateMudo=false` · `00:01.4 [] plateMudo=false`.
+- Teto de 16: `total: 20`, `camasNoPlayer: 16`, aviso "mais de 16 áudios simultâneos: o preview toca 16, o export toca todos", `quebrou: false`.
+- Salvar e recarregar: sidecar `{ version: 4, sfx: 1, music: 0, mix: { mute: [], solo: null } }`; depois da recarga, `T.clips('sfx')` → 1.
+- CONFORMAR com o efeito em 0–0,8s: resultado com `sfx: 1`, `mixPeakDb: -8.3`, `limiter: { ceilingDb: -2, cutDb: 0 }`, `truePeakDb: -8.3`, `lufs: -25`, `lra: 4.4`. Medição do tom (passa-banda de 1 kHz, 0,1–0,7s): conformado −21,1 dB (mono duplicado; −24 indicaria o upmix de −3 dB), fixture sem efeito −55,4 dB. A mensagem ainda não traz "· N SFX": esse trecho entra no B3. Conformado apagado e sidecar da fixture restaurado.
+
+**Rota canvas (Step 12):** bloqueio de `/vendor/studio-player.js` ligado pelo usuário; conferido `rota: "canvas"`. `await uiProbe.run('B2')` → `ok: true`, `falhas: []`; dois efeitos idênticos empilhados em 0,5s → `00:00.2 sfx[pp] plateMudo=false` · `00:00.4 sfx[▶▶] plateMudo=false` · `00:01.2 sfx[pp] plateMudo=false`: o mesmo arquivo toca duas vezes, cada clipe no seu elemento (a correção do B0 valendo para a SFX). Sidecar da fixture restaurado.
+
+**Checklist manual (Step 13):** informado pelo usuário — tudo OK: itens 1–12 do A, mais a lane SFX com efeito próprio (entra com a duração do arquivo, toca na janela certa nas duas rotas, slider em dB agindo ao vivo, arraste/trim/divisão/duplicar/colar/apagar como na TRILHA, SALVAR e recarregar mantendo a SFX, e projeto antigo abrindo com a SFX vazia).
+
 ---
 
 ## Status
@@ -4804,3 +4824,131 @@ server.js       |  19 ++++--
 16 hunks (`git diff | grep -c '^@@'`) nos 3 arquivos, batendo com as 1 + 12 + 5 = 18 trocas do plano (algumas trocas adjacentes caem no mesmo hunk pelo contexto padrão do diff, como já visto na Task 1/B0).
 
 Nenhum desvio do plano. `git status --short` mostra só `M lib/ffmpeg.js`, `M lib/timeline.js`, `M server.js` — nenhum outro arquivo rastreado tocado; nenhum commit criado; nenhuma branch trocada. Parando no Step 6 conforme instruído; Steps 7–9 (validator, conferência do usuário, git-workflow) ficam para o Orquestrador.
+
+### Task 3 (B2) — 2026-09-22 (Executor, Steps 1–8)
+
+Executado sobre a `main` local em `56d2a04` (sincronizada com `origin/main`; Tasks 1/B0 e 2/B1 já mergeadas). Steps 1–7 concluídos; Step 8 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b2-static.js` salvo (cópia literal do plano, via ferramenta de escrita de arquivos, sem heredoc) e rodado antes das trocas:**
+
+```
+FAIL
+index.html — ausente: --sfx:#22d3ee;
+index.html — ausente: .bt-clip.sfx{border-left:3px solid var(--sfx)}
+index.html — ausente: .bt-clip.music .nm,.bt-clip.sfx .nm{font-size:9.5px} /* isento:
+index.html — ausente: let SFX = [];
+index.html — ausente: <div class="bt-track-row" data-track="sfx">
+index.html — ausente: <span class="ic">≈</span><span class="nm">SFX</span>
+index.html — ausente: ${tctlHtml('add', 'SFX')}${tctlHtml('lock', 'SFX')}</div>
+index.html — ausente: <div class="bt-track-content" id="bt-track-sfx"></div>
+index.html — ausente: track === 'sfx' ? SFX : MUSIC
+index.html — ausente: const CLIP_HOST = { broll: 'bt-track-broll', music: 'bt-track-music', sfx: 'bt-track-sfx' };
+index.html — ausente: const CLIP_TRACK_NAME = { broll: 'B-ROLL', music: 'TRILHA', sfx: 'SFX' };
+index.html — ausente: ADICIONAR ${CLIP_TRACK_NAME[track]}
+index.html — ausente: function renderSfxTrack() { renderClipTrack('sfx', 'bt-track-sfx'); }
+index.html — ausente: const want = track === 'sfx' && asset.info && asset.info.duration > 0 ? asset.info.duration : 3;
+index.html — ausente: const isAudio = track === 'music' || track === 'sfx';
+index.html — ausente: clipsFor(track)[+inp.dataset.idx].volume = volumeOf(+inp.value);
+index.html — ausente: inp.setAttribute('aria-valuetext', inp.title);
+index.html — ausente: min="${GAIN_DB_MIN}" max="0" step="0.5" value="${dbOf(c.volume)}"
+index.html — ausente: const GAIN_DB_MIN = -40;
+index.html — ausente: ['broll', 'music', 'sfx'].forEach(track => clipsFor(track).forEach((c, i) => {
+index.html — ausente: const byTrack = { broll: [], music: [], sfx: [], video: [] };
+index.html — ausente: ['broll', 'music', 'sfx', 'video'].forEach(t =>
+index.html — ausente: SFX = JSON.parse(JSON.stringify(entry.sfx || []));
+index.html — ausente: const uses = [...MUSIC, ...SFX].filter(c => c.path === path).length;
+index.html — ausente: sfx: SFX.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume, srcIn: c.srcIn || 0 })),
+index.html — ausente: SFX = Array.isArray(saved.sfx) ? saved.sfx.map(
+index.html — ausente: SFX = (saved && Array.isArray(saved.sfx)) ? saved.sfx.map(
+index.html — ausente: function audibleNow() {
+index.html — ausente: return { audio: !trilhaSolo, music: !trilhaMuted && !hiddenTracks.music, sfx: !trilhaSolo };
+index.html — ausente: const PLAYER_AUDIO_MAX = 16;
+index.html — ausente: function capSimultaneous(items) {
+index.html — ausente: sfx: bedsOf('sfx'),
+index.html — ausente: audible: aud,
+index.html — ausente: path: url(c) + '#' + track + k,
+index.html — ausente: if (video.muted !== !aud.audio) video.muted = !aud.audio;
+index.html — ausente: [...MUSIC.map(c => ['music', c]), ...SFX.map(c => ['sfx', c])].forEach(([track, c]) => {
+index.html — ausente: const shouldPlay = onWindow && !video.paused && aud[track];
+index.html — não deveria existir: track === 'broll' ? 'bt-track-broll' : 'bt-track-music'
+index.html — não deveria existir: track === 'broll' ? 'B-ROLL' : 'TRILHA'
+index.html — não deveria existir: trilhaMuted, trilhaSolo,
+index.html — não deveria existir: el.muted = trilhaMuted;
+index.html — não deveria existir: !video.paused && !hiddenTracks.music
+CLIP_HOST[track] deveria aparecer 3× (arraste e trim)
+renderSfxTrack() deveria aparecer 7× (1 definição + 6 chamadas), achado 0
+snapshot e timelineState deveriam levar sfx
+trackHeights.sfx deveria existir nos dois lugares
+esperadas 17 chamadas ${tctlHtml(…)} (15 + 2 da SFX)
+a linha SFX deveria vir depois da TRILHA
+dbOf/volumeOf/dbLabel não extraíveis: dbOf is not defined
+TimelinePreview.tsx — ausente: sfx: Clip[];
+TimelinePreview.tsx — ausente: audible: { audio: boolean; music: boolean; sfx: boolean };
+TimelinePreview.tsx — ausente: muted={!audible.audio}
+TimelinePreview.tsx — ausente: {audible.music && bed(music, 'm')}
+TimelinePreview.tsx — ausente: {audible.sfx && bed(sfx, 'x')}
+TimelinePreview.tsx — ausente: audible: { audio: true, music: true, sfx: true },
+TimelinePreview.tsx — não deveria existir: trilhaMuted
+TimelinePreview.tsx — não deveria existir: trilhaSolo
+TimelinePreview.tsx — não deveria existir: hidden.music
+player-entry.tsx — ausente: numberOfSharedAudioTags={16}
+bundle não reconstruído (sem "audible" ou ainda com "trilhaSolo")
+bundle sem numberOfSharedAudioTags:16
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3'];
+ui-probe.js — ausente: const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music', '.bt-clip.sfx'];
+ui-probe.js — ausente: const TRACK_ORDER_B = TRACK_ORDER.concat('sfx');
+ui-probe.js — ausente: function sfxLane() {
+ui-probe.js — ausente: add('sfx-lane',
+ui-probe.js — ausente: const wantOrder = at('B2') ? TRACK_ORDER_B : TRACK_ORDER;
+ui-probe.js — ausente: if (!text || AMBIENT.test(text) || /#claude-/.test(where)) return;
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano: dezenas de `ausente:` em `index.html`, `TimelinePreview.tsx`, `player-entry.tsx` e `ui-probe.js`; as `não deveria existir:` de `trilhaMuted`/`trilhaSolo`/`hidden.music` na composição; e `bundle não reconstruído`.
+
+**Steps 2–4 — as trocas aplicadas**, na ordem do plano: `public/index.html` (35 trocas: `:root`; CSS de `.bt-clip.sfx` e `.bt-clip.music,.bt-clip.sfx .nm`; estado — `SFX`, comentários de `selectedClip`/`selectedClipSet`, `trackHeights.sfx`; `audibleNow()` + `capSimultaneous()` + `playerProps()` reescrito; `snapshot()`, `timelineState()`, `applyHistEntry()` com `sfx`; `pruneMediaCache()` conta TRILHA+SFX; `snapTargets()` com `'sfx'`; `ensureMiniWave()` chama `renderSfxTrack()`; `saveBeats()`/`applySavedBeats()` com `sfx`; markup do `buildDom()` — linha SFX depois da TRILHA; `clipsFor()` + `CLIP_HOST`/`CLIP_TRACK_NAME` + `dbOf`/`volumeOf`/`dbLabel`; `addClipAt()` — duração padrão da SFX; `renderClipTrack()` — slider em dB, `isAudio`, minionda e listeners para TRILHA+SFX; `renderSfxTrack()`; `openAddClipPopover()` pelo mapa; `compositeTick()` — TRILHA+SFX por ocorrência, plate por `audibleNow()`; `renderTracks()`, `onClipContextMenu()`, `startRowResize()` com SFX; `startClipMove()`/`startClipTrim()` — host pelo mapa (3×); `deleteSelection()` — `byTrack` e ordem com `sfx`; `startClipGroupMove()`, `onTracksMouseDown()` — re-render com SFX; `loadVideo()` — altura e leitura de `sfx`); `remotion/src/scenes/TimelinePreview.tsx` (4 trocas: props `sfx`/`audible`; função `bed()`; plate `muted={!audible.audio}`; TRILHA+SFX via `bed()`); `remotion/src/player-entry.tsx` (1 troca: `numberOfSharedAudioTags={16}`); `public/dev/ui-probe.js` (9 trocas: cabeçalho; `ORDER`/`EXEMPT_TEXT`; `TRACK_ORDER_B`; `sfxLane()`; isenção de `text-floor` a partir do B2; `track-order` por estágio; check `sfx-lane`; `console.info`; filtro `/#claude-/` em `motion-literals`).
+
+**Step 5 — tipos e bundle:**
+
+```
+$ cd remotion && npx tsc --noEmit -p .
+src/player-entry.tsx(11,39): error TS7016: Could not find a declaration file for module 'react-dom/client'. 'C:/Users/Usuario/Documents/GitHub/ai-video-studio/remotion/node_modules/react-dom/client.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/react-dom` if it exists or add a new declaration (.d.ts) file containing `declare module 'react-dom/client';`
+```
+
+Só o erro pré-existente esperado (`TS7016` em `react-dom/client`, já presente no `HEAD`); nenhum outro erro de tipo.
+
+```
+$ npm run build:player
+
+> build:player
+> esbuild src/player-entry.tsx --bundle --format=iife --platform=browser --target=es2020 --outfile=../public/vendor/studio-player.js --define:process.env.NODE_ENV=\"production\" --minify
+
+  ..\public\vendor\studio-player.js  403.4kb
+
+Done in 58ms
+```
+
+Tamanho igual ao esperado (`403.4kb`, ±1kb); `wc -c public/vendor/studio-player.js` → 413101 bytes. `public/vendor/studio-player.js` entra no diff (bundle regenerado, versionado).
+
+**Step 6 — as 9 trocas aplicadas em `public/dev/ui-probe.js`**, na ordem do plano.
+
+**Step 7 — `node jobs/checks/b2-static.js` depois das trocas:**
+
+```
+PASS: B2 estático
+```
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/b2-static.js` não aparece — `jobs/` é ignorado pelo git):**
+
+```
+public/dev/ui-probe.js                  |  45 +++++++---
+public/index.html                       | 155 +++++++++++++++++++++++++-------
+public/vendor/studio-player.js          |  24 ++---
+remotion/src/player-entry.tsx           |   4 +
+remotion/src/scenes/TimelinePreview.tsx |  38 ++++----
+5 files changed, 193 insertions(+), 73 deletions(-)
+```
+
+Hunks por arquivo (`git diff -- <arquivo> | grep -c '^@@'`): `public/index.html` 33 (as 35 trocas do Step 2, com algumas adjacentes caindo no mesmo hunk pelo contexto padrão do diff, como nas Tasks 1 e 2); `remotion/src/scenes/TimelinePreview.tsx` 4; `remotion/src/player-entry.tsx` 1; `public/dev/ui-probe.js` 9; `public/vendor/studio-player.js` 5 (bundle minificado — hunks não correspondem 1:1 às trocas de fonte).
+
+Nenhum desvio do plano. `git status --short` mostra só `M public/dev/ui-probe.js`, `M public/index.html`, `M public/vendor/studio-player.js`, `M remotion/src/player-entry.tsx`, `M remotion/src/scenes/TimelinePreview.tsx` — nenhum outro arquivo rastreado tocado; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `56d2a04`. Parando no Step 8 conforme instruído; Steps 9–11 (validator, bundle reproduzível, verificação no navegador nas duas rotas) e os Steps de usuário/git-workflow ficam para o Orquestrador.

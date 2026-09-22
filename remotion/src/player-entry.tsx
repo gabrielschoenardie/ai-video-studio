@@ -77,6 +77,10 @@ function render() {
       controls={false}
       clickToPlay={false}
       doubleClickToFullscreen={false}
+      // Cada <Audio> montado ao mesmo tempo ocupa uma destas tags; o padrão é 5 e
+      // o sexto lança erro e derruba o preview. A SFX empilha efeitos, então o
+      // teto sobe — e public/index.html (PLAYER_AUDIO_MAX) nunca manda mais que isto.
+      numberOfSharedAudioTags={16}
       style={{ width: '100%', height: '100%' }}
       acknowledgeRemotionLicense
     />,
