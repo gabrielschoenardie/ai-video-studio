@@ -1,7 +1,7 @@
 /* ui-probe.js — instrumento de medição da TIMELINE.
    Sub-projeto A (E0–E3b): docs/plans/ui-premium-timeline.md
      spec docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md
-   Sub-projeto B (B2–B3): docs/plans/mixagem-audio.md
+   Sub-projeto B (B2, B3, B5): docs/plans/mixagem-audio.md
      spec docs/superpowers/specs/2026-09-21-mixagem-audio-design.md
    Carregado só com ?probe na URL (loader no <head> de public/index.html).
    Só lê DOM/CSSOM — não enxerga o closure da TIMELINE. Uso, no console:
@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3'];
+  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5']; // o B4 não mexe na TIMELINE
   // Isentos do piso de 11px: dado desenhado em escala de tempo (spec A, decisão 2;
   // a SFX segue a TRILHA — spec B, decisão 11).
   const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music', '.bt-clip.sfx'];
@@ -258,6 +258,15 @@
     setMix(start.mute, start.solo);
     return { combos: combos.length, bad };
   }
+  // Espera o primeiro render do master (até 10 s) e mede o lugar do medidor.
+  async function meter() {
+    const m = $('#bt-meter'), s = $('.bt-scroll');
+    if (!m || !s) return { present: false };
+    for (let i = 0; i < 100 && m.dataset.state === 'pending'; i++) await sleep(100);
+    const rm = m.getBoundingClientRect(), rs = s.getBoundingClientRect();
+    return { present: true, rightOfTracks: rm.left >= rs.right - 1, heightDelta: round(Math.abs(rm.height - rs.height), 1),
+      state: m.dataset.state, peak: m.dataset.peak, token: cssVar('--meter-ok') };
+  }
   async function transportIds() {
     const missing = TRANSPORT_IDS.filter(id => !document.getElementById(id));
     const ungrouped = TRANSPORT_IDS.filter(id => {
@@ -373,6 +382,11 @@
         add('shortcut-sheet', sc.present && sc.opened && sc.modal && sc.expected > 0 && sc.rows === sc.expected && sc.focusReturned,
           sc, { opened: true, modal: true, rows: 'SHORTCUTS.length', focusReturned: true });
       }
+      if (at('B5')) {
+        const mt = await meter();
+        add('meter', mt.present && mt.rightOfTracks && mt.heightDelta <= 2 && mt.state === 'ok' && mt.token === '#34d399' &&
+          /^-?\d+\.\d$/.test(mt.peak || ''), mt, { rightOfTracks: true, heightDelta: '≤ 2', state: 'ok', token: '#34d399', peak: 'dBFS, uma casa' });
+      }
       if (at('B3')) {
         const acts = trackActs();
         add('audio-controls', same(acts, TRACK_ACTS_B3), acts, TRACK_ACTS_B3);
@@ -398,5 +412,5 @@
   }
 
   window.uiProbe = { load, run };
-  console.info('[uiProbe] carregado — await uiProbe.load(<vídeo>); await uiProbe.run("E0"…"E3b" | "B2" | "B3")');
+  console.info('[uiProbe] carregado — await uiProbe.load(<vídeo>); await uiProbe.run("E0"…"E3b" | "B2" | "B3" | "B5")');
 })();

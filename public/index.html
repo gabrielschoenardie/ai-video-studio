@@ -31,6 +31,7 @@ if (new URLSearchParams(location.search).has('probe')) {
   --go:#fbbf24; --go-hi:#fde68a; --go-solid:#ca8a04; --go-dim:rgba(251,191,36,.12);
   --violet:#8b8cf8; --warn:#ffb347; --bad:#fb7185;
   --sfx:#22d3ee; /* lane SFX da TIMELINE — B-ROLL usa --go, TRILHA usa --warn */
+  --meter-ok:#34d399; /* medidor de pico: zona verde; amarelo = --go, vermelho = --bad */
   --disp:'Unica One','Arial Narrow',sans-serif;
   --sans:'Inter',system-ui,sans-serif;
   --mono:'Red Hat Mono',ui-monospace,'Cascadia Mono',monospace;
@@ -376,6 +377,18 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 
 .bt-scroll{overflow:auto; border:1px solid var(--line); border-radius:var(--radius-sm);
   background:var(--bg2); position:relative}
+/* Timeline e medidor de pico lado a lado. O medidor estica à altura das tracks e
+   não empurra a linha: o canvas tem base 0 e só cresce no espaço que sobra. */
+.bt-mixrow{display:flex; gap:6px; align-items:stretch}
+.bt-mixrow > .bt-scroll{flex:1 1 auto; min-width:0}
+.bt-meter{flex:0 0 44px; display:flex; flex-direction:column; min-height:0;
+  border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--bg2); overflow:hidden}
+.bt-meter canvas{flex:1 1 0; min-height:0; width:100%; display:block}
+.bt-meter-peak{flex:0 0 auto; padding:3px 0; border-top:1px solid var(--line); text-align:center;
+  font:600 var(--fs-micro) var(--mono); color:var(--faint)}
+.bt-meter-peak.z-green{color:var(--meter-ok)}
+.bt-meter-peak.z-yellow{color:var(--go)}
+.bt-meter-peak.z-red{color:var(--bad)}
 .bt-inner{position:relative}
 .bt-ruler{position:sticky; top:0; z-index:5; height:22px; margin-left:var(--bt-labelw);
   background:var(--panel); border-bottom:1px solid var(--line)}
@@ -1556,6 +1569,7 @@ window.sendToClipper = (p) => {
     hist = hist.slice(0, histPos + 1);
     hist.push(JSON.parse(JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC, sfx: SFX, video: VIDEO })));
     histPos = hist.length - 1;
+    scheduleMaster();   // arraste, trim, split, colar… toda edição confirmada passa por aqui
   }
   /* "Ha edicoes nao salvas?" comparando CONTEUDO, e nao histPos: snapshot()
      faz hist.slice(0, histPos + 1) antes do push, entao desfazer e editar de
@@ -1605,6 +1619,10 @@ window.sendToClipper = (p) => {
       if (entry.audios) entry.audios.splice(uses).forEach(a => { if (a) { a.pause(); a.remove(); } });
       if (!entry.video && !(entry.audios && entry.audios.length)) mediaCache.delete(path);
     }
+    // buffers decodificados do medidor (B5): saem junto com o último clipe do arquivo, e a
+    // minionda também, para um arquivo que volte ser decodificado de novo
+    for (const path of [...audioBufCache.keys()])
+      if (![...MUSIC, ...SFX].some(c => c.path === path)) { audioBufCache.delete(path); miniWaveCache.delete(path); }
   }
   function clearMediaCache() {
     for (const entry of mediaCache.values()) {
@@ -1612,6 +1630,9 @@ window.sendToClipper = (p) => {
       if (entry.audios) entry.audios.forEach(a => { if (a) { a.pause(); a.remove(); } });
     }
     mediaCache.clear();
+    // medidor (B5): nada do vídeo anterior entra no master do próximo
+    plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();
+    meterEnv = null; lastMixSig = ''; meterGen++;
   }
 
   /* ---------------- snapping */
@@ -1696,6 +1717,7 @@ window.sendToClipper = (p) => {
   /* ---------------- waveform (real, decoded via Web Audio) */
   async function loadWaveform(path) {
     peaks = null;
+    plateBuf = null;
     waveError = false;
     try {
       const url = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
@@ -1703,6 +1725,7 @@ window.sendToClipper = (p) => {
       const AC = window.AudioContext || window.webkitAudioContext;
       const ctx = new AC();
       const audioBuf = await ctx.decodeAudioData(buf.slice(0));
+      plateBuf = audioBuf;   // o medidor (B5) mixa a partir dele
       const data = audioBuf.getChannelData(0);
       const totalPx = Math.ceil(DURATION * PX_PER_SEC_MAX);
       const cols = Math.max(1, Math.ceil(totalPx / 2)); // ~2px/coluna
@@ -1722,6 +1745,7 @@ window.sendToClipper = (p) => {
       waveError = true;
     }
     drawWaveform();
+    scheduleMaster();
   }
   function drawWaveform() {
     const canvas = $q('#bt-wave');
@@ -1784,7 +1808,9 @@ window.sendToClipper = (p) => {
       const buf = await (await fetch('/files/' + encodeURIComponent(path.replace(/\\/g, '/')))).arrayBuffer();
       const AC = window.AudioContext || window.webkitAudioContext;
       const ctx = new AC();
-      const data = (await ctx.decodeAudioData(buf.slice(0))).getChannelData(0);
+      const decoded = await ctx.decodeAudioData(buf.slice(0));
+      audioBufCache.set(path, decoded);   // o medidor (B5) mixa a partir dele
+      const data = decoded.getChannelData(0);
       const cols = 200, spc = Math.max(1, Math.floor(data.length / cols));
       const p = new Float32Array(cols);
       for (let c = 0; c < cols; c++) {
@@ -1794,9 +1820,10 @@ window.sendToClipper = (p) => {
       }
       miniWaveCache.set(path, p);
       ctx.close();
-    } catch (e) { miniWaveCache.set(path, null); }
+    } catch (e) { miniWaveCache.set(path, null); if (!audioBufCache.has(path)) audioBufCache.set(path, null); }
     renderMusicTrack();
     renderSfxTrack();
+    scheduleMaster();
   }
   function drawPeaksToCanvas(canvas, peaksArr, color) {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -1811,6 +1838,179 @@ window.sendToClipper = (p) => {
       const barH = Math.max(1, peaksArr[col] * (h - 6));
       ctx.fillRect(x, mid - barH / 2, 1.5, barH);
     }
+  }
+
+  /* ---------------- medidor de pico do master (B5) ----------------
+     O master é renderizado OFFLINE com as regras do conform: um trecho do vídeo
+     base por segmento da VÍDEO, cada clipe de TRILHA/SFX com o próprio ganho, só
+     as tracks que soam (audibleNow), mono duplicado nos dois canais (o up-mix
+     padrão do Web Audio) e soma direta. Nada se liga ao áudio que está tocando:
+     na rota Player ele mora no AudioContext interno do Remotion, e na rota canvas
+     não passa por Web Audio. Do mix sai um envelope de pico por 1/60 s que serve
+     play e scrub nas duas rotas — e antecipa o pico que o CONFORMAR mede antes do
+     limitador do master. O limitador fica de fora de propósito: o preview também
+     toca sem ele, e o vermelho mostra onde o export vai soar diferente. */
+  let plateBuf = null;               // AudioBuffer do vídeo base, guardado por loadWaveform
+  let plateAudio = true;             // o vídeo base tem faixa de áudio? (do probe, em loadVideo)
+  const audioBufCache = new Map();   // path -> AudioBuffer | null, guardado por ensureMiniWave
+  const METER_SR = 44100, METER_FPS = 60, METER_FLOOR = -60;
+  const METER_RELEASE = 20, METER_HOLD_MS = 1200;   // dB/s e ms (documento de referência)
+  let meterEnv = null;               // { l, r: Float32Array de amplitude, peakDb }
+  let meterGen = 0, meterTimer = null, lastMixSig = '', meterRaf = null, meterColors = null;
+  const meterDisp = { l: METER_FLOOR, r: METER_FLOOR, hl: METER_FLOOR, hr: METER_FLOOR, htl: 0, htr: 0, last: 0, drawn: '' };
+  function ampDb(a) { return a > 0 ? 20 * Math.log10(a) : -Infinity; }
+  // Zonas amarradas ao limitador do master: a partir de -2 dBFS (o teto, MASTER_CEIL_DB de
+  // lib/timeline.js) ele corta no export; a voz normalizada (pico -2) fica no limite do amarelo.
+  function meterZone(db) { return db >= -2 ? 'red' : db >= -6 ? 'yellow' : 'green'; }
+  function fmtDb(db) { return (db < 0 ? '−' : db > 0 ? '+' : '') + Math.abs(db).toFixed(1).replace('.', ','); }
+  function setMeterData(k, v) { const m = $q('#bt-meter'); if (m) m.dataset[k] = v; }
+  function scheduleMaster() { clearTimeout(meterTimer); meterTimer = setTimeout(renderMaster, 200); }
+  // O que muda o master: cortes, clipes, ganhos, quem soa e quais buffers já chegaram.
+  function mixSignature(aud) {
+    const clip = c => [c.path, c.start, c.dur, c.srcIn || 0, c.volume, audioBufCache.get(c.path) instanceof AudioBuffer];
+    return JSON.stringify([DURATION, !!plateBuf, aud, VIDEO, MUSIC.map(clip), SFX.map(clip)]);
+  }
+  async function renderMaster() {
+    if (!built) return;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    // o vídeo base TEM áudio e ele não decodificou: medir sem ele mentiria sobre a voz
+    if (!OAC || (waveError && plateAudio)) {
+      meterEnv = null; lastMixSig = '';
+      setMeterData('state', 'unavailable');
+      const m = $q('#bt-meter');
+      if (m) m.title = 'medidor indisponível: o áudio do vídeo não decodificou neste navegador';
+      updateMeterPeak();
+      return;
+    }
+    if ((plateAudio && !plateBuf) || !(DURATION > 0)) { setMeterData('state', 'pending'); return; }
+    const aud = audibleNow();
+    const sig = mixSignature(aud);
+    if (sig === lastMixSig) return;
+    const gen = ++meterGen;
+    const t0 = performance.now();
+    const ctx = new OAC(2, Math.max(1, Math.ceil(DURATION * METER_SR)), METER_SR);
+    let missing = false;
+    if (aud.audio && plateBuf) VIDEO.forEach((s, i) => {
+      const src = ctx.createBufferSource();
+      src.buffer = plateBuf; src.connect(ctx.destination);
+      src.start(segStart(i), s.srcIn, s.dur);
+    });
+    [['music', MUSIC], ['sfx', SFX]].forEach(([track, arr]) => {
+      if (!aud[track]) return;
+      arr.forEach(c => {
+        const buf = audioBufCache.get(c.path);
+        if (!(buf instanceof AudioBuffer)) { if (buf !== null) missing = true; return; }  // null = não decodifica
+        const srcIn = c.srcIn || 0;
+        const dur = Math.min(c.dur, buf.duration - srcIn, DURATION - c.start);
+        if (!(dur > 0)) return;
+        const g = ctx.createGain();
+        g.gain.value = Math.max(0, Math.min(1, c.volume));
+        g.connect(ctx.destination);
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.connect(g);
+        src.start(c.start, srcIn, dur);
+      });
+    });
+    let out;
+    try { out = await ctx.startRendering(); }
+    catch (e) { if (gen === meterGen) { meterEnv = null; setMeterData('state', 'unavailable'); updateMeterPeak(); } return; }
+    if (gen !== meterGen) return;    // um render mais novo começou enquanto este rodava
+    const L = out.getChannelData(0), R = out.getChannelData(1);
+    const hop = METER_SR / METER_FPS, n = Math.ceil(L.length / hop);
+    const l = new Float32Array(n), r = new Float32Array(n);
+    let max = 0;
+    for (let f = 0; f < n; f++) {
+      let a = 0, b = 0;
+      for (let i = Math.floor(f * hop), e = Math.min(L.length, Math.floor((f + 1) * hop)); i < e; i++) {
+        const x = L[i] < 0 ? -L[i] : L[i]; if (x > a) a = x;
+        const y = R[i] < 0 ? -R[i] : R[i]; if (y > b) b = y;
+      }
+      l[f] = a; r[f] = b;
+      if (a > max) max = a;
+      if (b > max) max = b;
+    }
+    meterEnv = { l, r, peakDb: max > 0 ? Math.round(ampDb(max) * 10) / 10 : null };
+    lastMixSig = sig;                // um buffer que chegar depois muda a assinatura e força outro render
+    setMeterData('renderMs', String(Math.round(performance.now() - t0)));
+    setMeterData('state', missing ? 'pending' : 'ok');
+    updateMeterPeak();
+    meterDisp.drawn = '';
+  }
+  function updateMeterPeak() {
+    const pk = meterEnv ? meterEnv.peakDb : null;
+    setMeterData('peak', pk == null ? '' : pk.toFixed(1));
+    const el = $q('#bt-meter-peak');
+    if (!el) return;
+    el.textContent = pk == null ? '—' : fmtDb(pk);
+    el.className = 'bt-meter-peak' + (pk == null ? '' : ' z-' + meterZone(pk));
+  }
+  function startMeter() { if (!meterRaf) meterRaf = requestAnimationFrame(meterTick); }
+  function envDb(env, t) {
+    if (!env || !env.length) return METER_FLOOR;
+    const i = Math.min(env.length - 1, Math.max(0, Math.floor(t * METER_FPS)));
+    return Math.max(METER_FLOOR, ampDb(env[i]));
+  }
+  function meterTick(now) {
+    meterRaf = null;
+    const m = $q('#bt-meter'), cv = $q('#bt-meter-canvas');
+    if (!built || !m || !cv) return;           // desmontado: o próximo startMeter() religa
+    meterRaf = requestAnimationFrame(meterTick);
+    const step = $('#step-beats');
+    // fora da TIMELINE, nada é lido nem desenhado; o laço segue agendado porque goStep()
+    // está fora do IIFE da TIMELINE e não teria como religá-lo (o compositeTick faz igual)
+    if (!step || !step.classList.contains('on')) { meterDisp.last = 0; return; }
+    const dt = meterDisp.last ? Math.min(0.1, (now - meterDisp.last) / 1000) : 0;
+    meterDisp.last = now;
+    const playing = engineReady() && !isPaused();
+    ['l', 'r'].forEach(ch => {
+      const target = meterEnv ? envDb(meterEnv[ch], playhead) : METER_FLOOR;
+      const cur = meterDisp[ch];
+      // Ataque instantâneo; queda de no máximo METER_RELEASE dB/s, nunca abaixo do
+      // envelope. Parado ou no scrub, o valor do frame direto.
+      const lv = !playing || target >= cur ? target : Math.max(target, cur - METER_RELEASE * dt);
+      meterDisp[ch] = lv;
+      const hk = 'h' + ch, tk = 'ht' + ch;
+      if (lv >= meterDisp[hk]) { meterDisp[hk] = lv; meterDisp[tk] = now; }
+      else if (now - meterDisp[tk] > METER_HOLD_MS) meterDisp[hk] = Math.max(lv, meterDisp[hk] - METER_RELEASE * dt);
+    });
+    const key = [meterDisp.l, meterDisp.r, meterDisp.hl, meterDisp.hr].map(v => v.toFixed(1)).join('|') + '|' + cv.clientHeight;
+    if (key === meterDisp.drawn) return;
+    meterDisp.drawn = key;
+    m.dataset.l = meterDisp.l.toFixed(1);
+    m.dataset.r = meterDisp.r.toFixed(1);
+    drawMeter(cv);
+  }
+  function drawMeter(cv) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (!w || !h) return;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    if (!meterColors) {   // canvas não lê custom properties: resolve uma vez
+      const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+      meterColors = { green: v('--meter-ok'), yellow: v('--go'), red: v('--bad'), text: v('--faint'), track: v('--panel2'), font: v('--mono') };
+    }
+    const C = meterColors, ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const top = 7, span = h - 14;
+    const y = db => top + span * (Math.min(0, Math.max(METER_FLOOR, db)) / METER_FLOOR);   // 0 dB no topo
+    ctx.font = '11px ' + C.font; ctx.fillStyle = C.text; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    [0, -6, -12, -18, -30, -60].forEach(d => ctx.fillText(String(-d), 19, y(d)));
+    [['l', 22], ['r', 32]].forEach(([ch, x]) => {
+      ctx.fillStyle = C.track; ctx.fillRect(x, top, 8, span);
+      const lv = meterDisp[ch];
+      const seg = (from, to, color) => {   // pinta a faixa [from, to] dB até onde o nível chega
+        const hi = Math.min(lv, to);
+        if (hi <= from) return;
+        ctx.fillStyle = color; ctx.fillRect(x, y(hi), 8, y(from) - y(hi));
+      };
+      // os mesmos limiares de meterZone: o vermelho começa no teto do limitador do master
+      seg(METER_FLOOR, -6, C.green); seg(-6, -2, C.yellow); seg(-2, 0, C.red);
+      const hd = meterDisp['h' + ch];
+      if (hd > METER_FLOOR) { ctx.fillStyle = C[meterZone(hd)]; ctx.fillRect(x, y(hd) - 1, 8, 2); }
+    });
   }
 
   /* ---------------- legend (palavras reais, resolvidas no servidor a
@@ -2010,6 +2210,7 @@ window.sendToClipper = (p) => {
           <div id="bt-legend-list"></div>
         </div>
       </div>
+      <div class="bt-mixrow">
       <div class="bt-scroll" id="bt-scroll">
         <div class="bt-inner" id="bt-inner">
           <div class="bt-tracks bt-tracks-top" id="bt-tracks-top">
@@ -2063,6 +2264,12 @@ window.sendToClipper = (p) => {
           <div class="bt-playhead" id="bt-playhead"><div class="bt-playhead-flag"></div><span class="bt-playhead-tc" aria-hidden="true">00:00.0</span></div>
           <div class="bt-inout" id="bt-inout" style="display:none"></div>
         </div>
+      </div>
+      <div class="bt-meter" id="bt-meter" data-state="pending" role="img" aria-label="Medidor de pico do master"
+        title="pico do master (L/R), antes do limitador: verde abaixo de −6 dBFS, amarelo até −2, vermelho a partir de −2 (o limitador corta no export)">
+        <canvas id="bt-meter-canvas"></canvas>
+        <div class="bt-meter-peak" id="bt-meter-peak" title="pico do mix antes do limitador — acima de −2 o limitador do master corta no export; o CONFORMAR mede o mesmo">—</div>
+      </div>
       </div>`;
     if (USE_RPLAYER) {
       video = null;
@@ -2318,6 +2525,7 @@ window.sendToClipper = (p) => {
           inp.title = dbLabel(+inp.value);
           inp.setAttribute('aria-valuetext', inp.title);
           syncPlayer();
+          scheduleMaster();
         });
         inp.addEventListener('change', () => snapshot());
       });
@@ -2685,6 +2893,7 @@ window.sendToClipper = (p) => {
     // com ripple, trim, add/remove de clipe, undo/redo, hide/lock) já passa por
     // aqui, então o preview nunca fica atrasado em relação à timeline
     syncPlayer();
+    scheduleMaster();
     justAdded = null; justSplit = null;
   }
 
@@ -3545,6 +3754,7 @@ window.sendToClipper = (p) => {
           // este handler não passa por renderTracks(), então o Player precisa
           // ser avisado aqui — senão hide/mute/solo só mudariam a UI
           syncPlayer();
+          scheduleMaster();
         };
       });
       const resizeHandle = row.querySelector('.bt-row-resize');
@@ -3630,6 +3840,7 @@ window.sendToClipper = (p) => {
     try { info = await api('/api/probe', { input: path }); }
     catch (e) { $('#bt-root').innerHTML = '<div class="empty">Falha ao carregar: ' + escapeHtml(e.message) + '</div>'; return; }
     MEDIA_DUR = info.duration || 0;
+    plateAudio = !!info.acodec;   // sem faixa de áudio, o medidor mede só TRILHA/SFX
     VIDEO = [{ srcIn: 0, dur: MEDIA_DUR }];
     recomputeDuration();
     playhead = 0; activeSeg = 0;
@@ -3656,6 +3867,7 @@ window.sendToClipper = (p) => {
     markSaved();
     buildDom();
     built = true;
+    startMeter();
     await loadWaveform(path);
     await loadLegend();
     renderTracks();
