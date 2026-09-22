@@ -410,6 +410,9 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 .bt-tctl.on[data-act="solo"]{color:var(--go); background:var(--go-dim)}
 .bt-track-content{position:relative; background:rgba(10,11,26,.5)}
 .bt-track-row.hidden .bt-track-content{opacity:.2; pointer-events:none}
+/* track de áudio que não vai soar (mudo próprio ou solo de outra): esmaecida,
+   mas editável — ao contrário da oculta, que bloqueia o mouse */
+.bt-track-row.silent .bt-track-content{opacity:.45}
 /* travada: hachura sobre a lane, sem trocar a cor de fundo */
 .bt-track-row.locked .bt-track-content{cursor:not-allowed;
   background-image:repeating-linear-gradient(45deg, rgba(255,179,71,.07) 0 6px, transparent 6px 12px)}
@@ -1330,7 +1333,20 @@ window.sendToClipper = (p) => {
   const TRACK_MIN_H = 44;
   const TRACK_MAX_H = 240;
   let trackHeights = { beats: 44, video: 44, audio: 44, legend: 44, broll: 44, music: 44, sfx: 44 };
-  let trilhaMuted = false, trilhaSolo = false;
+  /* M/S das tracks de áudio. `mute` ⊆ AUDIO_TRACKS; `solo` é um valor só, então é
+     exclusivo por construção, e o mudo vence o solo. Vai para o sidecar, e o
+     conform aplica a mesma regra (lib/timeline.js, audible): export = preview.
+     'audio' é o som do plate — os segmentos da VÍDEO. */
+  const AUDIO_TRACKS = ['audio', 'music', 'sfx'];
+  let MIX = { mute: [], solo: null };
+  function normalizeMix(mix) {
+    const m = mix && typeof mix === 'object' ? mix : {};
+    const mute = Array.isArray(m.mute) ? AUDIO_TRACKS.filter(t => m.mute.includes(t)) : [];
+    return { mute, solo: AUDIO_TRACKS.includes(m.solo) ? m.solo : null };
+  }
+  function audible(track) {
+    return !MIX.mute.includes(track) && (MIX.solo === null || MIX.solo === track);
+  }
   const mediaCache = new Map(); // path -> {video?, audios?: []} — elementos ocultos pro compositor
   const thumbCache = new Map();    // path -> dataURL | 'pending' | null (frame do clipe B-ROLL)
   const miniWaveCache = new Map(); // path -> Float32Array picos | 'pending' | null (mini-waveform do clipe TRILHA)
@@ -1380,12 +1396,9 @@ window.sendToClipper = (p) => {
     return '/files/' + encodeURIComponent(String(currentPath || '').replace(/\\/g, '/'));
   }
   /* Quem soa no preview. As duas rotas leem daqui e o Player recebe o
-     resultado pronto (prop `audible`): a regra mora num lugar só deste lado.
-     Por ora são as chaves de sempre da TRILHA — mudo, ocultar e o solo, que
-     cala o plate e agora também a SFX; o sub-projeto B, etapa B3, troca o
-     corpo por MIX + audible(). */
+     resultado pronto (prop `audible`): a regra mora num lugar só deste lado. */
   function audibleNow() {
-    return { audio: !trilhaSolo, music: !trilhaMuted && !hiddenTracks.music, sfx: !trilhaSolo };
+    return { audio: audible('audio'), music: audible('music'), sfx: audible('sfx') };
   }
   /* O Player monta no máximo PLAYER_AUDIO_MAX <Audio> ao mesmo tempo; o
      seguinte lança erro e derruba o preview inteiro. Acima do teto, os clipes
@@ -1545,7 +1558,9 @@ window.sendToClipper = (p) => {
      esta estrutura a cada edicao, entao o custo nao e novidade aqui. */
   let savedState = null; // instantaneo serializado do ultimo save/load
   function timelineState() {
-    return JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC, sfx: SFX, video: VIDEO });
+    // mix entra no "não salvo" (vale no export), mas não no histórico: Ctrl+Z
+    // desfaz edição, não chave de mixagem
+    return JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC, sfx: SFX, video: VIDEO, mix: MIX });
   }
   function markSaved() { savedState = timelineState(); }
   function isDirty() { return savedState !== null && timelineState() !== savedState; }
@@ -1827,11 +1842,29 @@ window.sendToClipper = (p) => {
         broll: BROLL.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })),
         music: MUSIC.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume, srcIn: c.srcIn || 0 })),
         sfx: SFX.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume, srcIn: c.srcIn || 0 })),
+        mix: MIX,
       });
       stage('beats salvos: ' + r.path);
       markSaved();
       return true;
     } catch (e) { stage(e.message, true); return false; }
+  }
+  /* Medidas do arquivo conformado, na ordem da mensagem: pico real, LUFS, LRA e
+     o corte do limitador do master. Informam; só o pico real acima de −1 dBTP
+     (o AAC empurrou para fora da faixa) vira erro, no stage() de doConform. */
+  function measuresMsg(r) {
+    const sg = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1).replace('.', ',');
+    const un = v => v.toFixed(1).replace('.', ',');
+    let s = '';
+    if (r.truePeakDb != null) s += ` · pico real ${sg(r.truePeakDb)} dBTP` +
+      (r.tpWarn === 'over' ? ' — acima de −1 depois do AAC: abaixe TRILHA/SFX' : '');
+    if (r.lufs != null) s += ` · ${sg(r.lufs)} LUFS` +
+      (r.loudWarn === 'low' ? ': abaixo do alvo −14 a −16' : r.loudWarn === 'high' ? ': acima do alvo −14 a −16' : '');
+    if (r.lra != null) s += ` · LRA ${un(r.lra)} LU` + (r.lraWarn === 'high' ? ': dinâmica alta para celular (ideal ≤ 9)' : '');
+    // acima de 3 dB de corte, um limitador de pico já achata os transientes
+    const cut = r.limiter ? r.limiter.cutDb : null;
+    if (cut > 0) s += ` · limitador −${un(cut)} dB` + (cut > 3 ? ' — mix alto: abaixe TRILHA/SFX' : '');
+    return s;
   }
   /* CONFORMAR: achata a timeline num mezanino de verdade e o entrega ao EXPORT.
      O sidecar é a única ponte entre o painel e lib/timeline.js, então salvar
@@ -1853,8 +1886,13 @@ window.sendToClipper = (p) => {
       const skipped = r.skipped && r.skipped.length
         ? ` · ${r.skipped.length} clipe(s) ignorado(s): ${r.skipped.map(s => s.name).join(', ')}`
         : '';
-      stage(`timeline conformada — ${r.duration.toFixed(1)}s · ${r.broll} B-ROLL · ${r.music} TRILHA` +
-        ` · ${r.captionedWords} palavras${skipped}`);
+      // export = preview: diz o que o mix deixou fora; depois, as medidas do arquivo
+      const NAME = { audio: 'ÁUDIO', music: 'TRILHA', sfx: 'SFX' };
+      const fora = (r.excluded || []).map(t => NAME[t]).join(', ');
+      const why = r.mix && r.mix.solo ? 'solo: ' + NAME[r.mix.solo] : 'mudo';
+      stage(`timeline conformada — ${r.duration.toFixed(1)}s · ${r.broll} B-ROLL · ${r.music} TRILHA · ${r.sfx} SFX` +
+        ` · ${r.captionedWords} palavras${fora ? ` · fora do export: ${fora} (${why})` : ''}${measuresMsg(r)}${skipped}`,
+        r.tpWarn === 'over');
     } catch (e) { stage(e.message, true); }
     finally { if (btn) btn.disabled = false; }
   }
@@ -1864,6 +1902,7 @@ window.sendToClipper = (p) => {
     BROLL = Array.isArray(saved.broll) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })) : [];
     MUSIC = Array.isArray(saved.music) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
     SFX = Array.isArray(saved.sfx) ? saved.sfx.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
+    MIX = normalizeMix(saved.mix);
     VIDEO = normalizeSegments(saved.segments);
     recomputeDuration();
     selected = -1; selectedClip = null;
@@ -1892,14 +1931,15 @@ window.sendToClipper = (p) => {
 
   /* Controles de track (H/L/M/S/+): ícone de dois estados em vez de letra. O
      estado vai em aria-pressed e o aria-label não muda com ele — trocar os dois
-     faria o leitor de tela anunciar a ação duas vezes, invertida. H/M/S são só
-     do preview (o conform lê o sidecar inteiro), e o title diz isso. */
+     faria o leitor de tela anunciar a ação duas vezes, invertida. H é só do
+     preview; M/S valem no export (o conform lê o mix do sidecar). O title diz
+     qual é qual. */
   const TCTL = {
     add:  { label: 'Adicionar clipe à track', title: 'adicionar clipe', icons: ['i-plus', 'i-plus'] },
     hide: { label: 'Ocultar track', title: 'ocultar no preview — não altera o export', icons: ['i-eye', 'i-eye-off'] },
     lock: { label: 'Travar track', title: 'travar edição', icons: ['i-lock-open', 'i-lock'] },
-    mute: { label: 'Silenciar trilha', title: 'mudo no preview — não altera o export', icons: ['i-spk', 'i-spk-off'] },
-    solo: { label: 'Ativar solo da trilha', title: 'solo da TRILHA: silencia o áudio do vídeo no preview — não altera o export', icons: ['i-solo', 'i-solo'] },
+    mute: { label: 'Silenciar track', title: 'mudo — vale no export', icons: ['i-spk', 'i-spk-off'] },
+    solo: { label: 'Solo da track', title: 'solo — só esta track soa, também no export', icons: ['i-solo', 'i-solo'] },
   };
   function tctlHtml(act, trackName) {
     const d = TCTL[act];
@@ -1997,19 +2037,19 @@ window.sendToClipper = (p) => {
             </div>
             <div class="bt-track-row" data-track="audio">
               <div class="bt-track-label"><span class="ic">♪</span><span class="nm">ÁUDIO</span>
-                ${tctlHtml('hide', 'ÁUDIO')}${tctlHtml('lock', 'ÁUDIO')}</div>
+                ${tctlHtml('mute', 'ÁUDIO')}${tctlHtml('solo', 'ÁUDIO')}${tctlHtml('lock', 'ÁUDIO')}</div>
               <div class="bt-track-content" id="bt-track-audio"><canvas id="bt-wave"></canvas></div>
               <div class="bt-row-resize" data-track="audio"></div>
             </div>
             <div class="bt-track-row" data-track="music">
               <div class="bt-track-label"><span class="ic">♫</span><span class="nm">TRILHA</span>
-                ${tctlHtml('add', 'TRILHA')}${tctlHtml('mute', 'TRILHA')}${tctlHtml('solo', 'TRILHA')}${tctlHtml('hide', 'TRILHA')}${tctlHtml('lock', 'TRILHA')}</div>
+                ${tctlHtml('add', 'TRILHA')}${tctlHtml('mute', 'TRILHA')}${tctlHtml('solo', 'TRILHA')}${tctlHtml('lock', 'TRILHA')}</div>
               <div class="bt-track-content" id="bt-track-music"></div>
               <div class="bt-row-resize" data-track="music"></div>
             </div>
             <div class="bt-track-row" data-track="sfx">
               <div class="bt-track-label"><span class="ic">≈</span><span class="nm">SFX</span>
-                ${tctlHtml('add', 'SFX')}${tctlHtml('lock', 'SFX')}</div>
+                ${tctlHtml('add', 'SFX')}${tctlHtml('mute', 'SFX')}${tctlHtml('solo', 'SFX')}${tctlHtml('lock', 'SFX')}</div>
               <div class="bt-track-content" id="bt-track-sfx"></div>
               <div class="bt-row-resize" data-track="sfx"></div>
             </div>
@@ -2588,13 +2628,14 @@ window.sendToClipper = (p) => {
       const track = row.dataset.track;
       row.classList.toggle('hidden', !!hiddenTracks[track]);
       row.classList.toggle('locked', !!lockedTracks[track]);
+      row.classList.toggle('silent', AUDIO_TRACKS.includes(track) && !audible(track));
       row.querySelectorAll('.bt-tctl').forEach(btn => {
         const act = btn.dataset.act;
         let on = false;
         if (act === 'hide') on = !!hiddenTracks[track];
         else if (act === 'lock') on = !!lockedTracks[track];
-        else if (act === 'mute') on = trilhaMuted;
-        else if (act === 'solo') on = trilhaSolo;
+        else if (act === 'mute') on = MIX.mute.includes(track);
+        else if (act === 'solo') on = MIX.solo === track;
         btn.classList.toggle('on', on);
         if (act !== 'add' && TCTL[act]) {
           btn.setAttribute('aria-pressed', String(on));
@@ -3490,8 +3531,10 @@ window.sendToClipper = (p) => {
           if (act === 'hide') hiddenTracks[track] = !hiddenTracks[track];
           if (act === 'lock') lockedTracks[track] = !lockedTracks[track];
           if (act === 'add') { openAddClipPopover(track, btn); return; }
-          if (act === 'mute') trilhaMuted = !trilhaMuted;
-          if (act === 'solo') { trilhaSolo = !trilhaSolo; if (video) video.muted = trilhaSolo; }
+          // o plate da rota canvas segue audibleNow() no compositeTick
+          if (act === 'mute') MIX = normalizeMix({ solo: MIX.solo,
+            mute: MIX.mute.includes(track) ? MIX.mute.filter(t => t !== track) : MIX.mute.concat(track) });
+          if (act === 'solo') MIX = { mute: MIX.mute, solo: MIX.solo === track ? null : track };
           applyTrackVisibility();
           // este handler não passa por renderTracks(), então o Player precisa
           // ser avisado aqui — senão hide/mute/solo só mudariam a UI
@@ -3585,7 +3628,7 @@ window.sendToClipper = (p) => {
     recomputeDuration();
     playhead = 0; activeSeg = 0;
     selected = -1; selectedClip = null; selectedClipSet.clear(); inPoint = null; outPoint = null;
-    hiddenTracks = {}; lockedTracks = {}; trilhaMuted = false; trilhaSolo = false;
+    hiddenTracks = {}; lockedTracks = {}; MIX = { mute: [], solo: null };
     trackHeights = { beats: 44, video: 44, audio: 44, legend: 44, broll: 44, music: 44, sfx: 44 };
     PX_PER_SEC = 60; updateZoomReadout();
     clearMediaCache();
@@ -3602,6 +3645,7 @@ window.sendToClipper = (p) => {
     BROLL = (saved && Array.isArray(saved.broll)) ? saved.broll.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, srcIn: c.srcIn || 0 })) : [];
     MUSIC = (saved && Array.isArray(saved.music)) ? saved.music.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
     SFX = (saved && Array.isArray(saved.sfx)) ? saved.sfx.map(c => ({ path: c.path, name: c.name, start: c.start, dur: c.dur, volume: c.volume != null ? c.volume : 1, srcIn: c.srcIn || 0 })) : [];
+    MIX = normalizeMix(saved && saved.mix);
     hist = []; histPos = -1; snapshot();
     markSaved();
     buildDom();

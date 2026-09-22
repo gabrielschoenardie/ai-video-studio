@@ -4713,6 +4713,27 @@ Seção do Orquestrador: resultados de validator, navegador e checklist de cada 
 
 ---
 
+### Task 4 (B3) — 2026-09-22
+
+**Desvio no Step 4 (checagens do executor):** `node jobs/checks/b1-unit.js` deu `FAIL` em 12 linhas (3 por fixture × 4) da seção de não-regressão. Não era regressão: o script carregava a referência de `git show HEAD:lib/timeline.js`, desenho que só valia enquanto o `HEAD` antecedia o B1. Com o B1 na `main`, o lado de referência passou a ligar o limitador por padrão, e comparar contra ele o working tree com `limiter: false` não pode dar PASS. O Orquestrador fixou a base em `ba928a7` (commit anterior ao merge do B1), restaurando a intenção do teste; `lib/timeline.js` ficou intocado. No mesmo passo, âncoras de texto vencidas foram atualizadas em `jobs/checks/b0-static.js` (o slider linear virou o de dB no B2) e em `jobs/checks/b2-static.js` (o B3 trocou o corpo do `audibleNow`, pôs M/S na SFX e levou os `tctlHtml` de 17 a 19). Nenhuma asserção foi afrouxada. Suíte depois: `PASS: B0 estático`, `PASS: B1 unidade`, `PASS: B2 estático`, `PASS: B3 estático`. Lição para as próximas tasks: checagem que compara contra `HEAD` vence no primeiro merge — fixar o commit-base desde o início.
+
+**Validator (Step 6):** APROVADO, sem achados, com as quatro checagens rodadas em contexto limpo. Diff = as 19 + 4 trocas do plano (16 hunks), sem nada a mais; `public/index.html` +86/−22, `public/dev/ui-probe.js` +58/−1, e no plano só `## Status` (+98, um hunk aditivo no fim). `lib/timeline.js`, `server.js` e o bundle não aparecem no `git status`. Conferido por leitura direta: a regra de `audible()` com o mesmo texto em `public/index.html` e `lib/timeline.js`; `MIX` em `timelineState()` e `saveBeats()` e fora de `snapshot()`/`applyHistEntry()`; o solo exclusivo por construção (`solo` é escalar, o clique substitui o valor inteiro); `measuresMsg()` campo a campo contra as quatro tabelas do B3/R3 da spec, com o estilo de erro só no `stage()` por `r.tpWarn === 'over'`; o H inalterado em MARKERS, B-ROLL e LEGENDA, com o title de sempre; `trilhaMuted`/`trilhaSolo`/`hiddenTracks.music` sem nenhuma ocorrência restante.
+
+**Rota Player (Step 7):** condições de medição (janela visível, 1264×619, `?probe`, fixture carregada, sidecar v3 restaurado).
+- `await uiProbe.run('B3')` → `ok: true`, `falhas: []`, 20 checks, com `audio-controls`, `solo-exclusive` e `silent-lanes` entre eles.
+- Rótulos e títulos: `Silenciar track ÁUDIO` / `Solo da track ÁUDIO` (e o mesmo para TRILHA e SFX); `mudo — vale no export` e `solo — só esta track soa, também no export`.
+- Solo na SFX: `audible: { audio: false, music: false, sfx: true }`, `silent: ["audio","music"]`.
+- Ctrl+Z: `depoisDoUndo: { mudoTrilha: "true", sfx: 0 }`, `depoisDoRedo: { mudoTrilha: "false", sfx: 1 }` — o histórico desfaz a edição e não a chave de mixagem.
+- CONFORMAR com o solo ligado: "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 1 SFX · 100 palavras · fora do export: ÁUDIO (solo: SFX) · pico real −18,0 dBTP · −19,4 LUFS: abaixo do alvo −14 a −16 · LRA 4,3 LU", exatamente o valor previsto. Medição do arquivo (passa-banda de 1 kHz): `5:6` → `-inf` (a voz do plate ficou fora, como no preview), `2.1:2.7` → −21,1 dB (o efeito).
+- Persistência: `await T.sidecar()` → `{ version: 4, sfx: 1, music: 0, mix: { mute: [], solo: "sfx" } }`; depois de recarregar e carregar de novo, `aria-pressed` do S da SFX em `"true"`, os outros dois em `"false"`, e `.silent` em `audio` e `music`.
+- Limitador na mensagem: dois `loud.wav` (−0,1 dBFS) empilhados na TRILHA sobre a voz → "… · pico real −1,9 dBTP · −14,9 LUFS · LRA 20,8 LU: dinâmica alta para celular (ideal ≤ 9) · limitador −8,4 dB — mix alto: abaixe TRILHA/SFX", com `mixPeakDb: 6.4`, `limiter: { ceilingDb: -2, cutDb: 8.4 }`, `tpWarn: null` e `estilo: "run"` — o teto de −2 segurou o pico real em −1,9 depois do AAC do conform, e a mensagem não ficou vermelha. Conformados apagados e sidecar da fixture restaurado nas duas vezes.
+
+**Rota canvas (Step 8):** bloqueio de `/vendor/studio-player.js` ligado pelo usuário; conferido `rota: "canvas"` (`window.StudioPlayer` indefinido). `await uiProbe.run('B3')` → `ok: true`, `falhas: []`, 20 checks. Cama dividida em duas na TRILHA, dois efeitos idênticos empilhados na SFX, solo na SFX → `silent: ["audio","music"]`; tocando: `00:00.2 trilha[pp] sfx[pp] plateMudo=true` · `00:00.4 trilha[pp] sfx[▶▶] plateMudo=true` · `00:01.2 trilha[pp] sfx[pp] plateMudo=true` — a TRILHA calada o tempo todo, os dois efeitos tocando na janela e o plate mudo, sem depender da rota. Desligando o solo: `plateMudo: false` e `silent: []`. Sidecar da fixture restaurado.
+
+**Checklist manual (Step 9):** informado pelo usuário — tudo OK: itens 1–12 do A com o item 8 já na forma nova (M/S nas tracks de áudio refletem no preview; H em MARKERS, B-ROLL e LEGENDA reflete no preview), mais M calando a track e esmaecendo a lane sem travá-la, S deixando só uma track soar e trocando de track num clique, mudo vencendo solo, o CONFORMAR com solo mostrando "fora do export: …" e o arquivo soando como o preview, a mensagem trazendo pico real, LUFS e LRA, e, com dois clipes altos sobrepostos, "limitador −… dB — mix alto: abaixe TRILHA/SFX" com o pico real entre −2 e −1 dBTP, sem estilo de erro — incluindo a escuta do arquivo contra o preview no trecho alto.
+
+---
+
 ## Status
 
 Seção do executor. Vazia até a primeira execução.
@@ -4952,3 +4973,101 @@ remotion/src/scenes/TimelinePreview.tsx |  38 ++++----
 Hunks por arquivo (`git diff -- <arquivo> | grep -c '^@@'`): `public/index.html` 33 (as 35 trocas do Step 2, com algumas adjacentes caindo no mesmo hunk pelo contexto padrão do diff, como nas Tasks 1 e 2); `remotion/src/scenes/TimelinePreview.tsx` 4; `remotion/src/player-entry.tsx` 1; `public/dev/ui-probe.js` 9; `public/vendor/studio-player.js` 5 (bundle minificado — hunks não correspondem 1:1 às trocas de fonte).
 
 Nenhum desvio do plano. `git status --short` mostra só `M public/dev/ui-probe.js`, `M public/index.html`, `M public/vendor/studio-player.js`, `M remotion/src/player-entry.tsx`, `M remotion/src/scenes/TimelinePreview.tsx` — nenhum outro arquivo rastreado tocado; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `56d2a04`. Parando no Step 8 conforme instruído; Steps 9–11 (validator, bundle reproduzível, verificação no navegador nas duas rotas) e os Steps de usuário/git-workflow ficam para o Orquestrador.
+
+### Task 4 (B3) — 2026-09-22 (Executor, Steps 1–5)
+
+Executado sobre a `main` local em `eb7ea2b` (sincronizada com `origin/main`; Tasks 1/B0, 2/B1 e 3/B2 já mergeadas). Steps 1–4 concluídos; Step 5 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b3-static.js` salvo (cópia literal do plano, via ferramenta de escrita de arquivos, sem heredoc) e rodado antes das trocas:**
+
+```
+FAIL
+index.html — regra audible() ausente ou duplicada
+index.html — não deveria existir: trilhaMuted
+index.html — não deveria existir: trilhaSolo
+index.html — não deveria existir: hiddenTracks.music
+index.html — não deveria existir: tctlHtml('hide', 'ÁUDIO')
+index.html — não deveria existir: tctlHtml('hide', 'TRILHA')
+index.html — não deveria existir: Silenciar trilha
+index.html — não deveria existir: Ativar solo da trilha
+index.html — não deveria existir: não altera o export', icons: ['i-spk
+index.html — ausente: .bt-track-row.silent .bt-track-content{opacity:.45}
+index.html — ausente: const AUDIO_TRACKS = ['audio', 'music', 'sfx'];
+index.html — ausente: let MIX = { mute: [], solo: null };
+index.html — ausente: function normalizeMix(mix) {
+index.html — ausente: function audible(track) {
+index.html — ausente: return { audio: audible('audio'), music: audible('music'), sfx: audible('sfx') };
+index.html — ausente: return JSON.stringify({ beats: BEATS, broll: BROLL, music: MUSIC, sfx: SFX, video: VIDEO, mix: MIX });
+index.html — ausente:         mix: MIX,
+      });
+index.html — ausente: MIX = normalizeMix(saved.mix);
+index.html — ausente: MIX = normalizeMix(saved && saved.mix);
+index.html — ausente: hiddenTracks = {}; lockedTracks = {}; MIX = { mute: [], solo: null };
+index.html — ausente: mute: { label: 'Silenciar track', title: 'mudo — vale no export', icons: ['i-spk', 'i-spk-off'] },
+index.html — ausente: solo: { label: 'Solo da track', title: 'solo — só esta track soa, também no export', icons: ['i-solo', 'i-solo'] },
+index.html — ausente: ${tctlHtml('mute', 'ÁUDIO')}${tctlHtml('solo', 'ÁUDIO')}${tctlHtml('lock', 'ÁUDIO')}</div>
+index.html — ausente: ${tctlHtml('add', 'TRILHA')}${tctlHtml('mute', 'TRILHA')}${tctlHtml('solo', 'TRILHA')}${tctlHtml('lock', 'TRILHA')}</div>
+index.html — ausente: ${tctlHtml('add', 'SFX')}${tctlHtml('mute', 'SFX')}${tctlHtml('solo', 'SFX')}${tctlHtml('lock', 'SFX')}</div>
+index.html — ausente: row.classList.toggle('silent', AUDIO_TRACKS.includes(track) && !audible(track));
+index.html — ausente: else if (act === 'mute') on = MIX.mute.includes(track);
+index.html — ausente: else if (act === 'solo') on = MIX.solo === track;
+index.html — ausente: if (act === 'solo') MIX = { mute: MIX.mute, solo: MIX.solo === track ? null : track };
+index.html — ausente: · ${r.sfx} SFX
+index.html — ausente: fora do export: ${fora} (${why})
+index.html — ausente: ${measuresMsg(r)}${skipped}
+index.html — ausente: r.tpWarn === 'over');
+index.html — ausente:   function measuresMsg(r) {
+measuresMsg(r) deveria aparecer 2× (definição e doConform)
+measuresMsg não achada
+esperadas 19 chamadas ${tctlHtml(…)}, achadas 17
+mix: MIX deveria aparecer 2× (timelineState e saveBeats)
+ui-probe.js — ausente: 'bt-seek', 'silent']);
+ui-probe.js — ausente: const TRACK_ACTS_B3 = {
+ui-probe.js — ausente: function soloExclusive() {
+ui-probe.js — ausente: function silentLanes() {
+ui-probe.js — ausente: add('audio-controls',
+ui-probe.js — ausente: add('solo-exclusive',
+ui-probe.js — ausente: add('silent-lanes',
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano: `regra audible() ausente ou duplicada`; as `não deveria existir:` de `trilhaMuted`, `trilhaSolo`, `hiddenTracks.music`, dos H de ÁUDIO/TRILHA e dos textos antigos de M/S; as linhas `ausente:`; `esperadas 19 chamadas ${tctlHtml(…)}, achadas 17`; `mix: MIX deveria aparecer 2×`; `measuresMsg(r) deveria aparecer 2× (definição e doConform)`; `measuresMsg não achada`; e as linhas `ausente:` do probe. A regra em `lib/timeline.js` não aparece na lista de falhas — já estava correta desde a Task 2.
+
+**Steps 2–3 — as trocas aplicadas**, na ordem do plano: `public/index.html` (19 trocas: CSS `.bt-track-row.silent`; estado `AUDIO_TRACKS`/`MIX`/`normalizeMix`/`audible`; `audibleNow()` pelo `MIX`; `timelineState()` com `mix: MIX`; `saveBeats()` envia `mix`; `measuresMsg()` nova, antes do comentário do CONFORMAR; `doConform()` — SFX, o que ficou de fora e as medidas; `applySavedBeats()` lê `mix`; comentário do TCTL; textos de M/S do TCTL; `buildDom()` — ÁUDIO com M S L, TRILHA sem H, SFX com M S; `applyTrackVisibility()` — classe `.silent` e estado de M/S; `wireTracks()` — clique em M/S; `loadVideo()` — zera `MIX` e lê `mix` do sidecar); `public/dev/ui-probe.js` (4 trocas: `STATE_CLASSES` com `'silent'`; `TRACK_ACTS_B3`/`AUDIO_TRACKS`; `trackActs()`/`soloExclusive()`/`silentLanes()`; checks `audio-controls`/`solo-exclusive`/`silent-lanes` no bloco `at('B3')`).
+
+**Step 4 — checagens depois das trocas:**
+
+```
+$ node jobs/checks/b3-static.js
+PASS: B3 estático
+```
+
+```
+$ node jobs/checks/b1-unit.js
+FAIL
+só VÍDEO: grafo (limiter: false) difere do HEAD
+só VÍDEO: args (limiter: false) diferem do HEAD
+só VÍDEO: cadeia do master ausente ou diferente
+com TRILHA: grafo (limiter: false) difere do HEAD
+com TRILHA: args (limiter: false) diferem do HEAD
+com TRILHA: cadeia do master ausente ou diferente
+B-ROLL + TRILHA: grafo (limiter: false) difere do HEAD
+B-ROLL + TRILHA: args (limiter: false) diferem do HEAD
+B-ROLL + TRILHA: cadeia do master ausente ou diferente
+plate sem áudio: grafo (limiter: false) difere do HEAD
+plate sem áudio: args (limiter: false) diferem do HEAD
+plate sem áudio: cadeia do master ausente ou diferente
+```
+
+(`exitCode 1`) — **desvio do esperado no plano** (`PASS: B1 unidade`). Diagnóstico: `lib/timeline.js` não foi tocado por esta task — confirmado idêntico a `git show HEAD:lib/timeline.js` (diff zero depois de normalizar CRLF/LF) e `git status --short` não lista `lib/timeline.js`. A causa é estrutural ao script, não uma regressão desta task: a seção 1 de `b1-unit.js` (`não-regressão`) compara `T.buildConformGraph({ ...fx, limiter: false })` contra `H.buildConformGraph(fx)`, onde `H` é carregado de `git show HEAD:lib/timeline.js`. Esse desenho fazia sentido só enquanto `HEAD` ainda era o commit **anterior** à Task 2/B1 (quando `buildConformGraph` não tinha o parâmetro `limiter` — qualquer chamada, com ou sem a chave, saía sem a cadeia do master). Agora `HEAD` é `eb7ea2b` (Task 2/B1 já mergeada), então `H` já é o código novo, cujo `buildConformGraph` tem `limiter = true` por padrão (`lib/timeline.js:139`); `H.buildConformGraph(fx)` sem a chave `limiter` usa esse padrão e inclui a cadeia do master (`alabel: '[amaster]'`), enquanto `T.buildConformGraph({ ...fx, limiter: false })` explicitamente a desliga (`alabel: '[aout]'`) — confirmado por inspeção direta dos dois grafos. As 12 linhas de falha (3 por fixture × 4 fixtures) são exatamente essa divergência de sempre-vai-falhar-com-HEAD-pós-merge; nenhuma outra seção do script (SFX no grafo, mono, `normalizeMix`/`audible` exportadas, `tpWarnOf`/`lraWarnOf`, `MASTER_CEIL_DB`, `parseLoudness`/`loudWarnOf`, `parseMixPeak`) falhou. Não toquei em `lib/timeline.js` nem em `jobs/checks/b1-unit.js` para "consertar" isso — nenhum dos dois está no escopo de arquivos desta task, e a instrução do Orquestrador veda tocar `lib/timeline.js`. Ficou para o Orquestrador decidir (script precisa ser regenerado/parametrizado por uma task futura, ou a expectativa do Step 4 fica documentada como obsoleta a partir daqui).
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/b3-static.js` não aparece — `jobs/` é ignorado pelo git):**
+
+```
+public/dev/ui-probe.js |  58 +++++++++++++++++++++++++++++++++-
+public/index.html      |  86 ++++++++++++++++++++++++++++++++++++++------------
+2 files changed, 122 insertions(+), 22 deletions(-)
+```
+
+16 hunks (`git diff | grep -c '^@@'`) nos 2 arquivos, para as 19 + 4 = 23 trocas do plano (trocas adjacentes caem no mesmo hunk pelo contexto padrão do diff, como nas Tasks anteriores). Confirmado que nenhuma edição alterou terminador de linha: `public/index.html` e `public/dev/ui-probe.js` seguem 100% CRLF (0 linhas só-LF) depois das trocas.
+
+**Desvio do plano:** só o Step 4, na checagem `node jobs/checks/b1-unit.js` — `FAIL` em vez de `PASS: B1 unidade`, pela razão estrutural explicada acima (script comparando contra um `HEAD` que já avançou além da baseline que o script assume; não é causado pelas trocas desta task, que não tocam `lib/timeline.js`). `node jobs/checks/b3-static.js` passou exatamente como esperado. Nenhum outro arquivo rastreado tocado além de `public/index.html` e `public/dev/ui-probe.js`; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `eb7ea2b`. Parando no Step 5 conforme instruído; Steps 6–7 (validator, rota Player) e os steps de usuário/git-workflow ficam para o Orquestrador — que deve avaliar o desvio do `b1-unit.js` antes de prosseguir.
