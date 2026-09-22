@@ -3547,7 +3547,7 @@ por:
 
 - [ ] **Step 6 [Executor]: Atualizar `## Status`** com as saídas dos Steps 1 e 5. Parar aqui.
 
-- [ ] **Step 7 [Orquestrador]: `validator`** — "validar a Task 5 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b4-unit.js` e `node jobs/checks/b4-e2e.js`; conferir que o diff de `lib/assemble.js` contra `HEAD` só toca o áudio (o `vf`, os argumentos de vídeo, a transcrição e o `.ass` ficam iguais); que toda falha da normalização termina numa montagem sem normalizar, nunca num ASSEMBLE que falha; e que o alvo é o da spec (−16 LUFS, true peak −1,5, LRA 11)".
+- [ ] **Step 7 [Orquestrador]: `validator`** — "validar a Task 5 de `docs/plans/mixagem-audio.md`; rodar `node jobs/checks/b4-unit.js` e `node jobs/checks/b4-e2e.js`; conferir que o diff de `lib/assemble.js` contra `HEAD` só toca o áudio (o `vf`, os argumentos de vídeo, a transcrição e o `.ass` ficam iguais); que toda falha da normalização termina numa montagem sem normalizar, nunca num ASSEMBLE que falha; e que o alvo é o da spec R3 (−16 LUFS, true peak −2,0, LRA 9 — o mesmo teto do limitador do master, para a voz sozinha nunca o acionar)".
 
 - [ ] **Step 8 [Orquestrador]: ASSEMBLE pela interface** — condições de medição, auxiliares colados (o `uiProbe.load` põe a fixture na lista de vídeos). Um ASSEMBLE sem legendas (sem Whisper), com o `bed.wav` da Task 0 como narração:
 
@@ -4734,6 +4734,20 @@ Seção do Orquestrador: resultados de validator, navegador e checklist de cada 
 
 ---
 
+### Task 5 (B4) — 2026-09-22
+
+**Correção no plano, antes de despachar:** o Step 7 ainda pedia ao validador conferir o alvo "−16 LUFS, true peak −1,5, LRA 11" — o valor da R2. A R3 mudou para true peak −2,0 e LRA 9 (spec, "Alvo", decisões 19 e 22), justamente para casar com o teto do limitador do master, de modo que a voz sozinha nunca o acione. O resto da task já usava `VOICE_TARGET = 'I=-16:TP=-2:LRA=9'`; só a instrução ao validador tinha ficado para trás na reescrita da R3.
+
+**Validator (Step 7):** APROVADO, sem achados. `node jobs/checks/b4-unit.js` → `PASS: B4 unidade`; `node jobs/checks/b4-e2e.js` → `PASS: B4 ponta a ponta` (E1–E6 mais as duas chamadas pela rota do servidor). Diff = as 5 + 1 + 1 trocas do plano, literais; fora delas, só o plano (o `## Status` do executor e a linha do Step 7 acima). Conferido que a cadeia de vídeo não mudou — `vf.join(',')`, os argumentos do libx264, as tags BT.709 e o `-ar 44100 -ac 2` (que desfaz o reamostramento interno de 192 kHz do loudnorm) apenas passaram a viver dentro de `muxArgs()`, e a única diferença real no comando de ffmpeg é o `-af` opcional; nenhum hunk toca a transcrição nem o `.ass`. Conferido também que todo caminho de falha termina num arquivo montado: `measureVoice()` engole a exceção e devolve `null`, `parseLoudnormJson()` devolve `null` em vez de lançar com JSON quebrado, silêncio/`normalizeVoice: false`/ausência de fonte são checados antes de medir, e a falha do mux com `-af` zera `af` e remonta sem filtro — como `voice.normalized` só é marcado dentro do `if (af)` avaliado depois do try/catch, o retry não deixa a voz marcada como normalizada nem repete o filtro.
+
+**Nota de cobertura (do validador, não é achado):** o caminho `'loudnorm falhou na montagem'` está confirmado por leitura de código, não por um caso do e2e que force esse ffmpeg a falhar. É o escopo que o próprio plano definiu para `b4-e2e.js`.
+
+**ASSEMBLE pela interface (Step 8):** servidor da 4870 reiniciado antes do teste (o processo antigo tinha o `lib/assemble.js` anterior em memória); `VOICE_TARGET` conferido em `I=-16:TP=-2:LRA=9` pelo módulo carregado. Montagem sem legendas, com a fixture como visual e o `bed.wav` da Task 0 como narração: o chip saiu "voz normalizada: −21,8 → −15,9 LUFS (com limitação de pico)", exatamente o valor previsto, com `stage: "done"`. Medição do arquivo montado: `I: -15.9 LUFS` (dentro de −16,5 a −15,5) e true peak `Peak: -14.9 dBFS` (bem abaixo do teto de −2 — a cama é um tom, de fator de crista baixo, então o pico fica perto do próprio nível integrado). Arquivo apagado; a fixture não foi tocada.
+
+**Ouvir (Step 9):** informado pelo usuário — tudo OK, "a voz ficou melhor". Sem distorção audível na comparação com um vídeo montado antes desta etapa.
+
+---
+
 ## Status
 
 Seção do executor. Vazia até a primeira execução.
@@ -5071,3 +5085,93 @@ public/index.html      |  86 ++++++++++++++++++++++++++++++++++++++------------
 16 hunks (`git diff | grep -c '^@@'`) nos 2 arquivos, para as 19 + 4 = 23 trocas do plano (trocas adjacentes caem no mesmo hunk pelo contexto padrão do diff, como nas Tasks anteriores). Confirmado que nenhuma edição alterou terminador de linha: `public/index.html` e `public/dev/ui-probe.js` seguem 100% CRLF (0 linhas só-LF) depois das trocas.
 
 **Desvio do plano:** só o Step 4, na checagem `node jobs/checks/b1-unit.js` — `FAIL` em vez de `PASS: B1 unidade`, pela razão estrutural explicada acima (script comparando contra um `HEAD` que já avançou além da baseline que o script assume; não é causado pelas trocas desta task, que não tocam `lib/timeline.js`). `node jobs/checks/b3-static.js` passou exatamente como esperado. Nenhum outro arquivo rastreado tocado além de `public/index.html` e `public/dev/ui-probe.js`; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `eb7ea2b`. Parando no Step 5 conforme instruído; Steps 6–7 (validator, rota Player) e os steps de usuário/git-workflow ficam para o Orquestrador — que deve avaliar o desvio do `b1-unit.js` antes de prosseguir.
+
+### Task 5 (B4) — 2026-09-22 (Executor, Steps 1–6)
+
+Executado sobre a `main` local em `ff0ed93` (sincronizada com `origin/main`; Tasks 1/B0, 2/B1, 3/B2 e 4/B3 já mergeadas). Steps 1–5 concluídos; Step 6 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b4-unit.js` e `jobs/checks/b4-e2e.js` salvos (cópia literal do plano, via ferramenta de escrita de arquivos, sem heredoc) e rodados antes das trocas:**
+
+`node jobs/checks/b4-unit.js` →
+
+```
+FAIL
+parseLoudnormJson não exportada
+lib/assemble.js — ausente: const VOICE_TARGET = 'I=-16:TP=-2:LRA=9';
+lib/assemble.js — ausente: function parseLoudnormJson(stderr) {
+lib/assemble.js — ausente: async function measureVoice(src) {
+lib/assemble.js — ausente: burnCaptions = false, normalizeVoice = true,
+lib/assemble.js — ausente: const voiceSrc = voiceover || (vInfo.acodec ? visual : null);
+lib/assemble.js — ausente: ':linear=true:print_format=json'
+lib/assemble.js — ausente: if (audioFilter) args.push('-af', audioFilter);
+lib/assemble.js — ausente: voice.reason = 'loudnorm falhou na montagem';
+lib/assemble.js — ausente: await runFfmpeg(muxArgs(null), { onLog });
+lib/assemble.js — ausente:     voice,
+  };
+lib/assemble.js — ausente: module.exports = { assemble, parseLoudnormJson, VOICE_TARGET };
+server.js — ausente: normalizeVoice: b.normalizeVoice !== false,
+index.html — ausente: const voiceChip = v.normalized
+index.html — ausente: ' (com limitação de pico)'
+index.html — ausente: voz sem normalizar — ${v.reason}
+index.html — ausente: (r.ass ? `<span class="chip ok">.ass pronto — queima no Export</span>` : '') + voiceChip +
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano: `parseLoudnormJson não exportada`, onze linhas `lib/assemble.js — ausente:`, a linha `server.js — ausente: normalizeVoice: b.normalizeVoice !== false,` e quatro linhas `index.html — ausente:`.
+
+`node jobs/checks/b4-e2e.js` (~15s) →
+
+```
+FAIL
+E1: LUFS de saída -34.4, esperado -16 ± 0,5
+E1: voice undefined
+E1: lufsIn undefined ≠ entrada -34.4
+E1: lufsOut undefined
+E2: voice undefined
+E3: voice undefined
+E4: LUFS de saída -34.4, esperado -16 ± 0,5
+E4: voice undefined
+E5: voice undefined
+E6: LUFS de saída -25.4, esperado -16 ± 0,5
+E6: voice undefined
+rota: deveria normalizar por padrão undefined
+rota: normalizeVoice false undefined
+(arquivos mantidos em jobs/b4-check/)
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano: `E1: LUFS de saída -34.4…`, `E4: LUFS de saída -34.4…`, `E6: LUFS de saída -25.4…`, as linhas `voice undefined` de E1 a E6, as duas linhas `rota:` e `(arquivos mantidos em jobs/b4-check/)`.
+
+Limpeza pós-Step-1 conforme pedido: `jobs/b4-check/` apagado (`rm -rf`).
+
+**Step 2 — as 5 trocas aplicadas em `lib/assemble.js`**, na ordem do plano: cabeçalho (comentário sobre a voz normalizada, alvo -16 LUFS / -2 dBTP, teto do limitador do master); bloco novo depois de `MEZZANINE_CRF` (`VOICE_TARGET`, `parseLoudnormJson()`, `measureVoice()`); assinatura de `assemble()` com `normalizeVoice = true`; bloco de montagem reescrito (medição da voz antes do mux, `muxArgs()` fatorada com `audioFilter` opcional, retry sem normalização se o loudnorm falhar na montagem, `voice` no retorno); `module.exports` com `parseLoudnormJson` e `VOICE_TARGET`.
+
+**Step 3 — a troca aplicada em `server.js`** (`normalizeVoice: b.normalizeVoice !== false,` acrescentada logo após `burnCaptions: b.burnCaptions === true,` em `POST /api/assemble`).
+
+**Step 4 — a troca aplicada em `public/index.html`** (bloco `voiceChip` novo antes do `$('#asm-out').innerHTML = …`, com o helper `lu()` de formatação pt-BR e a mensagem de fim do ASSEMBLE concatenando `voiceChip`).
+
+**Step 5 — checagens depois das trocas:**
+
+```
+$ node --check server.js
+server.js OK
+
+$ node jobs/checks/b4-unit.js
+PASS: B4 unidade
+
+$ node jobs/checks/b4-e2e.js
+PASS: B4 ponta a ponta
+```
+
+Porta 4879 confirmada livre antes e depois do e2e; porta 4870 (servidor do Orquestrador) seguiu `LISTENING`, não tocada. `jobs/b4-check/` se autolimpou (script removeu ao passar).
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/*.js` não aparece — `jobs/` é ignorado pelo git):**
+
+```
+lib/assemble.js   | 103 ++++++++++++++++++++++++++++++++++++++++++++++--------
+public/index.html |   8 ++++-
+server.js         |   1 +
+3 files changed, 96 insertions(+), 16 deletions(-)
+```
+
+5 hunks (`git diff -- <arquivo> | grep -c '^@@'`): `lib/assemble.js` 3 (as trocas 1+2 adjacentes caíram no mesmo hunk pelo contexto padrão do diff; a troca 3 (assinatura) caiu junto da 4 (montagem, por proximidade); a troca 5 (`module.exports`) ficou isolada — 5 trocas em 3 hunks); `server.js` 1; `public/index.html` 1. Confirmado que nenhuma edição alterou terminador de linha: `lib/assemble.js` já era 100% LF (não CRLF) tanto no `HEAD` quanto depois das trocas; `server.js` e `public/index.html` seguem 100% LF também, sem mudança em relação ao `HEAD` — nenhum dos três arquivos desta task usa CRLF no repo (diferente de `public/dev/ui-probe.js`/parte de `public/index.html` citados em tasks anteriores, que são CRLF; aqui o `git diff` só emite o aviso padrão do `core.autocrlf=true` do Git para Windows, sem efeito no conteúdo do working tree).
+
+Nenhum desvio do plano. `git status --short` mostra `M lib/assemble.js`, `M public/index.html`, `M server.js` (além de `M docs/plans/mixagem-audio.md`, deste Step 6) — nenhum outro arquivo rastreado tocado; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `ff0ed93`. Parando no Step 6 conforme instruído; Steps 7–10 (validator, ASSEMBLE pela interface, ouvir o usuário, git-workflow) ficam para o Orquestrador.

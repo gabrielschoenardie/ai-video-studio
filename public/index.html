@@ -1156,8 +1156,14 @@ window.doAssemble = async () => {
     // existir isto acontecia porque renderAssets() resetava os selects.
     $('#exp-input').value = r.output;                       // 03 -> 05
     if (window.btTimeline) window.btTimeline.adopt(r.output); // 03 -> 04, so se 04 estiver vazio
+    // a voz sai no nível-alvo (-16 LUFS); o chip mostra de onde veio, ou por que não
+    const v = r.voice || {};
+    const lu = x => (x == null ? '?' : (x < 0 ? '−' : '') + Math.abs(x).toFixed(1).replace('.', ','));
+    const voiceChip = v.normalized
+      ? `<span class="chip ok">voz normalizada: ${lu(v.lufsIn)} → ${lu(v.lufsOut)} LUFS${v.mode === 'dynamic' ? ' (com limitação de pico)' : ''}</span>`
+      : (v.reason ? `<span class="chip no">voz sem normalizar — ${v.reason}</span>` : '');
     $('#asm-out').innerHTML = `<span class="chip ok">${r.captionedWords} words captioned</span>` +
-      (r.ass ? `<span class="chip ok">.ass pronto — queima no Export</span>` : '') +
+      (r.ass ? `<span class="chip ok">.ass pronto — queima no Export</span>` : '') + voiceChip +
       `<video controls src="/files/${encodeURIComponent(r.output)}"></video>`;
   } catch (e) { stage(e.message, true); }
 };
