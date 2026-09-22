@@ -3829,6 +3829,8 @@ por:
     if (!built || !m || !cv) return;           // desmontado: o próximo startMeter() religa
     meterRaf = requestAnimationFrame(meterTick);
     const step = $('#step-beats');
+    // fora da TIMELINE, nada é lido nem desenhado; o laço segue agendado porque goStep()
+    // está fora do IIFE da TIMELINE e não teria como religá-lo (o compositeTick faz igual)
     if (!step || !step.classList.contains('on')) { meterDisp.last = 0; return; }
     const dt = meterDisp.last ? Math.min(0.1, (now - meterDisp.last) / 1000) : 0;
     meterDisp.last = now;
@@ -3877,7 +3879,8 @@ por:
         if (hi <= from) return;
         ctx.fillStyle = color; ctx.fillRect(x, y(hi), 8, y(from) - y(hi));
       };
-      seg(METER_FLOOR, -6, C.green); seg(-6, -1, C.yellow); seg(-1, 0, C.red);
+      // os mesmos limiares de meterZone: o vermelho começa no teto do limitador do master
+      seg(METER_FLOOR, -6, C.green); seg(-6, -2, C.yellow); seg(-2, 0, C.red);
       const hd = meterDisp['h' + ch];
       if (hd > METER_FLOOR) { ctx.fillStyle = C[meterZone(hd)]; ctx.fillRect(x, y(hd) - 1, 8, 2); }
     });
@@ -4748,6 +4751,27 @@ Seção do Orquestrador: resultados de validator, navegador e checklist de cada 
 
 ---
 
+### Task 6 (B5) — 2026-09-22
+
+**Validator (Step 6):** APROVADO com um achado real, mais uma observação. `node jobs/checks/b5-static.js` → `PASS: B5 estático`, e as outras quatro checagens passando. As 18 + 5 trocas conferidas uma a uma contra o texto do plano, todas literais; `scheduleMaster()` em 7 pontos; sem `AnalyserNode` nem `createMediaElementSource`; `renderMaster` seguindo as regras do conform (um trecho do `plateBuf` por segmento da VÍDEO quando `aud.audio`, um `AudioBufferSourceNode → GainNode(c.volume)` por clipe de track audível, soma direta sem normalização); e o wrapper `.bt-mixrow` como única mudança estrutural de layout.
+
+**Achado 1 (corrigido) — origem no plano, não na execução:** o `drawMeter()` pintava a faixa amarela até **−1 dBFS** (`seg(-6, -1, C.yellow); seg(-1, 0, C.red)`), resíduo da R2, quando o teto era −1; o `meterZone()`, que colore o número de pico e a marca de peak-hold, usa **−2**, o valor da R3 e da spec. A barra e a marca discordariam de cor no mesmo nível, e a barra ficaria otimista em até 1 dB exatamente na faixa que o medidor existe para avisar. O executor aplicou o texto do plano ao pé da letra — o erro era meu, do plano. Corrigido no código e no plano, e o `b5-static.js` foi reforçado: ele só exercitava `meterZone()` isolada, e agora também amarra as faixas do desenho aos mesmos limiares.
+
+**Achado 2 (revertido, spec corrigida):** o validador notou que o laço de `requestAnimationFrame` segue agendado com a TIMELINE invisível, contra a cláusula "montada e visível" da spec. Tentei fazê-lo parar fora da TIMELINE e religar pelo `goStep()` — e quebrei o carregamento (`ReferenceError: startMeter is not defined`): `goStep()` está na linha 841, fora do IIFE da TIMELINE (1296–3952), e não enxerga `startMeter`. O teste de navegador pegou na primeira execução. Revertido; a **spec** passou a descrever o que o código faz e por quê — fora da TIMELINE o laço não lê nem desenha nada, mas segue agendado, que é o mesmo desenho do `compositeTick` preexistente.
+
+**Condição de medição nova, aprendida na marra:** teste de UI movida a `requestAnimationFrame` exige a **aba em primeiro plano**. Com a aba em segundo plano o Chrome pausa o `rAF`: o canvas fica em branco (300×150, o padrão do HTML, nunca redimensionado), `data-l`/`data-r` nunca aparecem e nada disso gera erro no console. Cheguei a diagnosticar "laço morto" e "o plano perdeu a troca que escreve `data-l`/`data-r`" — as duas conclusões erradas. Com a aba à frente, 4280 agendamentos em 30 s, canvas em 42×317 com 5248 pixels opacos, e o dataset completo.
+
+**Rota Player (Step 7):** `await uiProbe.run('B5')` → `ok: true`, `falhas: []`, 21 checks; `data: { state: "ok", peak: "-8.4", renderMs: "52" }` contra o pico de amostra da fixture medido por `ebur128=peak=sample`, −8,3 dBFS.
+- Scrub e slider, com a ÁUDIO muda e um whoosh em 2,0–2,8s: `soSilencio: ""`, `pkWhoosh: "-18.1"`, `dentro: { l: "-18.1", r: "-18.1" }`, `fora: { l: "-60.0", r: "-60.0" }`, `pkMenos10: "-28.1"`, `sliderTitle: "−10,0 dB"` — todos os valores previstos.
+- Balística tocando de verdade: `00:01.8 L=-60.0` → `00:02.0 L=-18.1` (ataque instantâneo) e depois ~2 dB a cada 100 ms até `00:04.9 L=-60.0`; `piorQueda_dB_s: 20.9` (limite 25).
+- O medidor prevendo o conform: medidor `-8.4` contra `mixPeakDb: -8.3` do conform, 0,1 dB de diferença; `limiter: { ceilingDb: -2, cutDb: 0 }`. Conformado apagado e sidecar da fixture restaurado.
+
+**Rota canvas (Step 8):** bloqueio de `/vendor/studio-player.js` ligado pelo usuário; `rota: "canvas"` confirmada. `await uiProbe.run('B5')` → `ok: true`, `falhas: []`, 21 checks; `pkInicial: "-8.4"`, `pkWhoosh: "-18.1"`, `scrubDentro: "-18.1"` — os mesmos números da rota Player: o medidor não depende da rota, porque não escuta o playback. Sidecar da fixture restaurado.
+
+**Checklist manual (Step 9):** informado pelo usuário — tudo OK: itens 1–12 do A com o item 8 na forma da Task 4, mais o medidor andando com o som e acompanhando o scrub, o slider de ganho mudando o pico, M e S mudando o medidor, o número virando vermelho a partir de −2 junto com a barra (a correção do achado 1), e a timeline e a rolagem como antes, só mais estreitas.
+
+---
+
 ## Status
 
 Seção do executor. Vazia até a primeira execução.
@@ -5175,3 +5199,101 @@ server.js         |   1 +
 5 hunks (`git diff -- <arquivo> | grep -c '^@@'`): `lib/assemble.js` 3 (as trocas 1+2 adjacentes caíram no mesmo hunk pelo contexto padrão do diff; a troca 3 (assinatura) caiu junto da 4 (montagem, por proximidade); a troca 5 (`module.exports`) ficou isolada — 5 trocas em 3 hunks); `server.js` 1; `public/index.html` 1. Confirmado que nenhuma edição alterou terminador de linha: `lib/assemble.js` já era 100% LF (não CRLF) tanto no `HEAD` quanto depois das trocas; `server.js` e `public/index.html` seguem 100% LF também, sem mudança em relação ao `HEAD` — nenhum dos três arquivos desta task usa CRLF no repo (diferente de `public/dev/ui-probe.js`/parte de `public/index.html` citados em tasks anteriores, que são CRLF; aqui o `git diff` só emite o aviso padrão do `core.autocrlf=true` do Git para Windows, sem efeito no conteúdo do working tree).
 
 Nenhum desvio do plano. `git status --short` mostra `M lib/assemble.js`, `M public/index.html`, `M server.js` (além de `M docs/plans/mixagem-audio.md`, deste Step 6) — nenhum outro arquivo rastreado tocado; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `ff0ed93`. Parando no Step 6 conforme instruído; Steps 7–10 (validator, ASSEMBLE pela interface, ouvir o usuário, git-workflow) ficam para o Orquestrador.
+
+### Task 6 (B5) — 2026-09-22 (Executor, Steps 1–5)
+
+Executado sobre a `main` local em `72ac0d0` (sincronizada com `origin/main`; Tasks 1/B0, 2/B1, 3/B2, 4/B3 e 5/B4 já mergeadas). Steps 1–4 concluídos; Step 5 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b5-static.js` salvo (cópia literal do plano, via ferramenta de escrita de arquivos, sem heredoc) e rodado antes das trocas:**
+
+```
+FAIL
+index.html — ausente: --meter-ok:#34d399;
+index.html — ausente: .bt-mixrow{display:flex; gap:6px; align-items:stretch}
+index.html — ausente: .bt-meter{flex:0 0 44px;
+index.html — ausente: .bt-meter canvas{flex:1 1 0; min-height:0; width:100%; display:block}
+index.html — ausente: <div class="bt-mixrow">
+      <div class="bt-scroll" id="bt-scroll">
+index.html — ausente: <div class="bt-meter" id="bt-meter" data-state="pending" role="img" aria-label="Medidor de pico do master"
+index.html — ausente: <canvas id="bt-meter-canvas"></canvas>
+index.html — ausente: <div class="bt-meter-peak" id="bt-meter-peak"
+index.html — ausente: title="pico do mix antes do limitador — acima de −2 o limitador do master corta no export; o CONFORMAR mede o mesmo"
+index.html — ausente: amarelo até −2, vermelho a partir de −2 (o limitador corta no export)">
+index.html — ausente: let plateBuf = null;
+index.html — ausente: let plateAudio = true;
+index.html — ausente: const audioBufCache = new Map();
+index.html — ausente: const METER_SR = 44100, METER_FPS = 60, METER_FLOOR = -60;
+index.html — ausente: const METER_RELEASE = 20, METER_HOLD_MS = 1200;
+index.html — ausente: async function renderMaster() {
+index.html — ausente: const ctx = new OAC(2, Math.max(1, Math.ceil(DURATION * METER_SR)), METER_SR);
+index.html — ausente: if (aud.audio && plateBuf) VIDEO.forEach((s, i) => {
+index.html — ausente: src.start(segStart(i), s.srcIn, s.dur);
+index.html — ausente: g.gain.value = Math.max(0, Math.min(1, c.volume));
+index.html — ausente: src.start(c.start, srcIn, dur);
+index.html — ausente: if (gen !== meterGen) return;
+index.html — ausente: function meterTick(now) {
+index.html — ausente: function drawMeter(cv) {
+index.html — ausente: plateBuf = audioBuf;
+index.html — ausente: audioBufCache.set(path, decoded);
+index.html — ausente: plateAudio = !!info.acodec;
+index.html — ausente: plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();
+index.html — ausente: if (![...MUSIC, ...SFX].some(c => c.path === path)) { audioBufCache.delete(path); miniWaveCache.delete(path); }
+index.html — ausente:     built = true;
+    startMeter();
+scheduleMaster() deveria aparecer 7×, achado 0
+ampDb/meterZone/fmtDb não achadas numa linha só
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5'];
+ui-probe.js — ausente: async function meter() {
+ui-probe.js — ausente: add('meter',
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano: as linhas `index.html — ausente:` (token `--meter-ok`, CSS do `.bt-mixrow`/`.bt-meter`, markup do medidor, estado `plateBuf`/`plateAudio`/`audioBufCache`, o motor `renderMaster`/`meterTick`/`drawMeter` e os ganchos de gravação/gancho de `startMeter()`), `scheduleMaster() deveria aparecer 7×, achado 0`, `ampDb/meterZone/fmtDb não achadas numa linha só` e as três linhas `ui-probe.js — ausente:`.
+
+**Step 2 — as 18 trocas aplicadas em `public/index.html`**, na ordem do plano: `:root` (token `--meter-ok`); CSS `.bt-mixrow`/`.bt-meter`/`.bt-meter-peak` logo depois de `.bt-scroll{…}`; bloco novo do medidor (constantes, `ampDb`/`meterZone`/`fmtDb`, `scheduleMaster`/`mixSignature`/`renderMaster`/`updateMeterPeak`/`startMeter`/`envDb`/`meterTick`/`drawMeter`) antes da seção de legenda; `loadWaveform()` — zera e guarda `plateBuf`, chama `scheduleMaster()`; `ensureMiniWave()` — guarda/zera buffer em `audioBufCache`, chama `scheduleMaster()`; `pruneMediaCache()` — buffers do medidor saem com o arquivo; `clearMediaCache()` — zera o medidor na troca de vídeo; `snapshot()` — chama `scheduleMaster()`; `renderTracks()` — chama `scheduleMaster()`; listener `input` do slider de ganho — chama `scheduleMaster()`; clique de M/S em `wireTracks()` — chama `scheduleMaster()`; markup do `buildDom()` — wrapper `.bt-mixrow` e o medidor à direita das tracks; `loadVideo()` — `plateAudio` a partir do probe e `startMeter()` depois de `built = true`.
+
+**Step 3 — as 5 trocas aplicadas em `public/dev/ui-probe.js`**, na ordem do plano: cabeçalho (`B2, B3, B5`); `ORDER` com `'B5'`; `meter()` nova, antes de `transportIds()`; check `meter` no bloco `at('B5')`, antes do bloco `at('B3')`; `console.info` com `"B5"`.
+
+Aplicação feita via script Node dedicado (leitura/escrita `utf8`, sem normalizar `\r\n`↔`\n`), não via ferramenta de edição de texto — cada âncora foi conferida com ocorrência única (`count === 1`) contra o conteúdo real do arquivo (CRLF) antes de qualquer substituição, e o script abortava sem escrever se alguma âncora não batesse exatamente uma vez. Confirmado antes das trocas que as 18 âncoras de `public/index.html` e as 5 de `public/dev/ui-probe.js` ocorriam exatamente 1× cada com terminador `\r\n`.
+
+**Step 4 — `node jobs/checks/b5-static.js` depois das trocas:**
+
+```
+PASS: B5 estático
+```
+
+**Checagens adicionais pedidas pelo Orquestrador** (âncoras textuais de tasks anteriores — não fazem parte do Step 4 do plano):
+
+```
+$ node jobs/checks/b0-static.js
+FAIL
+o input do slider de ganho não chama syncPlayer()
+```
+
+Desvio esperado, não uma regressão: `jobs/checks/b0-static.js:37-38` procura literalmente `"          inp.setAttribute('aria-valuetext', inp.title);\n          syncPlayer();\n        });"` — exatamente a âncora antiga da troca 13 desta task, que insere `scheduleMaster();` entre `syncPlayer();` e `});`. O texto que a checagem de B0 procura foi deliberadamente reescrito por esta task; não editei `jobs/checks/b0-static.js` (decisão de atualizar a âncora fica com o Orquestrador, conforme instruído).
+
+```
+$ node jobs/checks/b2-static.js
+FAIL
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3'];
+```
+
+Mesmo padrão: `jobs/checks/b2-static.js:94` procura o array `ORDER` sem `'B5'` — exatamente o que a troca 2 do Step 3 desta task substituiu por `[...'B3', 'B5']`. Não editei `jobs/checks/b2-static.js`.
+
+```
+$ node jobs/checks/b3-static.js
+PASS: B3 estático
+```
+
+Sem regressão em B3.
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/b5-static.js` não aparece — `jobs/` é ignorado pelo git):**
+
+```
+public/dev/ui-probe.js |  20 ++++-
+public/index.html      | 213 ++++++++++++++++++++++++++++++++++++++++++++++++-
+2 files changed, 228 insertions(+), 5 deletions(-)
+```
+
+18 hunks em `public/index.html` (`git diff -- public/index.html | grep -c '^@@'`), batendo 1:1 com as 18 trocas do Step 2 (nenhuma troca ficou adjacente o bastante para cair no mesmo hunk desta vez); 5 hunks em `public/dev/ui-probe.js`, batendo 1:1 com as 5 trocas do Step 3. Confirmado que nenhuma edição alterou terminador de linha: `public/index.html` (3951 CRLF, 0 linha só-LF) e `public/dev/ui-probe.js` (416 CRLF, 0 linha só-LF) seguem 100% CRLF depois das trocas.
+
+Nenhum desvio do plano nos Steps 1–4. `git status --short` mostra `M public/dev/ui-probe.js`, `M public/index.html` (além de `M docs/plans/mixagem-audio.md`, deste Step 5) — nenhum outro arquivo rastreado tocado; `lib/`, `server.js` e `public/vendor/studio-player.js` não foram tocados, como pedido; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `72ac0d0`. Porta 4870 (servidor do usuário) confirmada `LISTENING` antes e depois, não tocada. Parando no Step 5 conforme instruído; Steps 6–10 (validator, rota Player, rota canvas, checklist manual do usuário, git-workflow) ficam para o Orquestrador.

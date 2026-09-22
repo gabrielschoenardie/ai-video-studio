@@ -377,7 +377,7 @@ O limiar de 3 dB: acima disso, um limitador de pico costuma achatar os transient
 - **(R3) O que o medidor mede:** o mix **antes** do limitador, porque o preview também toca sem ele. O vermelho mostra onde o export vai soar diferente do preview. O motor não muda.
 - **Balística** (do documento): ataque instantâneo; queda de no máximo 20 dB/s, nunca abaixo do valor atual do envelope; peak hold por 1,2 s, depois cai à mesma taxa.
 - **Play e scrub.** O medidor lê o envelope no frame de `playhead`. Tocando, aplica a balística; parado ou no scrub, mostra o valor do frame direto, como no documento.
-- **Laço.** `requestAnimationFrame` só enquanto a TIMELINE está montada e visível, e só redesenha quando algo mudou.
+- **Laço.** `requestAnimationFrame` só enquanto a TIMELINE está montada, e só redesenha quando algo mudou. Fora da TIMELINE o laço não lê nem desenha nada, mas segue agendado: `goStep()` está fora do IIFE da TIMELINE e não teria como religá-lo. É o mesmo desenho do `compositeTick`, que já existia.
 
 ### Ganchos de teste
 
