@@ -1328,7 +1328,7 @@ window.sendToClipper = (p) => {
   const TRACK_MAX_H = 240;
   let trackHeights = { beats: 44, video: 44, audio: 44, legend: 44, broll: 44, music: 44 };
   let trilhaMuted = false, trilhaSolo = false;
-  const mediaCache = new Map(); // path -> {video?, audio?} — elementos ocultos pro compositor
+  const mediaCache = new Map(); // path -> {video?, audios?: []} — elementos ocultos pro compositor
   const thumbCache = new Map();    // path -> dataURL | 'pending' | null (frame do clipe B-ROLL)
   const miniWaveCache = new Map(); // path -> Float32Array picos | 'pending' | null (mini-waveform do clipe TRILHA)
   let inPoint = null, outPoint = null;
@@ -1529,16 +1529,17 @@ window.sendToClipper = (p) => {
   function pruneMediaCache() {
     for (const [path, entry] of mediaCache) {
       const stillBroll = BROLL.some(c => c.path === path);
-      const stillMusic = MUSIC.some(c => c.path === path);
       if (!stillBroll && entry.video) { entry.video.pause(); entry.video.remove(); entry.video = null; }
-      if (!stillMusic && entry.audio) { entry.audio.pause(); entry.audio.remove(); entry.audio = null; }
-      if (!entry.video && !entry.audio) mediaCache.delete(path);
+      // um <audio> por ocorrência: sobram só tantos quantos clipes ainda usam o arquivo
+      const uses = MUSIC.filter(c => c.path === path).length;
+      if (entry.audios) entry.audios.splice(uses).forEach(a => { if (a) { a.pause(); a.remove(); } });
+      if (!entry.video && !(entry.audios && entry.audios.length)) mediaCache.delete(path);
     }
   }
   function clearMediaCache() {
     for (const entry of mediaCache.values()) {
       if (entry.video) { entry.video.pause(); entry.video.remove(); }
-      if (entry.audio) { entry.audio.pause(); entry.audio.remove(); }
+      if (entry.audios) entry.audios.forEach(a => { if (a) { a.pause(); a.remove(); } });
     }
     mediaCache.clear();
   }
@@ -2187,7 +2188,9 @@ window.sendToClipper = (p) => {
     if (track === 'music') {
       host.querySelectorAll('.bt-clip-vol').forEach(inp => {
         inp.addEventListener('mousedown', e => e.stopPropagation());
-        inp.addEventListener('input', () => { MUSIC[+inp.dataset.idx].volume = +inp.value; });
+        // o Player só relê as props em syncPlayer(); sem isto o ganho mudava na
+        // tela e no sidecar, mas o som só no próximo renderTracks()
+        inp.addEventListener('input', () => { MUSIC[+inp.dataset.idx].volume = +inp.value; syncPlayer(); });
         inp.addEventListener('change', () => snapshot());
       });
       host.querySelectorAll('.bt-clip-wave').forEach(cv => {
@@ -2338,17 +2341,23 @@ window.sendToClipper = (p) => {
     }
     return entry.video;
   }
-  function getMusicAudioEl(path) {
+  /* Um <audio> por OCORRÊNCIA do arquivo, não por arquivo. Dois clipes do mesmo
+     arquivo (split, duplicar, colar) disputariam um elemento só: o que está fora
+     da janela pausava o que está dentro, e a primeira metade de um split ficava
+     muda. `k` é a ordem da ocorrência na passada do compositor; reordenar só
+     troca qual elemento serve qual clipe, e o seek do laço corrige a posição. */
+  function getAudioEl(path, k) {
     let entry = mediaCache.get(path);
     if (!entry) { entry = {}; mediaCache.set(path, entry); }
-    if (!entry.audio) {
+    if (!entry.audios) entry.audios = [];
+    if (!entry.audios[k]) {
       const a = document.createElement('audio');
       a.src = '/files/' + encodeURIComponent(path.replace(/\\/g, '/'));
       a.preload = 'auto';
       document.body.appendChild(a);
-      entry.audio = a;
+      entry.audios[k] = a;
     }
-    return entry.audio;
+    return entry.audios[k];
   }
   function activeBroll(t) {
     if (hiddenTracks.broll) return null;
@@ -2397,8 +2406,11 @@ window.sendToClipper = (p) => {
     } else {
       drawFrame(canvas, video);
     }
+    const seen = new Map(); // path -> ocorrências já servidas nesta passada
     MUSIC.forEach(c => {
-      const el = getMusicAudioEl(c.path);
+      const k = seen.get(c.path) || 0;
+      seen.set(c.path, k + 1);
+      const el = getAudioEl(c.path, k);
       const onWindow = t >= c.start && t < c.start + c.dur;
       const shouldPlay = onWindow && !video.paused && !hiddenTracks.music;
       el.volume = Math.max(0, Math.min(1, c.volume));
