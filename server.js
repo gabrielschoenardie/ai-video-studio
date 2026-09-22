@@ -19,7 +19,7 @@ const { encodeReel } = require('./lib/encode');
 const { score } = require('./lib/score');
 const { download } = require('./lib/download');
 const { writeAss } = require('./lib/captions');
-const { conform } = require('./lib/timeline');
+const { conform, normalizeMix } = require('./lib/timeline');
 
 const ROOT = __dirname;
 const PORT = parseInt(process.env.PORT || '4870', 10);
@@ -288,10 +288,15 @@ const server = http.createServer(async (req, res) => {
       // timeline order. Their position is implicit in the order — that is what
       // makes a delete ripple. An absent or empty array means "the whole
       // media, untouched", which is exactly how a v2 sidecar reads.
-      const payload = { version: 3, video: b.video, duration: b.duration || null,
+      // v4 adds `sfx` (TRILHA's clip shape) and `mix` ({mute, solo} of the
+      // audio tracks, which the conform honours). Absent reads as empty SFX and
+      // everything audible — how a v3 sidecar sounds.
+      const payload = { version: 4, video: b.video, duration: b.duration || null,
         beats: b.beats, segments: Array.isArray(b.segments) ? b.segments : [],
         broll: Array.isArray(b.broll) ? b.broll : [],
-        music: Array.isArray(b.music) ? b.music : [], updatedAt: new Date().toISOString() };
+        music: Array.isArray(b.music) ? b.music : [],
+        sfx: Array.isArray(b.sfx) ? b.sfx : [],
+        mix: normalizeMix(b.mix), updatedAt: new Date().toISOString() };
       fs.writeFileSync(sidecar, JSON.stringify(payload, null, 2), 'utf8');
       return send(res, 200, { ok: true, path: path.relative(ROOT, sidecar) });
     }
@@ -357,7 +362,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Timeline conform — flattens the step-04 sidecar (VÍDEO segment cuts,
-    // B-ROLL, TRILHA) into a real 4:4:4 CRF-12 mezzanine. This is the only
+    // B-ROLL, TRILHA, SFX, and the M/S mix) into a real 4:4:4 CRF-12 mezzanine. This is the only
     // path by which the timeline reaches the exported file: the browser's
     // preview compositor is a preview, not a render. The output is meant to be
     // fed to /api/export as `sourceKind: 'mezzanine'`.
@@ -375,12 +380,13 @@ const server = http.createServer(async (req, res) => {
 
       // Every clip path in the sidecar goes back through resolveInput: the
       // file is client-written, so it is exactly as untrusted as a request body.
-      let broll, music;
+      let broll, music, sfx;
       try {
         const resolveClips = (arr) => (Array.isArray(arr) ? arr : []).map(c =>
           ({ ...c, path: resolveInput(c.path) }));
         broll = resolveClips(tl.broll);
         music = resolveClips(tl.music);
+        sfx = resolveClips(tl.sfx);
       } catch (e) { return send(res, 400, { error: 'clipe fora do diretório permitido: ' + String(e.message || e) }); }
 
       // Caption words follow the cuts — lib/timeline reprojects them and
@@ -398,7 +404,8 @@ const server = http.createServer(async (req, res) => {
         const dir = path.join(JOBS_DIR, job.id); fs.mkdirSync(dir, { recursive: true });
         const out = path.join(OUT_DIR, `conformed-${job.id}.mp4`);
         const r = await conform({
-          base, segments: tl.segments || [], broll, music,
+          base, segments: tl.segments || [], broll, music, sfx, mix: tl.mix,
+          limiter: b.limiter !== false,
           output: out, workDir: dir, fit: b.fit || 'blur',
           words, captionStyle,
           onLog: s => jlog(job, s), onStage: (st, l) => jstage(job, st, l),

@@ -1341,7 +1341,7 @@ por:
 
 - [ ] **Step 8 [Usuário]: Conferência rápida** — num projeto que já tenha TRILHA, CONFORMAR → EXPORT conclui como antes (item 11 do checklist). Se a TRILHA for mono, o export sai 3 dB mais alto que antes: é a correção da decisão 13, agora igual ao preview. Com a TRILHA alta, os picos saem contidos pelo limitador do master (−2 dBTP): é a exceção declarada da decisão 21. O log do job mostra a linha `[conform] mix antes do limitador: … · pico real: … · loudness: … · LRA: …`.
 
-- [ ] **Step 9 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b1`; arquivos `lib/timeline.js`, `lib/ffmpeg.js`, `server.js`; commit `Conform SFX and mute/solo, add master limiter, measure loudness, keep mono level (B1)`) → OK do usuário → `publish`.
+- [ ] **Step 9 [Orquestrador → Usuário]: `git-workflow`** `prepare` (branch `feat/audio-mix-b1`; arquivos `lib/timeline.js`, `lib/ffmpeg.js`, `server.js`; commit `Conform SFX and mute/solo, add master limiter, measure loudness (B1)`) → OK do usuário → `publish`.
 
 ---
 
@@ -4677,6 +4677,20 @@ Seção do Orquestrador: resultados de validator, navegador e checklist de cada 
 
 **Checklist manual (Step 8):** informado pelo usuário — tudo OK: itens 1–12 do A, as duas metades de um clipe dividido da TRILHA soando na rota canvas e o slider de ganho mudando o volume na hora, com o vídeo tocando, na rota Player. Depois do checklist, sidecar da fixture conferido intacto e nenhum arquivo de teste deixado em `output/`.
 
+**Publicação (Step 9):** PR #19, commit `8128bdd`, merge commit `ba928a7`.
+
+### Task 2 (B1) — 2026-09-22
+
+**Validator (Step 7):** APROVADO, sem achados. `node jobs/checks/b1-unit.js` → `PASS: B1 unidade`; `node jobs/checks/b1-e2e.js` → `PASS: B1 ponta a ponta` (porta 4879, autolimpeza conferida); os dois scripts idênticos aos blocos do Step 1. Diff contra `HEAD` = exatamente as 18 trocas (16 hunks): `lib/ffmpeg.js` só ganhou `channels`; a parte de vídeo de `buildConformGraph` (passos 1 e 2) não aparece no diff; a regra de `audible` é a da spec, literal; a cadeia do master é a da spec (item 5), com `atrim=end=<duração>` antes do `asplit`; `tl.sfx` passa por `resolveClips` → `resolveInput()`; `limiter` vem de `b.limiter` (corpo da requisição) e `mix` de `tl.mix` (sidecar); `parseMixPeak` é regex pura e `measureLoudness` devolve nulos em qualquer erro. No plano só `## Status` mudou; nenhum outro arquivo versionado modificado; nenhum `output/conformed-*.mp4` novo.
+
+**Servidor reiniciado** na porta 4870 com o código novo (o processo anterior tinha o `lib/timeline.js` antigo carregado).
+
+**Conferência do usuário (Step 8):** conform rodado num projeto real com TRILHA (duas músicas na lane). Linha do CONSOLE: `[conform] mix antes do limitador: -0.8 dBFS (corte 1.2 dB) · pico real: -1.8 dBTP · loudness: -17.0 LUFS · LRA: 1.5 LU`. O limitador cortou 1,2 dB e o arquivo saiu em −1,8 dBTP, dentro da faixa de −1 a −2. O EXPORT também concluiu, com o arquivo chegando ao passo seguinte (item 11 do checklist).
+
+**Achado do usuário, fora do escopo desta task (vira a etapa B7, decidido pelo usuário):** aparar ou dividir um clipe da TRILHA não muda o desenho da minionda. O áudio é cortado de verdade (preview canvas busca `c.srcIn + (t − c.start)`; o conform usa `atrim` por `srcIn`/`dur`), mas `ensureMiniWave` guarda 200 colunas do **arquivo inteiro** e `drawPeaksToCanvas` estica essas colunas na largura do clipe, sem olhar `srcIn`/`dur`: as duas metades de um split mostram a mesma onda. Junto disso, o trim da borda direita só trava no fim da timeline (`hi = DURATION` em `startClipTrim`), não no fim da mídia, então dá para esticar um clipe além do arquivo e o excedente sai em silêncio. Correção esboçada: guardar a duração decodificada por arquivo, desenhar só a janela `[srcIn, srcIn + dur]` e travar o trim direito em `srcIn + dur ≤ duração da mídia`. Fica para depois do B6, com spec e plano próprios, para não reabrir tasks já testadas (o B2, o B5 e o B6 mexem nas mesmas funções).
+
+**Correção no Step 9 desta task:** o título de commit escrito na R3 tinha 85 caracteres, acima do limite de 72 do projeto. Encurtado para `Conform SFX and mute/solo, add master limiter, measure loudness (B1)` (68); "keep mono level" continua no corpo do commit. O Step 9 acima já está com o título novo.
+
 ---
 
 ## Status
@@ -4723,3 +4737,70 @@ public/index.html | 34 +++++++++++++++++++++++-----------
 5 hunks (`git diff | grep -c '^@@'`). São as 6 trocas do Step 3: troca 2 (`pruneMediaCache`) e troca 3 (`clearMediaCache`) caíram no mesmo hunk por estarem a poucas linhas uma da outra (contexto padrão de 3 linhas do diff); as outras 4 trocas (mediaCache, slider de ganho, `getAudioEl`, laço `MUSIC.forEach`) geraram um hunk cada. Nenhuma outra parte de `public/index.html` foi tocada; nenhum outro arquivo do repo foi modificado por esta task.
 
 Nenhum desvio do plano. Parando no Step 5 conforme instruído; Steps 6–9 (validator, verificação pós-troca, checklist manual, git-workflow) ficam para o Orquestrador.
+
+### Task 2 (B1) — 2026-09-22 (Executor, Steps 1–6)
+
+Executado sobre a `main` local em `ba928a7`. Steps 1–5 concluídos; Step 6 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b1-unit.js` e `jobs/checks/b1-e2e.js` salvos (cópia literal do plano, via ferramenta de escrita de arquivos, sem heredoc) e rodados antes das trocas:**
+
+`node jobs/checks/b1-unit.js` →
+
+```
+FAIL
+só VÍDEO: cadeia do master ausente ou diferente
+só VÍDEO: args com o limitador deveriam diferir do HEAD só no filtro e no -map de áudio
+com TRILHA: cadeia do master ausente ou diferente
+com TRILHA: args com o limitador deveriam diferir do HEAD só no filtro e no -map de áudio
+B-ROLL + TRILHA: cadeia do master ausente ou diferente
+B-ROLL + TRILHA: args com o limitador deveriam diferir do HEAD só no filtro e no -map de áudio
+plate sem áudio: cadeia do master ausente ou diferente
+plate sem áudio: args com o limitador deveriam diferir do HEAD só no filtro e no -map de áudio
+SFX: cadeia do primeiro clipe (input 4) ausente ou diferente
+SFX: segundo clipe (input 5, mesmo arquivo) ausente
+SFX: amix não soma base + 2 TRILHA + 2 SFX com normalize=0
+SFX: ordem dos -i ["base.mp4","b1.mp4","m1.wav","m2.wav"]
+SFX sem TRILHA: input 1 e amix de 2
+mono: pan só no clipe de 1 canal
+normalizeMix/audible não exportadas
+tpWarnOf/lraWarnOf não exportadas
+MASTER_CEIL_DB = undefined, esperado -2
+parseLoudness/loudWarnOf não exportadas
+parseMixPeak não exportada
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano (as linhas de não-regressão com `limiter: false` não apareceram, como previsto).
+
+`node jobs/checks/b1-e2e.js` (~15s) → `FAIL`, com as linhas-chave esperadas todas presentes: `C1: mono perdeu 3 dB no export — RMS S -Infinity, M -24.09041`; janelas de C3/C4 com som onde deveria haver silêncio (`C3 solo sfx: janela A deveria ter silêncio, RMS -24.10…`, `janela M deveria ter silêncio, RMS -24.09…`; mesmo padrão em C4); as linhas de medição com `undefined` em C1, C4, C5, C5b, C6, C7 e `C8: LRA undefined / undefined, esperado > 9 e high`; `sidecar: version 3`; `rota: limitador deveria vir ligado por padrão, veio undefined`; e `(arquivos mantidos em jobs/b1-check/)`. `C9` (alinhamento) não apareceu na lista de falhas — passou já no código de hoje, como o plano antecipa. Também apareceram falhas adicionais não citadas no texto do plano mas cobertas pelo "inclui" (p.ex. `C1 padrão: janela S deveria ter som, RMS -Infinity dB`, `C1: contagens sfx/music undefined/1`, `C1: excluded undefined` e as correspondentes em C2/C3/C4/C5/C5b) — todas consistentes com SFX/mix ainda não implementados.
+
+Limpeza pós-Step-1 conforme pedido: `jobs/b1-check/` apagado (`rm -rf`). O arquivo `output/conformed-cdd0dd366b41.mp4`, citado na linha `rota: mix do sidecar ignorado`, já não existia em `output/` ao checar — o próprio script o remove com `fs.rmSync(out1, { force: true })` logo depois de montar as asserções daquele bloco (as chamadas `ok(...)` só acumulam falhas, não interrompem a execução, então a limpeza roda de qualquer forma). Conferido que só os dois `conformed-*.mp4` pré-existentes (556f7c8f83b3, ab05b3a46a09, anteriores a esta sessão) seguem em `output/`; nenhum arquivo estranho ficou para trás.
+
+**Steps 2–4 — as trocas aplicadas**, na ordem do plano: `lib/ffmpeg.js` (1 troca — `channels` em `mediaInfo`); `lib/timeline.js` (12 trocas — cabeçalho; constantes do limitador; `normalizeMix`/`audible`; assinatura de `buildConformGraph`; TRILHA+SFX no amix e cadeia do master; `-i` de SFX em `buildConformArgs`; `channels` em `probeClips`; bloco de medição — `parseMixPeak`, `parseLoudness`, `measureLoudness`, `loudWarnOf`, `tpWarnOf`, `lraWarnOf` — e nova assinatura de `conform()`; regra `audible`/`excluded` antes do grafo; pico e medição do arquivo depois do `runFfmpeg`; retorno de `conform()`; `module.exports`); `server.js` (5 trocas — `require` com `normalizeMix`; sidecar v4 em `POST /api/beats`; comentário do bloco de conform; `sfx` resolvido por `resolveInput` junto de broll/music; `sfx`, `mix: tl.mix` e `limiter: b.limiter !== false` passados a `conform()`).
+
+**Step 5 — checagens depois das trocas:**
+
+```
+$ node --check server.js
+server.js OK
+
+$ node jobs/checks/b1-unit.js
+PASS: B1 unidade
+
+$ node jobs/checks/b1-e2e.js
+PASS: B1 ponta a ponta
+```
+
+O `b1-e2e.js` se autolimpou (`jobs/b1-check/` removido, o `conform` via servidor removeu cada `output/conformed-*.mp4` que criou). Confirmado depois: porta 4879 livre; porta 4870 (servidor do Orquestrador) seguia `LISTENING`, não tocada.
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/*.js` não aparece — `jobs/` é ignorado pelo git):**
+
+```
+lib/ffmpeg.js   |   1 +
+lib/timeline.js | 190 +++++++++++++++++++++++++++++++++++++++++++++++++-------
+server.js       |  19 ++++--
+3 files changed, 180 insertions(+), 30 deletions(-)
+```
+
+16 hunks (`git diff | grep -c '^@@'`) nos 3 arquivos, batendo com as 1 + 12 + 5 = 18 trocas do plano (algumas trocas adjacentes caem no mesmo hunk pelo contexto padrão do diff, como já visto na Task 1/B0).
+
+Nenhum desvio do plano. `git status --short` mostra só `M lib/ffmpeg.js`, `M lib/timeline.js`, `M server.js` — nenhum outro arquivo rastreado tocado; nenhum commit criado; nenhuma branch trocada. Parando no Step 6 conforme instruído; Steps 7–9 (validator, conferência do usuário, git-workflow) ficam para o Orquestrador.
