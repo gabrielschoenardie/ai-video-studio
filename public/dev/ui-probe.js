@@ -1,6 +1,8 @@
-/* ui-probe.js — instrumento de medição do sub-projeto A (UI da TIMELINE).
-   Plano: docs/plans/ui-premium-timeline.md
-   Spec:  docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md
+/* ui-probe.js — instrumento de medição da TIMELINE.
+   Sub-projeto A (E0–E3b): docs/plans/ui-premium-timeline.md
+     spec docs/superpowers/specs/2026-09-16-ui-premium-timeline-design.md
+   Sub-projeto B (B2–B3): docs/plans/mixagem-audio.md
+     spec docs/superpowers/specs/2026-09-21-mixagem-audio-design.md
    Carregado só com ?probe na URL (loader no <head> de public/index.html).
    Só lê DOM/CSSOM — não enxerga o closure da TIMELINE. Uso, no console:
      await uiProbe.load('output/assembled-4545f906507a.mp4')
@@ -10,9 +12,10 @@
 (function () {
   'use strict';
 
-  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b'];
-  // Isentos do piso de 11px: dado desenhado em escala de tempo (spec, decisão 2).
-  const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music'];
+  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3'];
+  // Isentos do piso de 11px: dado desenhado em escala de tempo (spec A, decisão 2;
+  // a SFX segue a TRILHA — spec B, decisão 11).
+  const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music', '.bt-clip.sfx'];
   // Classes de estado mudam com playhead/seleção e não dizem nada sobre fonte.
   const STATE_CLASSES = new Set(['on', 'active', 'selected', 'hidden', 'locked', 'done', 'run', 'err',
     'dragging', 'flip', 'hot', 'over', 'enter', 'collapsed', 'bt-enter', 'bt-split', 'bt-seek']);
@@ -20,6 +23,7 @@
   const AMBIENT = /\b(drift|blink|bt-pulse)\b/;
   const TIME_LITERAL = /(?:^|[\s,(])(\d*\.?\d+m?s)(?![\w-])/g;
   const TRACK_ORDER = ['beats', 'broll', 'video', 'legend', 'audio', 'music'];
+  const TRACK_ORDER_B = TRACK_ORDER.concat('sfx'); // lane SFX abaixo da TRILHA, do B2 em diante
   const TRANSPORT_IDS = ['bt-play', 'bt-time', 'bt-rate', 'bt-j', 'bt-k', 'bt-l', 'bt-frameback',
     'bt-frameforward', 'bt-markin', 'bt-markout', 'bt-split', 'bt-merge', 'bt-rename', 'bt-undo',
     'bt-redo', 'bt-zoomout', 'bt-zoomlevel', 'bt-zoomin', 'bt-zoomfit', 'bt-save', 'bt-conform'];
@@ -104,7 +108,10 @@
   function motionLiterals() {
     const hits = new Set();
     const scan = (where, text) => {
-      if (!text || AMBIENT.test(text)) return;
+      // A extensão Claude in Chrome injeta na página, enquanto o agente age, uma borda
+      // animada e um cursor fantasma (#claude-agent-glow-border…, #claude-phantom-cursor).
+      // Não são do app: sem este filtro, o check falha depois de qualquer tecla ou clique.
+      if (!text || AMBIENT.test(text) || /#claude-/.test(where)) return;
       if ([...text.matchAll(TIME_LITERAL)].some(m => parseFloat(m[1]) > 0)) hits.add(where + ' → ' + text);
     };
     const walk = rules => {
@@ -178,6 +185,12 @@
       withText: all.filter(b => b.textContent.trim()).length,
       missingPressed: all.filter(b => b.dataset.act !== 'add' && !b.hasAttribute('aria-pressed')).length,
     };
+  }
+  function sfxLane() {
+    const order = trackOrder(), row = $('.bt-track-row[data-track="sfx"]');
+    return { afterMusic: order.indexOf('sfx') === order.indexOf('music') + 1,
+      acts: row ? $$('.bt-tctl', row).map(b => b.dataset.act) : [],
+      host: !!$('#bt-track-sfx'), token: cssVar('--sfx') };
   }
   function playheadTc() {
     const tc = $('.bt-playhead-tc'), time = $('#bt-time');
@@ -253,8 +266,12 @@
     const b = BASELINE || {};
     if (!BASELINE) add('baseline', false, null, 'BASELINE gravado', 'rode run("E0") no app antes das mudanças');
 
-    if (at('E2')) add('text-floor', snap.textFloor.offenders.length === 0 && same(snap.textFloor.exempt, (b.textFloor || {}).exempt),
-      snap.textFloor, { offenders: [], exempt: (b.textFloor || {}).exempt });
+    // Do B2 em diante há clipes de TRILHA/SFX na tela conforme o teste: toda
+    // isenção vale se o seletor estiver em EXEMPT_TEXT (o baseline não tinha clipes).
+    const exemptOk = at('B2') ? snap.textFloor.exempt.every(e => EXEMPT_TEXT.includes(e.split('@')[0]))
+      : same(snap.textFloor.exempt, (b.textFloor || {}).exempt);
+    if (at('E2')) add('text-floor', snap.textFloor.offenders.length === 0 && exemptOk,
+      snap.textFloor, { offenders: [], exempt: at('B2') ? 'seletores de EXEMPT_TEXT' : (b.textFloor || {}).exempt });
     else add('text-floor', same(snap.textFloor, b.textFloor), snap.textFloor, b.textFloor);
 
     const ratios = Object.values(snap.contrast).filter(v => v != null);
@@ -275,7 +292,8 @@
       else add('tap-targets', same(snap.tapTargets, b.tapTargets), snap.tapTargets, b.tapTargets);
       if (at('E2')) add('transport-overflow', snap.transportOverflow === false, snap.transportOverflow, false);
       else add('transport-overflow', snap.transportOverflow === b.transportOverflow, snap.transportOverflow, b.transportOverflow);
-      add('track-order', same(snap.trackOrder, TRACK_ORDER), snap.trackOrder, TRACK_ORDER);
+      const wantOrder = at('B2') ? TRACK_ORDER_B : TRACK_ORDER;
+      add('track-order', same(snap.trackOrder, wantOrder), snap.trackOrder, wantOrder);
       if (at('E2')) add('label-truncate', snap.labelTruncate.length === 0, snap.labelTruncate, []);
       else add('label-truncate', same(snap.labelTruncate, b.labelTruncate), snap.labelTruncate, b.labelTruncate);
       add('labelw-sync', syncOk(snap.labelwSync), snap.labelwSync, 'token = rótulo = margin-left da régua; playheadDelta ≤ tolerance');
@@ -307,6 +325,11 @@
         add('shortcut-sheet', sc.present && sc.opened && sc.modal && sc.expected > 0 && sc.rows === sc.expected && sc.focusReturned,
           sc, { opened: true, modal: true, rows: 'SHORTCUTS.length', focusReturned: true });
       }
+      if (at('B2')) {
+        const s = sfxLane();
+        add('sfx-lane', s.afterMusic && s.host && s.token === '#22d3ee' && s.acts.includes('add') && s.acts.includes('lock'),
+          s, { afterMusic: true, host: true, token: '#22d3ee', acts: 'inclui add e lock' });
+      }
     }
 
     for (const r of R)
@@ -319,5 +342,5 @@
   }
 
   window.uiProbe = { load, run };
-  console.info('[uiProbe] carregado — await uiProbe.load(<vídeo>); await uiProbe.run("E0"…"E3b")');
+  console.info('[uiProbe] carregado — await uiProbe.load(<vídeo>); await uiProbe.run("E0"…"E3b" | "B2" | "B3")');
 })();

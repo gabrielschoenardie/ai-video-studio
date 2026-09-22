@@ -21,15 +21,17 @@ export type TimelineProps = {
   segments: Segment[];
   broll: Clip[];
   music: Clip[];
-  hidden: { broll?: boolean; music?: boolean };
-  trilhaMuted: boolean;
-  /* SOLO da TRILHA: silencia o plate para sobrar só a música, espelhando o
-     `video.muted = trilhaSolo` da rota de canvas. */
-  trilhaSolo: boolean;
+  sfx: Clip[];
+  hidden: { broll?: boolean };
+  /* Quem soa, calculado pelo app (`audibleNow()` em public/index.html). A
+     composição só obedece: a regra de mudo/solo mora num lugar só deste lado,
+     e o conform (lib/timeline.js) aplica a mesma ao arquivo exportado. */
+  audible: { audio: boolean; music: boolean; sfx: boolean };
 };
 
 export const EMPTY_TIMELINE: TimelineProps = {
-  src: '', segments: [], broll: [], music: [], hidden: {}, trilhaMuted: false, trilhaSolo: false,
+  src: '', segments: [], broll: [], music: [], sfx: [], hidden: {},
+  audible: { audio: true, music: true, sfx: true },
 };
 
 // Um Sequence com 0 frames não renderiza e o Remotion reclama de duração
@@ -39,11 +41,20 @@ const atLeastOneFrame = (seconds: number, fps: number) =>
   Math.max(1, Math.round((seconds || 0) * fps));
 
 export const TimelinePreview: React.FC<TimelineProps> = ({
-  src, segments, broll, music, hidden, trilhaMuted, trilhaSolo,
+  src, segments, broll, music, sfx, hidden, audible,
 }) => {
   const { fps } = useVideoConfig();
   const frames = (s: number) => atLeastOneFrame(s, fps);
   const from = (s: number) => Math.max(0, Math.round((s || 0) * fps));
+
+  // TRILHA e SFX tocam igual: um <Audio> por clipe, na janela dele. Track que
+  // não soa não monta <Audio> nenhum (não toca com volume 0): cada <Audio>
+  // montado ocupa uma das numberOfSharedAudioTags do Player.
+  const bed = (clips: Clip[], key: string) => clips.map((c, i) => (
+    <Sequence key={`${key}${i}`} from={from(c.start)} durationInFrames={frames(c.dur)}>
+      <Audio src={c.path} startFrom={from(c.srcIn || 0)} volume={Math.max(0, Math.min(1, c.volume ?? 1))} />
+    </Sequence>
+  ));
 
   // `contain` copia o que o compositor de canvas fazia (Math.min(cw/vw, ch/vh)),
   // e NÃO o buildFit() do export — que tem fundo desfocado, crop e pad. O
@@ -56,7 +67,7 @@ export const TimelinePreview: React.FC<TimelineProps> = ({
         <Series>
           {segments.map((seg, i) => (
             <Series.Sequence key={`v${i}`} durationInFrames={frames(seg.dur)}>
-              <Video src={src} startFrom={from(seg.srcIn)} muted={trilhaSolo} style={fit} />
+              <Video src={src} startFrom={from(seg.srcIn)} muted={!audible.audio} style={fit} />
             </Series.Sequence>
           ))}
         </Series>
@@ -71,15 +82,8 @@ export const TimelinePreview: React.FC<TimelineProps> = ({
         </Sequence>
       ))}
 
-      {!hidden.music && music.map((c, i) => (
-        <Sequence key={`m${i}`} from={from(c.start)} durationInFrames={frames(c.dur)}>
-          <Audio
-            src={c.path}
-            startFrom={from(c.srcIn || 0)}
-            volume={trilhaMuted ? 0 : Math.max(0, Math.min(1, c.volume ?? 1))}
-          />
-        </Sequence>
-      ))}
+      {audible.music && bed(music, 'm')}
+      {audible.sfx && bed(sfx, 'x')}
     </AbsoluteFill>
   );
 };
