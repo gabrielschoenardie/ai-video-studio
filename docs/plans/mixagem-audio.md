@@ -4658,10 +4658,68 @@ Esperado: a mensagem termina em "· 1 SFX acima de −10 dB" (só a primeira met
 
 ## Verificação
 
-Seção do Orquestrador: resultados de validator, navegador e checklist de cada task, e qualquer desvio aprovado pelo usuário. Vazia até a Task 1.
+Seção do Orquestrador: resultados de validator, navegador e checklist de cada task, e qualquer desvio aprovado pelo usuário.
+
+### Task 1 (B0) — 2026-09-22
+
+**Preparo (Task 0):** mídia de teste gerada em `jobs/b-check/` (`whoosh.wav`, `bed.wav`, `loud.wav`, `hit.wav`) e sidecar v3 da fixture copiado para `jobs/b-check/fixture.beats.json.bak`. `main` em `09c5ba9`, sincronizada com `origin/main`; working tree limpo.
+
+**Bugs reproduzidos no `HEAD` (Step 1):** `node server.js`, Chrome 1280×800, `?probe=1`, fixture carregada, auxiliares colados.
+- Rota Player (`StudioPlayer` presente): `bed.wav` na TRILHA, espião ligado, slider do clipe a 0,4 → `{ updates: 0 }`. O ganho não chega ao Player.
+- Rota canvas (Network request blocking em `/vendor/studio-player.js`, feito pelo usuário; conferido `__playerBundleFailed` ligado e `StudioPlayer` ausente): `bed.wav` dividido em 1,5s (`clips: 2`), play por Espaço a partir de 0,2s → `00:00.2 trilha[p]` · `00:01.5 trilha[▶]` · `00:02.8 trilha[p]`. Um elemento só, pausado durante toda a primeira metade; ele toca só na segunda. O `p` final é o `T.pause()` da gravação.
+
+**Validator (Step 6):** APROVADO, sem achados. `node jobs/checks/b0-static.js` → `PASS: B0 estático` (script idêntico ao bloco do Step 2); diff de `public/index.html` = exatamente as 6 trocas (5 hunks: trocas 2 e 3 no mesmo); `getAudioEl` só na definição e no laço do `compositeTick()`; nenhum `entry.audio` (singular) nem `getMusicAudioEl` restante; o plano só mudou em `## Verificação` e `## Status`; nenhum outro arquivo versionado modificado.
+
+**Depois da mudança (Step 7):** mesmas condições do Step 1; conferido que o servidor entrega o código novo (`function getAudioEl(path, k)` no HTML).
+- Rota canvas: `await uiProbe.run('E3b')` → `ok: true`, sem falhas. Cena do Step 1 → `clips: 2` e **dois** elementos: `00:00.2 trilha[▶p]` · `00:01.5 trilha[p▶]` · `00:02.8 trilha[pp]`. A primeira metade toca no primeiro elemento, a segunda no outro, e os dois param perto do fim do clipe (3,0s).
+- Rota Player (bloqueio desligado pelo usuário; `StudioPlayer` presente): `await uiProbe.run('E3b')` → `ok: true`, sem falhas. Slider do clipe da TRILHA a 0,4 → `{ updates: 1 }`, e o Player recebe `volume: 0.4`.
+- Sidecar da fixture restaurado (estava intacto: a cena não salva).
+
+**Checklist manual (Step 8):** informado pelo usuário — tudo OK: itens 1–12 do A, as duas metades de um clipe dividido da TRILHA soando na rota canvas e o slider de ganho mudando o volume na hora, com o vídeo tocando, na rota Player. Depois do checklist, sidecar da fixture conferido intacto e nenhum arquivo de teste deixado em `output/`.
 
 ---
 
 ## Status
 
 Seção do executor. Vazia até a primeira execução.
+
+### Task 1 (B0) — 2026-09-22 (Executor, Steps 2–5)
+
+Executado sobre a `main` local em `09c5ba9`. Steps 2, 3 e 4 concluídos; Step 5 (este) atualiza o Status e para.
+
+**Step 2 — `jobs/checks/b0-static.js` salvo (cópia literal do plano) e rodado antes das trocas:**
+
+```
+FAIL
+getMusicAudioEl ainda existe
+ainda há entry.audio (singular)
+ausente: function getAudioEl(path, k) {
+ausente: entry.audios[k] = a;
+ausente: const seen = new Map(); // path -> ocorrências já servidas nesta passada
+ausente: const el = getAudioEl(c.path, k);
+ausente: if (entry.audios) entry.audios.splice(uses).forEach(a => { if (a) { a.pause(); a.remove(); } });
+ausente: if (entry.audios) entry.audios.forEach(a => { if (a) { a.pause(); a.remove(); } });
+getAudioEl deveria aparecer 2× (definição + laço), achado 0
+o input do slider de ganho não chama syncPlayer()
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano.
+
+**Step 3 — as 6 trocas aplicadas em `public/index.html`** (`mediaCache` comentário; `pruneMediaCache()`; `clearMediaCache()`; `getMusicAudioEl` → `getAudioEl(path, k)`; laço `MUSIC.forEach` do `compositeTick()`; listener `input` do `.bt-clip-vol`), na ordem do plano.
+
+**Step 4 — `node jobs/checks/b0-static.js` depois das trocas:**
+
+```
+PASS: B0 estático
+```
+
+**`git diff --stat -- public/index.html`:**
+
+```
+public/index.html | 34 +++++++++++++++++++++++-----------
+1 file changed, 23 insertions(+), 11 deletions(-)
+```
+
+5 hunks (`git diff | grep -c '^@@'`). São as 6 trocas do Step 3: troca 2 (`pruneMediaCache`) e troca 3 (`clearMediaCache`) caíram no mesmo hunk por estarem a poucas linhas uma da outra (contexto padrão de 3 linhas do diff); as outras 4 trocas (mediaCache, slider de ganho, `getAudioEl`, laço `MUSIC.forEach`) geraram um hunk cada. Nenhuma outra parte de `public/index.html` foi tocada; nenhum outro arquivo do repo foi modificado por esta task.
+
+Nenhum desvio do plano. Parando no Step 5 conforme instruído; Steps 6–9 (validator, verificação pós-troca, checklist manual, git-workflow) ficam para o Orquestrador.
