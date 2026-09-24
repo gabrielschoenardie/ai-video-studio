@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6']; // o B4 não mexe na TIMELINE
+  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6', 'B7']; // o B4 não mexe na TIMELINE
   // Isentos do piso de 11px: dado desenhado em escala de tempo (spec A, decisão 2;
   // a SFX segue a TRILHA — spec B, decisão 11).
   const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music', '.bt-clip.sfx'];
@@ -281,6 +281,22 @@
     return { present: true, rightOfTracks: rm.left >= rs.right - 1, heightDelta: round(Math.abs(rm.height - rs.height), 1),
       state: m.dataset.state, peak: m.dataset.peak, token: cssVar('--meter-ok') };
   }
+  /* B7: o trecho marcado como excesso não pode escapar do clipe, e clipe que cabe na
+     mídia não pode ter marcação. Só lê DOM — a duração da mídia mora no closure da
+     TIMELINE e o probe não a enxerga, então a afirmação é geométrica. */
+  function clipBounds() {
+    const bad = [];
+    for (const track of ['broll', 'music', 'sfx']) {
+      for (const el of $$(`#bt-track-${track} .bt-clip`)) {
+        const ov = $('.bt-clip-over', el);
+        if (!ov) continue;
+        const w = el.getBoundingClientRect().width, ow = ov.getBoundingClientRect().width;
+        if (ow > w + 1) bad.push({ track, idx: el.dataset.idx, clipe: round(w, 1), excesso: round(ow, 1) });
+        if (getComputedStyle(ov).pointerEvents !== 'none') bad.push({ track, idx: el.dataset.idx, pointerEvents: 'não é none' });
+      }
+    }
+    return { marcados: $$('.bt-clip-over').length, bad };
+  }
   async function transportIds() {
     const missing = TRANSPORT_IDS.filter(id => !document.getElementById(id));
     const ungrouped = TRANSPORT_IDS.filter(id => {
@@ -400,6 +416,10 @@
         const mt = await meter();
         add('meter', mt.present && mt.rightOfTracks && mt.heightDelta <= 2 && mt.state === 'ok' && mt.token === '#34d399' &&
           /^-?\d+\.\d$/.test(mt.peak || ''), mt, { rightOfTracks: true, heightDelta: '≤ 2', state: 'ok', token: '#34d399', peak: 'dBFS, uma casa' });
+      }
+      if (at('B7')) {
+        const cb = clipBounds();
+        add('clip-bounds', cb.bad.length === 0, cb, { bad: [] });
       }
       if (at('B6')) {
         const sp = sfxPeak();
