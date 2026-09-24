@@ -297,6 +297,19 @@
     }
     return { marcados: $$('.bt-clip-over').length, bad };
   }
+  /* B7: a janela que o canvas desenhou tem de ser a do clipe. O probe não enxerga o
+     closure da TIMELINE, então compara o data-win com o que o DOM sabe do clipe —
+     a largura do clipe em segundos vem da escala do próprio ruler. */
+  function waveWindow() {
+    const out = [];
+    for (const track of ['music', 'sfx']) {
+      for (const cv of $$(`#bt-track-${track} .bt-clip-wave`)) {
+        const el = cv.closest('.bt-clip');
+        out.push({ track, idx: el && el.dataset.idx, win: cv.dataset.win || null });
+      }
+    }
+    return { canvases: out.length, semWin: out.filter(o => !o.win).length, janelas: out };
+  }
   async function transportIds() {
     const missing = TRANSPORT_IDS.filter(id => !document.getElementById(id));
     const ungrouped = TRANSPORT_IDS.filter(id => {
@@ -420,6 +433,8 @@
       if (at('B7')) {
         const cb = clipBounds();
         add('clip-bounds', cb.bad.length === 0, cb, { bad: [] });
+        const ww = waveWindow();
+        add('wave-window', ww.semWin === 0, ww, { semWin: 0 });
       }
       if (at('B6')) {
         const sp = sfxPeak();

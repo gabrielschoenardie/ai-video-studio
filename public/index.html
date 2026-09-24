@@ -1378,7 +1378,11 @@ window.sendToClipper = (p) => {
   }
   const mediaCache = new Map(); // path -> {video?, audios?: []} — elementos ocultos pro compositor
   const thumbCache = new Map();    // path -> dataURL | 'pending' | null (frame do clipe B-ROLL)
-  const miniWaveCache = new Map(); // path -> Float32Array picos | 'pending' | null (mini-waveform do clipe TRILHA)
+  // Estado do decode de cada arquivo de clipe de áudio: 'pending' enquanto baixa e
+  // decodifica, true quando o AudioBuffer entrou no audioBufCache, null quando falhou.
+  // Até o B7a guardava 200 colunas de pico do arquivo inteiro; a mini-waveform passou a
+  // desenhar a janela usada, calculada do buffer, e o array do arquivo virou trabalho morto.
+  const miniWaveCache = new Map(); // path -> 'pending' | true | null
   /* Duração da mídia de cada arquivo usado em clipe (B7). O MEDIA_DUR vale só para o
      vídeo base; cada clipe aponta para um arquivo próprio, e o sidecar não guarda a
      duração. Uma consulta ao POST /api/probe por caminho, cacheada — é o que trava o
@@ -1652,6 +1656,7 @@ window.sendToClipper = (p) => {
     // medidor (B5): nada do vídeo anterior entra no master do próximo
     plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();
     mediaDur.clear();   // B7: nada da duração do vídeo anterior
+    winPeakCache.clear();
     meterEnv = null; lastMixSig = ''; meterGen++;
   }
 
@@ -1830,15 +1835,8 @@ window.sendToClipper = (p) => {
       const ctx = new AC();
       const decoded = await ctx.decodeAudioData(buf.slice(0));
       audioBufCache.set(path, decoded);   // o medidor (B5) mixa a partir dele
-      const data = decoded.getChannelData(0);
-      const cols = 200, spc = Math.max(1, Math.floor(data.length / cols));
-      const p = new Float32Array(cols);
-      for (let c = 0; c < cols; c++) {
-        let m = 0; const s = c * spc, e2 = Math.min(data.length, s + spc);
-        for (let i = s; i < e2; i++) { const a = Math.abs(data[i]); if (a > m) m = a; }
-        p[c] = m;
-      }
-      miniWaveCache.set(path, p);
+      // o desenho vem de windowPeaksCached, direto do buffer: aqui só fica o estado
+      miniWaveCache.set(path, true);
       ctx.close();
     } catch (e) { miniWaveCache.set(path, null); if (!audioBufCache.has(path)) audioBufCache.set(path, null); }
     renderMusicTrack();
@@ -1875,6 +1873,52 @@ window.sendToClipper = (p) => {
     if (!(md > 0)) return 0;
     const over = (c.srcIn || 0) + c.dur - md;
     return over > 0 ? Math.min(c.dur, over) : 0;
+  }
+  const MINI_COLS = 200;          // colunas da mini-waveform; o desenho anda de 2 em 2 px
+  const MINI_MAX_PER_COL = 256;   // teto de amostras visitadas por coluna
+  const winPeakCache = new Map(); // `path|srcIn|dur` -> Float32Array
+  /* Picos do trecho usado do arquivo. É isto que faz a mini-waveform mostrar o que o
+     clipe toca, em vez do arquivo inteiro esticado na largura dele — e é o que torna
+     visível que cortar um clipe ao meio cortou o áudio. Pura: só lê o buffer.
+     O passo mantém o total visitado sob MINI_MAX_PER_COL por coluna porque
+     renderClipTrack roda a cada frame de arraste e o `dur` muda em todo frame: sem
+     teto, esticar uma cama de 10 minutos varreria milhões de amostras por frame. O pico
+     de cada coluna é o pico das amostras visitadas — numa waveform de 26 px de altura,
+     indistinguível do pico exato. */
+  function windowPeaks(buf, srcIn, dur, cols) {
+    const out = new Float32Array(cols);
+    if (!buf || !(dur > 0)) return out;
+    const data = buf.getChannelData(0), sr = buf.sampleRate;
+    const a = Math.max(0, Math.floor((srcIn || 0) * sr));
+    const b = Math.min(data.length, Math.ceil(((srcIn || 0) + dur) * sr));
+    if (b <= a) return out;
+    const per = (b - a) / cols;
+    for (let c = 0; c < cols; c++) {
+      const s = a + Math.floor(c * per), e = Math.min(b, a + Math.floor((c + 1) * per));
+      // ceil, não floor: com floor o passo fica em 1 quando a coluna tem entre 256 e 511
+      // amostras, e aí não reduz nada — o "teto" viraria o dobro numa janela de ~2,3 s.
+      const step = Math.max(1, Math.ceil((e - s) / MINI_MAX_PER_COL));
+      let m = 0;
+      for (let i = s; i < e; i += step) { const v = Math.abs(data[i]); if (v > m) m = v; }
+      out[c] = m;
+    }
+    return out;
+  }
+  /* Memo por janela, arredondada ao milissegundo para não errar por ruído de ponto
+     flutuante. Um arraste erra o memo de propósito em todo frame — é para isso que o
+     teto de amostras existe. O memo é limpo inteiro ao passar de 300 entradas: é cache
+     de desenho, não estado, e um arraste longo geraria uma entrada por frame. */
+  function windowPeaksCached(path, srcIn, dur) {
+    const buf = audioBufCache.get(path);
+    if (!(buf instanceof AudioBuffer)) return null;
+    const key = path + '|' + (srcIn || 0).toFixed(3) + '|' + dur.toFixed(3);
+    let p = winPeakCache.get(key);
+    if (!p) {
+      if (winPeakCache.size > 300) winPeakCache.clear();
+      p = windowPeaks(buf, srcIn, dur, MINI_COLS);
+      winPeakCache.set(key, p);
+    }
+    return p;
   }
   function drawPeaksToCanvas(canvas, peaksArr, color) {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -2608,7 +2652,10 @@ window.sendToClipper = (p) => {
       }
       if (isAudio) {
         ensureMiniWave(c.path);
-        if (miniWaveCache.get(c.path) instanceof Float32Array) media = `<canvas class="bt-clip-wave" data-idx="${i}"></canvas>`;
+        // o portão passa a ser o buffer, que é de onde a janela é calculada. O data-win
+        // é gancho de teste: o probe compara a janela desenhada com o srcIn/dur do clipe.
+        if (audioBufCache.get(c.path) instanceof AudioBuffer) media =
+          `<canvas class="bt-clip-wave" data-idx="${i}" data-win="${(c.srcIn || 0).toFixed(3)},${c.dur.toFixed(3)}"></canvas>`;
       }
       return `<div class="bt-clip ${track}${sel}${fxClass(track, i)}" data-track="${track}" data-idx="${i}"
           style="left:${timeToX(c.start)}px;width:${Math.max(4, timeToX(c.dur))}px">
@@ -2635,8 +2682,9 @@ window.sendToClipper = (p) => {
       });
       const waveColor = track === 'sfx' ? 'rgba(34,211,238,.6)' : 'rgba(255,179,71,.6)';
       host.querySelectorAll('.bt-clip-wave').forEach(cv => {
-        const peaksArr = miniWaveCache.get(arr[+cv.dataset.idx].path);
-        if (peaksArr instanceof Float32Array) drawPeaksToCanvas(cv, peaksArr, waveColor);
+        const c2 = arr[+cv.dataset.idx];
+        const peaksArr = windowPeaksCached(c2.path, c2.srcIn || 0, c2.dur);
+        if (peaksArr) drawPeaksToCanvas(cv, peaksArr, waveColor);
       });
       if (track === 'sfx') host.querySelectorAll('.bt-clip').forEach(el => markSfxPeak(el, arr[+el.dataset.idx]));
     }
