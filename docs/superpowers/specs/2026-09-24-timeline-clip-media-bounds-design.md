@@ -93,8 +93,10 @@ O resultado é memoizado por `path|srcIn|dur`, com `srcIn` e `dur` arredondados 
 Em `startClipTrim`, lado direito, junto do `hi` que já existe:
 
 ```
-mediaDur conhecido → hi = Math.min(hi, origStart + (mediaDur - origSrcIn))
+mediaDur conhecido → hi = Math.min(hi, Math.max(origEnd, origStart + (mediaDur - origSrcIn)))
 ```
+
+O `Math.max(origEnd, …)` veio de uma medição no Step 7 da Task 1: com a fórmula simples, pegar a borda direita de um clipe legado de 4 s sobre um arquivo de 0,8 s a levava de 240 px para 48 px num arraste de 60 px — a trava apagava 3,2 s no primeiro movimento. Isso contraria a decisão 4 (não mexer em projeto salvo sem o usuário pedir), então o teto passa a ser o maior entre o fim atual do clipe e o fim da mídia: impede crescer, deixa encurtar, e volta a ser o fim da mídia assim que o clipe cabe.
 
 É o espelho exato da trava esquerda (`lo = Math.max(lo, origStart - origSrcIn)`) e a mesma forma do `Math.min(MEDIA_DUR, …)` da track VÍDEO. Vale nas três tracks de clipe: B-ROLL, TRILHA e SFX.
 

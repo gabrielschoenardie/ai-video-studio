@@ -17,7 +17,8 @@
 - **Nenhum cálculo novo por render sem custo limitado.** `renderClipTrack` roda a cada frame de arraste.
 - **`data-peak` e as classes de zona do medidor não mudam.** São a superfície que o probe e as checagens do B5 e do B6 leem.
 - **Projeto salvo abre como foi salvo.** Nenhum saneamento silencioso de `dur` ou `srcIn` nas tracks de clipe.
-- **Trocas aditivas onde possível.** `jobs/checks/b5-static.js` e `b6-static.js` fixam as duas linhas de limpeza de cache (`plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();` e a linha do `audioBufCache.delete`). As trocas desta etapa acrescentam linhas novas em vez de reescrever essas, para as checagens anteriores continuarem passando.
+- **Trocas aditivas onde possível.** `jobs/checks/b5-static.js` e `b6-static.js` fixam as duas linhas de limpeza de cache (`plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();` e a linha do `audioBufCache.delete`). As trocas desta etapa acrescentam linhas novas em vez de reescrever essas.
+- **Mas "aditivo" não garante checagem anterior verde, e eu escrevi isso errado na primeira versão deste plano.** Ao escrever a Task 1 eu auditei as âncoras de **texto** das checagens antigas e concluí que as seis passariam. Falhou em duas, por tipos de asserção que eu não audi­tei: uma **contagem fixa** (`b2-static` exigia exatamente 7 ocorrências de `renderSfxTrack()`, e a chamada nova do `ensureMediaDur` fez 8) e um **literal de lista** (`b6-static` fixava o `ORDER` do probe fechado em `'B6'`). Antes de cada task, auditar os três tipos: âncora de texto, contagem e literal de lista. Quando uma vencer, o Orquestrador atualiza a checagem — o executor **reporta e não edita**.
 - **Invariantes do sub-projeto A valem:** nenhuma fonte literal abaixo de 11px fora de `var(--fs-*)`, nenhuma duração literal de `transition`/`animation` fora das exceções, e os `<script>` inline têm de compilar.
 - **Working tree em CRLF** (`core.autocrlf=true`) em `public/index.html` e `public/dev/ui-probe.js`: preservar os terminadores existentes, nunca normalizar o arquivo.
 
@@ -391,8 +392,12 @@ por:
     // forma do Math.min(MEDIA_DUR, …) que a track VÍDEO já usa no startVideoTrim.
     // Calculado uma vez, aqui: uma duração que chegue no meio do arraste não muda o
     // teto do gesto em curso, então a borda não dá salto — o próximo arraste já trava.
+    // O teto da mídia nunca puxa a borda para dentro de um clipe que já passa do fim do
+    // arquivo (projeto salvo antes desta trava): nesse caso o teto é o próprio fim atual,
+    // então ele impede crescer e deixa encurtar à vontade. Assim que o clipe volta a caber,
+    // o teto passa a ser o fim da mídia. Um toque no puxador não apaga trecho nenhum.
     const md = mediaDurOf(c.path);
-    if (md) hi = Math.min(hi, origStart + (md - origSrcIn));
+    if (md) hi = Math.min(hi, Math.max(origEnd, origStart + (md - origSrcIn)));
 ```
 
 - [ ] **Step 3 [Executor]: `public/dev/ui-probe.js` — 3 trocas**
@@ -1071,10 +1076,121 @@ Esperado: `falhas: []`, com `peak-labels` entre os checks; `medidor` começando 
 
 ## Verificação
 
-Seção do Orquestrador. Vazia até a primeira validação.
+### Task 1 (B7a) — 2026-09-24
+
+**Duas checagens anteriores falharam, e a culpa é do plano, não da execução.** Eu havia escrito em `## Global Constraints` que as seis passariam porque desenhei as trocas como aditivas. Auditei só as âncoras de **texto** e esqueci dois outros tipos de asserção:
+
+1. `b2-static.js` exigia `count(src, 'renderSfxTrack()') === 7`; o `ensureMediaDur` re-renderiza as três tracks e fez 8. Primeiro troquei por um piso (`< 7`); o validador apontou que isso **enfraquece** a checagem — deixaria passar duplicação acidental de uma chamada de render num caminho quente, contra a restrição de custo por frame. Aceitei: voltou a ser igualdade, agora em 8, com comentário explicando a composição do número.
+2. `b6-static.js` fixava o literal `const ORDER = [… 'B6'];` fechado. É o mesmo problema que já derrubou `b2-static` e `b5-static` no B5, onde passei a ancorar no prefixo — mas o `b6-static` nasceu depois, do meu próprio texto, repetindo o erro. Agora ancora no prefixo também. O validador conferiu e não considerou enfraquecimento: é a convenção já aceita para asserção que cresce por natureza.
+
+A linha de `## Global Constraints` foi corrigida: auditar os **três** tipos antes de cada task — âncora de texto, contagem e literal de lista.
+
+**Validator (Step 6):** APROVADO, sem achados bloqueantes no código, com as sete checagens rodadas em contexto limpo. Diff = as 9 + 3 trocas do plano, literais; nada em `lib/`, `server.js` ou no sidecar. Conferido por leitura: `mediaDurOf` devolvendo `null` para `'pending'`, para zero e para ausente; `200` com JSON sem `duration` caindo em `null`; `ensureMediaDur` sem caminho que lance, e a guarda `mediaDur.has(path)` + `set('pending')` síncrono fechando tanto chamadas concorrentes no mesmo tick quanto o ciclo com os `render*Track()` que ele mesmo dispara (o validador rastreou a volta inteira e ela termina em uma); a trava fora do closure de `onMove`, com os três limites (`DURATION`, vizinho do B-ROLL, mídia) convivendo por `Math.min` sucessivo; `overflowSec` limitando a `c.dur` e tratando `srcIn` ausente como 0; e a sobreposição com `pointer-events:none` dentro do `overflow:hidden` do clipe.
+
+**Contrato da rota, medido antes da validação** (não suposto): `POST /api/probe` devolve `200` com `{"duration":0.8,…}` para `hit.wav`; **`500`** com `{"error":…}` tanto para `nao-midia.txt` quanto para caminho inexistente. Os dois casos de falha caem no mesmo ramo, e o `r.ok` do `ensureMediaDur` é o discriminador correto.
+
+**Falha do plano no Step 7:** o script fabricava o clipe longo com `SFX[0].dur = 4` no console. `SFX` vive no IIFE da TIMELINE (linhas 1296–3952) e não é alcançável de lá. Troquei por montar o sidecar com o clipe longo e abrir o projeto — teste de fidelidade maior, porque é o caminho real de um projeto salvo antes desta trava.
+
+**Achado do Step 7, que mudou a fórmula da trava.** Com `hi = Math.min(hi, origStart + (md - origSrcIn))`, pegar a borda direita de um clipe legado de 4 s sobre um arquivo de 0,8 s levava o clipe de 240 px para 48 px num arraste de 60 px: a trava apagava 3,2 s no primeiro movimento. Isso contraria a decisão 4 da spec (não mexer em projeto salvo sem o usuário pedir). Levei ao usuário com as duas saídas e ele escolheu a **B**: o teto passa a ser `Math.max(origEnd, origStart + (md - origSrcIn))` — impede crescer, deixa encurtar, e volta a ser o fim da mídia assim que o clipe cabe. Aplicado no código, no texto da troca 9 do plano, na âncora do `b7a-static.js` e na seção da spec.
+
+**Rota Player (Step 7), depois da mudança:**
+- `await uiProbe.run('B7')` → `ok: true`, `falhas: []`, 23 checks, com `clip-bounds`.
+- **A trava, com controle de que o arraste funciona:** num `whoosh.wav` de 0,8 s, esticar 400 px não moveu a borda; encurtar respondeu (48 → 28 px); esticar de volta parou em **exatamente 48 px**, o fim do arquivo.
+- **Clipe legado aberto do sidecar** (4 s sobre 0,8 s): 240 px com 192 px de excesso — 0,80 da largura, que é 3,2 s de 4 s —, borda tracejada e `pointer-events: none`.
+- **O ciclo de vida completo do clipe legado:** tentar crescer 60 px → fica em 240 px (não cresce); encurtar 60 → 180 px com 132 de excesso; mais 60 → 120 px com 72; mais 80 → 40 px e **excesso 0** (cruzou o fim da mídia, marcação sumiu); daí esticar 400 px → 48 px, o fim do arquivo, e o mesmo resultado ao repetir. O excesso encurta 1:1 com o clipe, e a catraca é de mão única.
+- **Arquivo que não é mídia** (`nao-midia.txt`): o clipe entra com os 3 s padrão, sem marcação, **sem erro no console**, e a borda direita continua esticando livre (180 → 300 px) — o guardrail de "`null` nunca bloqueia edição" valendo.
+
+**Rota canvas (Step 8):** bloqueio de `/vendor/studio-player.js` ligado pelo usuário; `rota: "canvas"` e `window.StudioPlayer` indefinido, confirmados. `await uiProbe.run('B7')` → `ok: true`, `falhas: []`, 23 checks. Confirmação extra da trava nesta rota, para não depender só do probe: num `whoosh.wav` de 0,8 s, esticar 400 px manteve o clipe em 48 px e encurtar 25 px respondeu (48 → 23 px). A etapa não toca nenhuma das duas engines de preview, então isso é regressão, não ciclo completo (spec, decisão 8). Sidecar da fixture restaurado.
+
+**Teste no vídeo do usuário, a pedido dele.** Montei um sidecar de teste em `output/assembled-9680c0370b29.mp4` (19 MB, 6,3 s, sidecar com só um corte — os dois projetos com B-ROLL e trilha de verdade eu não toquei), com backup em `jobs/b-check/assembled-9680c0370b29.beats.json.ORIGINAL`. Dois clipes legados do mesmo `whoosh.wav` de 0,8 s: um na SFX desenhado com 3,0 s e um na TRILHA com 2,5 s. Medido: marcação inicial em 0,73 e 0,68 da largura, batendo com os 2,2 s e 1,7 s de excesso previstos, as duas tracejadas; tentar crescer 200 px não moveu nenhum dos dois; encurtar 60 px derrubou o excesso exatamente 60 px em cada (1:1 com o clipe); ao cruzar o fim do áudio a marcação sumiu nos dois; e esticar 300 px levou **ambos a 48 px** — as duas tracks param no mesmo lugar porque usam o mesmo arquivo, o que prova que a trava lê a mídia e não algo do clipe. Sidecar do usuário restaurado e conferido byte a byte contra o backup.
+
+**Checklist manual (Step 9):** os itens 1–12 do sub-projeto A foram **dispensados pelo usuário** ("não quero passar os olhos novamente no sub-projeto A de antes"). Os itens próprios do B7a foram exercitados por mim no navegador, nas duas rotas e no vídeo do próprio usuário, com os números acima. Fica registrado que esta task não teve conferência humana de regressão do A.
+
 
 ---
 
 ## Status
 
 Seção do executor. Vazia até a primeira execução.
+
+### Task 1 (B7a) — 2026-09-24 (Executor, Steps 1–5)
+
+Executado sobre a `main` local em `1d4bd60` (working tree limpo). Steps 1–4 concluídos; Step 5 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b7a-static.js` salvo (cópia literal do plano) e rodado antes das trocas:**
+
+```
+FAIL
+index.html — ausente: .bt-clip-over{position:absolute; top:0; bottom:0; right:0; z-index:0; pointer-events:none;
+index.html — ausente: const mediaDur = new Map();
+index.html — ausente:   function mediaDurOf(path) {
+index.html — ausente:   async function ensureMediaDur(path) {
+index.html — ausente:       body: JSON.stringify({ input: path }) });
+index.html — ausente:   function overflowSec(c, md) {
+index.html — ausente: mediaDur.set(path, info && info.duration > 0 ? info.duration : null);
+index.html — ausente: if (![...BROLL, ...MUSIC, ...SFX].some(c => c.path === path)) mediaDur.delete(path);
+index.html — ausente: mediaDur.clear();
+index.html — ausente: if (asset.info && asset.info.duration > 0) mediaDur.set(asset.path, asset.info.duration);
+index.html — ausente: ensureMediaDur(c.path);
+index.html — ausente: const ovSec = overflowSec(c, mediaDurOf(c.path));
+index.html — ausente: class="bt-clip-over"
+index.html — ausente: const md = mediaDurOf(c.path);
+index.html — ausente: if (md) hi = Math.min(hi, origStart + (md - origSrcIn));
+ensureMediaDur deveria ser chamado 1× no markup do clipe
+mediaDur.clear() deveria aparecer 1× (clearMediaCache)
+overflowSec não achada
+hi-uma-vez: a trava da mídia deveria estar antes do onMove, não dentro dele
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6', 'B7'];
+ui-probe.js — ausente:   function clipBounds() {
+ui-probe.js — ausente: add('clip-bounds',
+```
+
+(`exitCode 1`) — as 15 linhas `index.html — ausente:` do primeiro bloco, as duas linhas de contagem, `overflowSec não achada`, `hi-uma-vez: …` e as três linhas `ui-probe.js — ausente:`, exatamente como o plano previa. Conferido à parte: as **duas** linhas do segundo `need` (as que `b5-static` e `b6-static` fixam — `plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();` e a linha do `audioBufCache.delete`) **não** apareceram no FAIL, confirmando que já existiam antes das trocas.
+
+**Steps 2 e 3 — as trocas aplicadas na ordem do plano:** `public/index.html` (9 trocas — CSS `.bt-clip-over`; comentário + `const mediaDur = new Map()`; `mediaDurOf`/`ensureMediaDur`/`overflowSec`; limpeza por caminho em `pruneMediaCache()`, aditiva; limpeza total em `clearMediaCache()`, aditiva; semeadura em `addClipFromAsset`; `ensureMediaDur(c.path)`/`overMark` no markup do clipe em `renderClipTrack()`; `${overMark}` no HTML do clipe; trava do trim direito em `startClipTrim()`, antes do `onMove`); `public/dev/ui-probe.js` (3 trocas — `B7` no `ORDER`; `clipBounds()`; check `clip-bounds` no `at('B7')`). Todas as âncoras casaram em exatamente 1 ocorrência antes de cada edição — nenhuma trocada às cegas.
+
+**Step 4 — checagens depois das trocas:**
+
+```
+$ node jobs/checks/b7a-static.js
+PASS: B7a estático
+
+$ node jobs/checks/b0-static.js
+PASS: B0 estático
+
+$ node jobs/checks/b1-unit.js
+PASS: B1 unidade
+
+$ node jobs/checks/b2-static.js
+FAIL
+renderSfxTrack() deveria aparecer 7× (1 definição + 6 chamadas), achado 8
+
+$ node jobs/checks/b3-static.js
+PASS: B3 estático
+
+$ node jobs/checks/b5-static.js
+PASS: B5 estático
+
+$ node jobs/checks/b6-static.js
+FAIL
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6'];
+```
+
+Quatro das seis checagens anteriores passaram (`b0-static`, `b1-unit`, `b3-static`, `b5-static`) — as duas que o plano citava por nome como desenhadas para continuar passando (`b5-static`, `b6-static`) não bateram 2 de 2: `b5-static` passou, `b6-static` não. As duas falhas, reportadas sem editar nenhuma checagem:
+
+- **`b2-static`** — a âncora `if (count(src, 'renderSfxTrack()') !== 7) …` (linha 57 de `jobs/checks/b2-static.js`) exige exatamente 7 ocorrências de `renderSfxTrack()` (1 definição + 6 chamadas). A troca 3 do Step 2 desta task (`ensureMediaDur`), copiada literalmente do plano, acrescenta uma 7ª chamada (`renderBrollTrack(); renderMusicTrack(); renderSfxTrack();` dentro de `ensureMediaDur`), levando a contagem a 8. A troca é aditiva no sentido de não reescrever nenhuma linha existente, mas o número de chamadas que `b2-static` fixa como invariante deixou de bater.
+- **`b6-static`** — a âncora `need(probe, 'ui-probe.js', ["const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6'];", …])` (linha 59 de `jobs/checks/b6-static.js`) exige a string exata do array `ORDER` terminando em `'B6'`. A troca 1 do Step 3 desta task, também copiada literalmente do plano, substitui essa linha pela mesma lista com `, 'B7'` acrescentado ao fim — string diferente da que `b6-static` procura, então essa âncora deixa de casar.
+
+Ambas as falhas vêm de trocas que o plano especifica literalmente (não de decisão do executor); nenhuma checagem foi editada. Fica para o Orquestrador decidir se `b2-static`/`b6-static` devem ser atualizadas (ex.: `renderSfxTrack()` para 8×, `ORDER` com `'B7'`) ou se a Task 1 deve mudar.
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/b7a-static.js` não aparece — `jobs/` é gitignored):**
+
+```
+public/dev/ui-probe.js | 22 ++++++++++++++++-
+public/index.html      | 65 +++++++++++++++++++++++++++++++++++++++++++++++++-
+2 files changed, 85 insertions(+), 2 deletions(-)
+```
+
+9 hunks em `public/index.html` e 3 em `public/dev/ui-probe.js` (`git diff | grep -c '^@@'` por arquivo), batendo 1:1 com as 9 + 3 trocas dos Steps 2 e 3 — nenhuma trocaram caiu no mesmo hunk de outra. `git status --short` mostra só `M public/dev/ui-probe.js` e `M public/index.html`; nada em `lib/`, `server.js` ou no sidecar tocado; nenhum commit criado; nenhuma branch trocada. CRLF preservado nos dois arquivos (conferido por contagem de bytes antes e depois das trocas: todo `\n` continua precedido de `\r`).
+
+Nenhum desvio das instruções de trocas — as duas falhas acima são resultado de aplicar o plano literalmente, não de improviso do executor. Parando no Step 5 conforme instruído; Steps 6–10 (validator, rota Player, rota canvas, checklist manual, git-workflow) ficam para o Orquestrador.

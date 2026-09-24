@@ -524,6 +524,13 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 .bt-clip.music .nm,.bt-clip.sfx .nm{font-size:9.5px} /* isento: lane intocada — sub-projeto A, decisão 2; SFX segue a TRILHA (sub-projeto B, decisão 11) */
 .bt-clip-thumb{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.55; z-index:0}
 .bt-clip-wave{position:absolute; inset:0; width:100%; height:100%; z-index:0}
+/* Trecho do clipe além do fim da mídia (B7). Só aparece em projeto salvo antes da
+   trava do trim direito: com ela valendo, não há como criar um novo. Esmaecido e
+   tracejado, e sem capturar mouse — a edição do clipe continua igual, e o contorno
+   sólido da seleção segue distinguível do tracejado do aviso. O overflow:hidden do
+   .bt-clip é o que impede a sobreposição de escapar num clipe estreito. */
+.bt-clip-over{position:absolute; top:0; bottom:0; right:0; z-index:0; pointer-events:none;
+  background:var(--panel); opacity:.55; border-left:1px dashed var(--faint)}
 .bt-clip-vol{position:relative; z-index:1; width:46px; flex:0 0 auto}
 .bt-handle.left{left:-2px}
 .bt-asset-list{display:flex; flex-direction:column; gap:3px; max-height:180px; overflow:auto;
@@ -1372,6 +1379,12 @@ window.sendToClipper = (p) => {
   const mediaCache = new Map(); // path -> {video?, audios?: []} — elementos ocultos pro compositor
   const thumbCache = new Map();    // path -> dataURL | 'pending' | null (frame do clipe B-ROLL)
   const miniWaveCache = new Map(); // path -> Float32Array picos | 'pending' | null (mini-waveform do clipe TRILHA)
+  /* Duração da mídia de cada arquivo usado em clipe (B7). O MEDIA_DUR vale só para o
+     vídeo base; cada clipe aponta para um arquivo próprio, e o sidecar não guarda a
+     duração. Uma consulta ao POST /api/probe por caminho, cacheada — é o que trava o
+     trim direito e marca o excesso, nas três tracks de clipe. `null` significa
+     desconhecido, não-mídia ou probe falho: aí o comportamento é o de antes do B7. */
+  const mediaDur = new Map();      // path -> segundos | 'pending' | null
   let inPoint = null, outPoint = null;
   let currentPath = null;
   let words = []; // {start,end,text,hl?} parsed from the .ass
@@ -1626,6 +1639,9 @@ window.sendToClipper = (p) => {
     // minionda também, para um arquivo que volte ser decodificado de novo
     for (const path of [...audioBufCache.keys()])
       if (![...MUSIC, ...SFX].some(c => c.path === path)) { audioBufCache.delete(path); miniWaveCache.delete(path); }
+    // a duração (B7) sai quando nenhum clipe de nenhuma das três tracks usa mais o arquivo
+    for (const path of [...mediaDur.keys()])
+      if (![...BROLL, ...MUSIC, ...SFX].some(c => c.path === path)) mediaDur.delete(path);
   }
   function clearMediaCache() {
     for (const entry of mediaCache.values()) {
@@ -1635,6 +1651,7 @@ window.sendToClipper = (p) => {
     mediaCache.clear();
     // medidor (B5): nada do vídeo anterior entra no master do próximo
     plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();
+    mediaDur.clear();   // B7: nada da duração do vídeo anterior
     meterEnv = null; lastMixSig = ''; meterGen++;
   }
 
@@ -1827,6 +1844,37 @@ window.sendToClipper = (p) => {
     renderMusicTrack();
     renderSfxTrack();
     scheduleMaster();
+  }
+  function mediaDurOf(path) {
+    const d = mediaDur.get(path);
+    return typeof d === 'number' && d > 0 ? d : null;
+  }
+  /* Uma consulta por caminho. O caminho vai como o clipe o guarda: é o resolveInput do
+     servidor que decide se é legítimo, a mesma fronteira que o /api/probe já aplica a
+     todo chamador. Erro de rede, resposta não-ok ou arquivo que não é mídia viram
+     `null` e não são perguntados de novo. As três tracks de clipe re-renderizam porque
+     a trava e a marcação valem nas três. */
+  async function ensureMediaDur(path) {
+    if (mediaDur.has(path)) return;
+    mediaDur.set(path, 'pending');
+    try {
+      const r = await fetch('/api/probe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: path }) });
+      const info = r.ok ? await r.json() : null;
+      mediaDur.set(path, info && info.duration > 0 ? info.duration : null);
+    } catch (e) { mediaDur.set(path, null); }
+    renderBrollTrack();
+    renderMusicTrack();
+    renderSfxTrack();
+  }
+  /* Segundos do clipe que passam do fim da mídia. Limitado à duração do próprio clipe:
+     um srcIn além do fim da mídia (sidecar antigo, ou arquivo trocado por um mais
+     curto) marcaria o clipe inteiro, nunca mais que ele. Duração desconhecida ou zero
+     devolve 0 — sem dado, sem marcação. */
+  function overflowSec(c, md) {
+    if (!(md > 0)) return 0;
+    const over = (c.srcIn || 0) + c.dur - md;
+    return over > 0 ? Math.min(c.dur, over) : 0;
   }
   function drawPeaksToCanvas(canvas, peaksArr, color) {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -2520,6 +2568,9 @@ window.sendToClipper = (p) => {
       dur = Math.min(want, DURATION - t);
       if (dur <= MIN_BEAT_DUR) { stage('sem espaço até o fim da timeline', true); return; }
     }
+    // a duração do asset já é conhecida aqui: semeia a cache do B7 e poupa o probe.
+    // Clipe vindo do sidecar não tem essa sorte — para ele o ensureMediaDur consulta.
+    if (asset.info && asset.info.duration > 0) mediaDur.set(asset.path, asset.info.duration);
     const clip = track === 'broll'
       ? { path: asset.path, name: asset.name, start, dur, srcIn: 0 }
       : { path: asset.path, name: asset.name, start, dur, volume: 1, srcIn: 0 };
@@ -2541,6 +2592,12 @@ window.sendToClipper = (p) => {
         ? `<input type="range" class="bt-clip-vol" min="${GAIN_DB_MIN}" max="0" step="0.5" value="${dbOf(c.volume)}" data-idx="${i}"
             title="${dbLabel(dbOf(c.volume))}" aria-label="Ganho do clipe" aria-valuetext="${dbLabel(dbOf(c.volume))}">`
         : '';
+      // B7: a duração da mídia entra no mesmo laço onde a minionda e o thumbnail já
+      // entram — um por clipe, e a cache descarta a repetição. Cobre projeto aberto do
+      // sidecar e clipe recém-criado sem gancho novo no loadVideo.
+      ensureMediaDur(c.path);
+      const ovSec = overflowSec(c, mediaDurOf(c.path));
+      const overMark = ovSec > 0 ? `<div class="bt-clip-over" style="width:${timeToX(ovSec)}px"></div>` : '';
       let media = '';
       if (track === 'broll') {
         ensureThumbnail(c.path);
@@ -2555,7 +2612,7 @@ window.sendToClipper = (p) => {
       }
       return `<div class="bt-clip ${track}${sel}${fxClass(track, i)}" data-track="${track}" data-idx="${i}"
           style="left:${timeToX(c.start)}px;width:${Math.max(4, timeToX(c.dur))}px">
-          ${media}
+          ${media}${overMark}
           <div class="bt-handle left" data-track="${track}" data-idx="${i}" data-side="left"></div>
           <span class="nm">${escapeHtml(c.name)}</span>${vol}
           <div class="bt-handle right" data-track="${track}" data-idx="${i}" data-side="right"></div>
@@ -3573,6 +3630,16 @@ window.sendToClipper = (p) => {
     // não dá para esticar a cabeça para antes do começo da mídia: srcIn não pode
     // ficar negativo. Mesma trava que qualquer NLE aplica ao trim de entrada.
     if (side === 'left') lo = Math.max(lo, origStart - origSrcIn);
+    // ...nem a cauda para depois do fim dela (B7). Espelho da trava de cima, e a mesma
+    // forma do Math.min(MEDIA_DUR, …) que a track VÍDEO já usa no startVideoTrim.
+    // Calculado uma vez, aqui: uma duração que chegue no meio do arraste não muda o
+    // teto do gesto em curso, então a borda não dá salto — o próximo arraste já trava.
+    // O teto da mídia nunca puxa a borda para dentro de um clipe que já passa do fim do
+    // arquivo (projeto salvo antes desta trava): nesse caso o teto é o próprio fim atual,
+    // então ele impede crescer e deixa encurtar à vontade. Assim que o clipe volta a caber,
+    // o teto passa a ser o fim da mídia. Um toque no puxador não apaga trecho nenhum.
+    const md = mediaDurOf(c.path);
+    if (md) hi = Math.min(hi, Math.max(origEnd, origStart + (md - origSrcIn)));
     const trimOpts = { clipEdges: true, playhead: true, exclude: new Set([clipKey(track, i)]) };
     function onMove(ev) {
       const dx = (ev.clientX - startX) / PX_PER_SEC;
