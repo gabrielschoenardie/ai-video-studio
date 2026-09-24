@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5']; // o B4 não mexe na TIMELINE
+  const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6']; // o B4 não mexe na TIMELINE
   // Isentos do piso de 11px: dado desenhado em escala de tempo (spec A, decisão 2;
   // a SFX segue a TRILHA — spec B, decisão 11).
   const EXEMPT_TEXT = ['.bt-word', '.bt-clip.music', '.bt-clip.sfx'];
@@ -258,6 +258,20 @@
     setMix(start.mute, start.solo);
     return { combos: combos.length, bad };
   }
+  // B6: em todo clipe de SFX com pico conhecido, a marca segue o limiar de −10 dBFS;
+  // sem pico conhecido (arquivo ainda decodificando), nenhuma marca. Só lê.
+  function sfxPeak() {
+    const clips = $$('#bt-track-sfx .bt-clip'), bad = [];
+    let known = 0;
+    clips.forEach((c, i) => {
+      const over = c.classList.contains('over'), title = !!c.getAttribute('title');
+      if (!('peak' in c.dataset)) { if (over || title) bad.push({ i, peak: null, over, title }); return; }
+      known++;
+      const want = parseFloat(c.dataset.peak) > -10;
+      if (over !== want || title !== want) bad.push({ i, peak: c.dataset.peak, over, title });
+    });
+    return { clips: clips.length, known, bad };
+  }
   // Espera o primeiro render do master (até 10 s) e mede o lugar do medidor.
   async function meter() {
     const m = $('#bt-meter'), s = $('.bt-scroll');
@@ -386,6 +400,10 @@
         const mt = await meter();
         add('meter', mt.present && mt.rightOfTracks && mt.heightDelta <= 2 && mt.state === 'ok' && mt.token === '#34d399' &&
           /^-?\d+\.\d$/.test(mt.peak || ''), mt, { rightOfTracks: true, heightDelta: '≤ 2', state: 'ok', token: '#34d399', peak: 'dBFS, uma casa' });
+      }
+      if (at('B6')) {
+        const sp = sfxPeak();
+        add('sfx-peak', sp.bad.length === 0, sp, { bad: [] });
       }
       if (at('B3')) {
         const acts = trackActs();
