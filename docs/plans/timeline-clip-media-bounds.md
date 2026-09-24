@@ -629,7 +629,7 @@ console.log(fail.length ? 'FAIL\n' + fail.join('\n') : 'PASS: B7b estático');
 process.exitCode = fail.length ? 1 : 0;
 ```
 
-Rodar `node jobs/checks/b7b-static.js`. Esperado: `FAIL` com as onze linhas `index.html — ausente:`, a linha de contagem do `winPeakCache.clear()`, `windowPeaks não achada` e as duas linhas `ui-probe.js — ausente:`. As duas linhas `não deveria existir:` **não** aparecem (o laço antigo ainda está lá, e é a Task 2 que o remove), e as duas do `need` de âncoras preservadas também não.
+Rodar `node jobs/checks/b7b-static.js`. Esperado: `FAIL` com as onze linhas `index.html — ausente:`, a linha de contagem do `winPeakCache.clear()`, `windowPeaks não achada` e as duas linhas `ui-probe.js — ausente:`. As duas linhas `não deveria existir:` **aparecem** neste FAIL: o laço de 200 colunas e o `miniWaveCache.set(path, p);` ainda estão no arquivo, e é a troca 3 desta task que os remove — o check acusa presença, então ele dispara. (A primeira versão deste plano dizia o contrário, com uma justificativa que explicava justamente por que eles apareceriam; prosa invertida, corrigida depois que o executor a confrontou com a saída real.) Já as duas linhas do segundo `need`, as âncoras que `b5-static` e `b6-static` fixam, **não** aparecem: elas já existem e esta task não as toca.
 
 - [ ] **Step 2 [Executor]: `public/index.html` — 6 trocas, nesta ordem**
 
@@ -679,7 +679,9 @@ por:
     const per = (b - a) / cols;
     for (let c = 0; c < cols; c++) {
       const s = a + Math.floor(c * per), e = Math.min(b, a + Math.floor((c + 1) * per));
-      const step = Math.max(1, Math.floor((e - s) / MINI_MAX_PER_COL));
+      // ceil, não floor: com floor o passo fica em 1 quando a coluna tem entre 256 e 511
+      // amostras, e aí não reduz nada — o "teto" viraria o dobro numa janela de ~2,3 s.
+      const step = Math.max(1, Math.ceil((e - s) / MINI_MAX_PER_COL));
       let m = 0;
       for (let i = s; i < e; i += step) { const v = Math.abs(data[i]); if (v > m) m = v; }
       out[c] = m;
@@ -1106,6 +1108,36 @@ A linha de `## Global Constraints` foi corrigida: auditar os **três** tipos ant
 
 **Checklist manual (Step 9):** os itens 1–12 do sub-projeto A foram **dispensados pelo usuário** ("não quero passar os olhos novamente no sub-projeto A de antes"). Os itens próprios do B7a foram exercitados por mim no navegador, nas duas rotas e no vídeo do próprio usuário, com os números acima. Fica registrado que esta task não teve conferência humana de regressão do A.
 
+### Task 2 (B7b) — 2026-09-24
+
+**Auditoria antes de despachar, e ela funcionou.** Aplicando a regra que a Task 1 me ensinou, auditei os três tipos de asserção das checagens existentes contra o que esta task muda, e previ ao executor que as oito passariam. Passaram, de primeira, sem editar nenhuma — a primeira vez em quatro tasks que isso acontece. Nenhuma checagem ancorava os textos que esta task mexe (o comentário da declaração de `miniWaveCache`, o laço de 200 colunas, o portão do canvas, o bloco de desenho), e nenhuma contagem muda: `renderSfxTrack()` fica em 8, `scheduleMaster()` em 7, `mediaDur.clear();` em 1.
+
+**Erro meu na prosa do Step 1:** eu havia escrito que as duas linhas `não deveria existir:` não apareceriam no FAIL inicial, com uma justificativa que explicava justamente por que elas apareceriam — o laço antigo ainda está no arquivo antes da troca 3, e o check acusa presença. O executor confrontou a prosa com a saída real em vez de aceitá-la. Prosa corrigida; a checagem nunca esteve errada.
+
+**Achado do validator (Step 6), corrigido: o teto de amostras não era um teto.** Com `step = max(1, floor(amostras / 256))`, o passo fica em 1 quando a coluna tem entre 256 e 511 amostras, e aí não reduz nada. O validador mediu: uma janela de 2,3 s a 44,1 kHz com 200 colunas lia **101.430** amostras contra o teto nominal de 51.400 — o dobro. Pior: os dois tamanhos que eu pus na checagem (1 s e 600 s) escapam exatamente dessa faixa, um por ficar abaixo do limiar e o outro por ser múltiplo grande, então ela não pegava. Corrigido com `ceil` em vez de `floor`, o que torna as leituras por coluna `ceil(amostras / passo) ≤ 256` para qualquer tamanho.
+
+Verifiquei que o teste agora morde, extraindo a função do arquivo nas duas formas e contando as leituras com um `Proxy`:
+
+| janela | com `floor` (antes) | com `ceil` (agora) |
+| --- | --- | --- |
+| 1 s | 44.100 | 44.100 |
+| **2,3 s** | **101.430 — estoura** | 50.800 |
+| 10 min | 51.400 | 51.200 |
+
+Teto: 51.400. Os dois casos antigos passam nas duas versões, o que confirma que a checagem era cega exatamente onde importava. Ela ganhou o caso de 2,3 s, e código, plano e spec foram alinhados.
+
+**Resto da validação:** APROVADO. O validador exercitou `windowPeaks` além dos casos do check (`cols=0`, `cols=1`, `dur=NaN`, `srcIn=NaN`, valores em 1e9, janela terminando exatamente no fim do buffer) — nenhum lançou, nenhum leu fora de `[0, data.length)`, com a prova geométrica de que todo índice cai em `[a, b) ⊂ [0, data.length)`. Confirmou o limite de 300 do memo e a limpeza no `clearMediaCache`, e avaliou que limpar o memo inteiro ao estourar é aceitável. Confirmou que nenhum ponto do arquivo ainda espera `Float32Array` do `miniWaveCache`, que a guarda contra decode duplo segue valendo, e que o portão do canvas não mudou o **momento** em que a waveform aparece, porque `audioBufCache` e `miniWaveCache` são preenchidas na mesma sequência síncrona.
+
+**Rota Player (Step 7):**
+- `await uiProbe.run('B7')` → `ok: true`, `falhas: []`, 24 checks, com `wave-window`.
+- **O item que originou a etapa inteira.** Clipe de `hit.wav` inteiro: janela `0.000,0.800`. Dividido em 2,33 s: `0.000,0.333` e `0.333,0.467` — somam 0,800 exatos e emendam, a segunda começando onde a primeira termina. Antes desta task as duas metades desenhariam `0.000,0.800`, idênticas: era isso que fazia parecer que o áudio não tinha sido cortado.
+- **Prova nos pixels, não só no gancho de teste.** Densidade de tinta no canvas: 0,6129 na primeira metade contra 0,0968 na segunda — **6,3× mais cheia**, exatamente o formato do `hit.wav` (forte nos primeiros 0,3 s, baixo depois).
+- **Custo do arraste:** um arraste em 308 ms e oito em 2.484 ms, dominados pelas esperas do próprio auxiliar de teste (300 ms por arraste); nenhum travamento. O memo erra em todo frame de propósito, e é o teto que mantém isso barato.
+
+**Rota canvas (Step 8):** bloqueio de `/vendor/studio-player.js` ligado pelo usuário; `rota: "canvas"` confirmada. `await uiProbe.run('B7')` → `ok: true`, `falhas: []`, 24 checks. O teste da divisão repetido nesta rota deu **valor por valor o mesmo resultado**, inclusive na medição de pixels: janelas `0.000,0.333` e `0.333,0.467`, soma 0,800, e densidades de tinta 0,6129 e 0,0968 com razão 6,33 — os mesmos números da rota Player. Era o esperado, porque a waveform é canvas e DOM, sem passar por nenhuma das duas engines de preview. Sidecar da fixture restaurado.
+
+**Checklist manual (Step 9):** o usuário testou e reportou "tudo funcionando corretamente", depois de eu listar os itens próprios desta task — clipe de TRILHA cortado ao meio mostrando desenhos diferentes em cada metade, a borda esquerda com o desenho acompanhando, e clipe recém-adicionado sem demora nova. Ele não especificou se percorreu também os itens 1–12 do sub-projeto A, que havia dispensado na Task 1; fica registrado assim, sem presumir. O item da borda esquerda era justamente o que eu não conseguia afirmar bem por medição automática, porque arrastar ali muda `srcIn` e `dur` juntos e o olho pega melhor que o número se o desenho escorrega.
+
 
 ---
 
@@ -1194,3 +1226,76 @@ public/index.html      | 65 +++++++++++++++++++++++++++++++++++++++++++++++++-
 9 hunks em `public/index.html` e 3 em `public/dev/ui-probe.js` (`git diff | grep -c '^@@'` por arquivo), batendo 1:1 com as 9 + 3 trocas dos Steps 2 e 3 — nenhuma trocaram caiu no mesmo hunk de outra. `git status --short` mostra só `M public/dev/ui-probe.js` e `M public/index.html`; nada em `lib/`, `server.js` ou no sidecar tocado; nenhum commit criado; nenhuma branch trocada. CRLF preservado nos dois arquivos (conferido por contagem de bytes antes e depois das trocas: todo `\n` continua precedido de `\r`).
 
 Nenhum desvio das instruções de trocas — as duas falhas acima são resultado de aplicar o plano literalmente, não de improviso do executor. Parando no Step 5 conforme instruído; Steps 6–10 (validator, rota Player, rota canvas, checklist manual, git-workflow) ficam para o Orquestrador.
+
+### Task 2 (B7b) — 2026-09-24 (Executor, Steps 1–5)
+
+Executado sobre a `main` local em `9ad6dfc` (working tree limpo, Task 1 já mergeada no PR #28). Steps 1–4 concluídos; Step 5 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b7b-static.js` salvo (cópia literal do plano) e rodado antes das trocas:**
+
+```
+FAIL
+index.html — ausente: const MINI_COLS = 200;
+index.html — ausente: const MINI_MAX_PER_COL = 256;
+index.html — ausente: const winPeakCache = new Map();
+index.html — ausente:   function windowPeaks(buf, srcIn, dur, cols) {
+index.html — ausente:   function windowPeaksCached(path, srcIn, dur) {
+index.html — ausente: if (winPeakCache.size > 300) winPeakCache.clear();
+index.html — ausente: miniWaveCache.set(path, true);
+index.html — ausente: if (audioBufCache.get(c.path) instanceof AudioBuffer) media =
+index.html — ausente: data-win="${(c.srcIn || 0).toFixed(3)},${c.dur.toFixed(3)}"
+index.html — ausente: const peaksArr = windowPeaksCached(c2.path, c2.srcIn || 0, c2.dur);
+index.html — ausente: winPeakCache.clear();
+index.html — não deveria existir: const cols = 200, spc = Math.max(1, Math.floor(data.length / cols));
+index.html — não deveria existir: miniWaveCache.set(path, p);
+winPeakCache.clear() deveria aparecer 2× (memo cheio e clearMediaCache)
+windowPeaks não achada
+ui-probe.js — ausente:   function waveWindow() {
+ui-probe.js — ausente: add('wave-window',
+```
+
+(`exitCode 1`) — as onze linhas `index.html — ausente:`, a linha de contagem do `winPeakCache.clear()`, `windowPeaks não achada` e as duas linhas `ui-probe.js — ausente:` bateram exatamente com o previsto no plano. **Divergência encontrada e reportada, não corrigida:** o plano previa que as duas linhas `índex.html — não deveria existir:` (o laço de 200 colunas e `miniWaveCache.set(path, p);`) **não** apareceriam nesse FAIL ("o laço antigo ainda está lá, e é a Task 2 que o remove"). Elas apareceram — e é o comportamento correto do check: antes da troca 3 do Step 2, esse laço ainda está de fato em `ensureMiniWave()` (confirmado por grep, 1 ocorrência literal), então `if (src.includes(t)) fail.push(...)` dispara como esperado pela própria lógica do check. A prosa do plano parece estar invertida nesse trecho — o mesmo tipo de furo de auditoria já relatado na Task 1, desta vez na narrativa do "esperado" do Step 1, não numa âncora de troca. Não editei o check nem o plano além desta seção de Status; registrando para o Orquestrador decidir. As **duas** linhas do segundo `need` (as que `b5-static`/`b6-static` fixam) não apareceram, como previsto.
+
+**Steps 2 e 3 — as 6 trocas em `public/index.html` e as 2 em `public/dev/ui-probe.js`, na ordem do plano.** Todas as âncoras foram conferidas por grep antes de cada edição e casaram em exatamente 1 ocorrência — nenhuma trocada às cegas. `public/index.html`: comentário da declaração de `miniWaveCache`; bloco `MINI_COLS`/`MINI_MAX_PER_COL`/`winPeakCache`/`windowPeaks`/`windowPeaksCached` antes de `drawPeaksToCanvas()`; `ensureMiniWave()` trocando o laço de 200 colunas por `miniWaveCache.set(path, true);`; `winPeakCache.clear();` em `clearMediaCache()`; portão do canvas de `miniWaveCache` para `audioBufCache` com `data-win`; laço de desenho em `renderClipTrack()` chamando `windowPeaksCached`. `public/dev/ui-probe.js`: função `waveWindow()` antes de `transportIds()`; check `wave-window` no bloco `at('B7')`.
+
+**Step 4 — checagens depois das trocas, todas passando, nenhuma editada:**
+
+```
+$ node jobs/checks/b7b-static.js
+PASS: B7b estático
+
+$ node jobs/checks/b7a-static.js
+PASS: B7a estático
+
+$ node jobs/checks/b0-static.js
+PASS: B0 estático
+
+$ node jobs/checks/b1-unit.js
+PASS: B1 unidade
+
+$ node jobs/checks/b2-static.js
+PASS: B2 estático
+
+$ node jobs/checks/b3-static.js
+PASS: B3 estático
+
+$ node jobs/checks/b5-static.js
+PASS: B5 estático
+
+$ node jobs/checks/b6-static.js
+PASS: B6 estático
+```
+
+As oito checagens passaram de primeira — `b2-static` e `b6-static` já vinham corrigidas do fechamento da Task 1 (8× para `renderSfxTrack()`, prefixo do `ORDER` sem exigir o fim exato da lista), e nenhuma troca desta task mexeu em contagens fixas ou em literais de lista.
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/b7b-static.js` não aparece — `jobs/` é gitignored):**
+
+```
+public/dev/ui-probe.js | 15 +++++++++++
+public/index.html      | 72 +++++++++++++++++++++++++++++++++++++++++---------
+2 files changed, 74 insertions(+), 13 deletions(-)
+```
+
+2 hunks em `public/dev/ui-probe.js` e 6 em `public/index.html` (`git diff | grep -c '^@@'` por arquivo), batendo 1:1 com as 2 + 6 trocas dos Steps 2 e 3. `git status --short` mostra só `M public/dev/ui-probe.js` e `M public/index.html`; nada em `lib/`, `server.js` ou no sidecar tocado; nenhum commit criado; nenhuma branch trocada. CRLF preservado nos dois arquivos (contagem de bytes: todo `\n` continua precedido de `\r` nos dois — `LF total == CRLF` para cada arquivo, zero LF solto).
+
+Único desvio: a divergência do Step 1 relatada acima, na prosa do "esperado" do plano, não em código ou em critério de aceite. Nenhuma checagem foi editada. Parando no Step 5 conforme instruído; Steps 6–10 (validator, rota Player, rota canvas, checklist manual, git-workflow) ficam para o Orquestrador.

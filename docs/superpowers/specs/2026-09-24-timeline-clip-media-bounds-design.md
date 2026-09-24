@@ -79,7 +79,7 @@ Uma função pura nova, com nome e assinatura estáveis para poder ser testada f
 `windowPeaks(buf, srcIn, dur, cols) → Float32Array(cols)`
 
 - Recorta `[srcIn, srcIn+dur]` em amostras, limitado por `buf.length`; devolve `cols` zeros quando a janela é vazia, negativa ou fora do buffer.
-- Visita as amostras com um passo que mantém o total visitado sob um teto fixo, independente do tamanho da janela: **no máximo 256 amostras por coluna**, ou seja 51 200 visitas com as 200 colunas de hoje. O passo é `max(1, floor(amostrasDaColuna / 256))`. O pico de cada coluna é o pico das amostras visitadas — para uma waveform de 26 px de altura, indistinguível do pico exato.
+- Visita as amostras com um passo que mantém o total visitado sob um teto fixo, independente do tamanho da janela: **no máximo 256 amostras por coluna**, ou seja 51 200 visitas com as 200 colunas de hoje. O passo é `max(1, ceil(amostrasDaColuna / 256))`. Com `floor` o passo ficaria em 1 para coluna de 256 a 511 amostras, e o teto viraria o dobro numa janela de ~2,3 s — achado do validador na Task 2, onde a checagem não pegava porque os dois tamanhos testados escapavam dessa faixa. O pico de cada coluna é o pico das amostras visitadas — para uma waveform de 26 px de altura, indistinguível do pico exato.
 - `cols` segue as 200 de hoje: já é mais fino que o passo de 2 px do desenho.
 
 O resultado é memoizado por `path|srcIn|dur`, com `srcIn` e `dur` arredondados a 3 casas (milissegundo) para o memo não errar por ruído de ponto flutuante. Durante um arraste o `dur` muda a cada frame e o memo erra de propósito, o que é o caso que o teto de amostras existe para tornar barato.
