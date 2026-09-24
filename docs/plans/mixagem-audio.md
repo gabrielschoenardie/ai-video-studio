@@ -4772,6 +4772,35 @@ Seção do Orquestrador: resultados de validator, navegador e checklist de cada 
 
 ---
 
+### Task 7 (B6) — 2026-09-23
+
+**Checagens vencidas (atualizadas pelo Orquestrador):** três âncoras textuais, todas superadas de propósito por esta task, nenhuma regressão. `b3-static.js` procurava `${measuresMsg(r)}${skipped}`, e o B6 insere `${sfxHotMsg()}` entre os dois — passou a ancorar em `${measuresMsg(r)}`, já que a contagem de 2 ocorrências de `measuresMsg(r)` no mesmo script guarda o resto. `b2-static.js` e `b5-static.js` fixavam o literal inteiro do `ORDER` do probe, que muda a cada etapa nova — foi o que já as derrubou no B5 e derrubaria de novo no B7. Agora cada uma ancora no **prefixo até o próprio estágio**, então etapa acrescentada ao fim não as quebra mais. Ao aplicar isso eu deixei um comentário `//` antes da vírgula da lista do `b2-static` e engoli o resto da linha, quebrando o script; corrigido movendo o comentário para a linha de cima. Suíte depois: `b0-static`, `b1-unit`, `b2-static`, `b3-static`, `b5-static` e `b6-static`, todas PASS.
+
+**Validator (Step 6):** APROVADO, sem achados, com as seis checagens rodadas em contexto limpo. Diff = as 5 + 3 trocas do plano (8 hunks), literais; no plano, um hunk só, dentro de `## Status`. Conferido que o B6 só lê: nenhuma escrita em `c.volume` ou `MIX`, e nenhum `AnalyserNode`, `DynamicsCompressor`, `GainNode` ou `createMediaElementSource` nas linhas novas. O validador testou à mão as bordas de `regionPeak` além do que o check cobre — `dur` zero, `dur` negativo, janela além do fim do buffer e `srcIn` negativo, todas devolvendo 0 sem ler fora do array, porque o `for` não executa quando `a >= b`; buffer ausente é barrado antes, em `clipPeakDb`. Confirmado também que o `WeakMap` guarda só a amplitude linear do trecho, sem o ganho, e que `clipPeakDb` multiplica por `c.volume` **depois** do lookup — por isso mudar o ganho recalcula o dB na hora sem invalidar cache; que classe, `▲` e `title` andam sempre juntos pelo mesmo booleano; que `sfxHotMsg()` retorna `''` cedo quando a SFX não é audível; e que as duas limpezas de cache de mídia do B5 estão intactas e fora do diff.
+
+**Rota Player (Step 7):** condições de medição (aba em primeiro plano, `?probe`, fixture carregada, sidecar v3 restaurado).
+- Clipe de `hit.wav` a 0 dB: `peak: "-3.1"`, `over: true`, `title: "pico −3,1 dBFS — acima de −10; mantenha só se for um elemento dramático"`, `seta: "\"▲ \""` e contorno `rgb(251, 191, 36) 0px 0px 0px 1px inset`. O pico do arquivo medido por `astats`: −3,098 dBFS.
+- `await uiProbe.run('B6')` → `ok: true`, `falhas: []`, 22 checks.
+- Slider a −20 dB: `{ mesmoElemento: true, peak: "-23.1", over: false, title: "" }` — a marca saiu sem re-render, e o mesmo elemento foi atualizado.
+- Pico do trecho, não do arquivo: de volta a 0 dB e dividindo o clipe em 2,33 s, onde o `hit.wav` já caiu para −20, as metades deram `[{ peak: "-3.1", over: true }, { peak: "-20.0", over: false }]`.
+- Contagem na mensagem: "timeline conformada — 38.2s · 0 B-ROLL · 0 TRILHA · 2 SFX · 100 palavras · pico real −2,0 dBTP · −21,1 LUFS: abaixo do alvo −14 a −16 · LRA 15,0 LU: dinâmica alta para celular (ideal ≤ 9) · limitador −0,4 dB · 1 SFX acima de −10 dB", com o medidor em −1,6 e a classe `z-red` — só a primeira metade passa do limiar.
+- Com a SFX muda, conformando de novo: "… · 0 SFX · 100 palavras · fora do export: SFX (mudo) · pico real −8,3 dBTP · −25,4 LUFS: abaixo do alvo −14 a −16 · LRA 4,3 LU" — sem o trecho da contagem. As marcas seguem na lane, o que é o comportamento certo: o `▲` fala do clipe, a contagem fala do que entrou no arquivo. Conformados apagados e sidecar da fixture restaurado.
+
+**Rota canvas (Step 8):** bloqueio de `/vendor/studio-player.js` ligado pelo usuário; `rota: "canvas"` confirmada. O primeiro bloco do Step 7 repetido deu valor por valor o mesmo resultado — `antes` com `-3.1`/`over`/`title`/`▲`/contorno, `probe` 22/22 sem falhas, `depois` com `-23.1` e a marca fora, no mesmo elemento: o aviso não depende da rota, porque é cálculo sobre o buffer decodificado, não sobre o que toca. Sidecar da fixture restaurado.
+
+**Step 9 — o usuário testou e reportou dois sintomas; nenhum é defeito.** Ele relatou que o `▲` "aparece somente quando deixo o slider de volume em 0,0 dB" e que o número do medidor de pico do master "fica estático fixo sempre em −9,3". Investigados um a um, com medição:
+
+1. **O `▲` acompanha o ganho.** Varredura do slider num efeito de pico conhecido (−3,1 dBFS): 0 dB → −3,1 marcado; −3 dB → −6,1 marcado; −5 dB → −8,1 marcado; −6,5 dB → −9,6 marcado; **−7 dB → −10,1 sem marca**; −20 dB → −23,1 sem marca. A marca apaga ao cruzar −10, não ao sair de 0,0. O sintoma se explica pelo arquivo do usuário: um efeito que pica pouco acima de −10 no trecho usado sai da faixa com qualquer atenuação. **Falha de usabilidade encontrada no caminho:** o `title` do clipe só existe quando ele está marcado, então sem marca não há como ver o pico e entender por que meio decibel bastou.
+2. **O número do medidor não é leitura ao vivo, e não está travado.** Com o som tocando, em 146 amostras a barra L assumiu 66 valores distintos e o número, 1 só. Atenuando a SFX, o número muda e depois para: 0 dB → −1,6; −10 dB → −8,4; −30 dB → −8,4; −40 dB → −8,4. Ele para em −8,4 porque esse é o pico do áudio da própria fixture (`astats` mede −8,343): abaixo disso quem manda no pico do mix é a voz, e mexer na SFX não muda nada. No projeto do usuário esse piso é −9,3. O número é, por decisão do B5, o pico do projeto inteiro antes do limitador — é o que o torna comparável ao `mixPeakDb` do conform, que é a razão de existir do medidor. **Mas a apresentação engana:** um número parado embaixo de uma barra que se move lê como leitura ao vivo quebrada.
+
+**Decisão do usuário:** publicar o B6 como está (validado e com as duas rotas testadas) e levar as duas melhorias de legibilidade para a **etapa B7**, junto da mini-waveform:
+- o clipe de SFX passa a carregar o pico no `title` sempre, não só quando passa de −10;
+- o número do medidor ganha um rótulo que o distinga da barra ao vivo (algo como "projeto: −9,3 dBFS").
+
+O checklist manual completo do Step 9 não foi percorrido item a item: o usuário testou o B6 pela interface, levantou os dois pontos acima e aprovou a publicação depois da investigação.
+
+---
+
 ## Status
 
 Seção do executor. Vazia até a primeira execução.
@@ -5295,5 +5324,81 @@ public/index.html      | 213 ++++++++++++++++++++++++++++++++++++++++++++++++-
 ```
 
 18 hunks em `public/index.html` (`git diff -- public/index.html | grep -c '^@@'`), batendo 1:1 com as 18 trocas do Step 2 (nenhuma troca ficou adjacente o bastante para cair no mesmo hunk desta vez); 5 hunks em `public/dev/ui-probe.js`, batendo 1:1 com as 5 trocas do Step 3. Confirmado que nenhuma edição alterou terminador de linha: `public/index.html` (3951 CRLF, 0 linha só-LF) e `public/dev/ui-probe.js` (416 CRLF, 0 linha só-LF) seguem 100% CRLF depois das trocas.
+
+### Task 7 (B6) — 2026-09-23 (Executor, Steps 1–5)
+
+Executado sobre a `main` local em `8712fc8` (sincronizada com `origin/main`; Tasks 1/B0, 2/B1, 3/B2, 4/B3, 5/B4 e 6/B5 já mergeadas; working tree limpo no início). Steps 1–4 concluídos; Step 5 (este) atualiza o Status e para.
+
+**Step 1 — `jobs/checks/b6-static.js` salvo (cópia literal do plano, via ferramenta de escrita de arquivos) e rodado antes das trocas:**
+
+```
+FAIL
+index.html — ausente: .bt-clip.sfx.over{box-shadow:inset 0 0 0 1px var(--go)}
+index.html — ausente: .bt-clip.sfx.over .nm::before{content:'▲ '; color:var(--go)}
+index.html — ausente: const SFX_PEAK_MAX = -10;
+index.html — ausente: const regionPeakCache = new WeakMap();
+index.html — ausente:   function regionPeak(buf, srcIn, dur) {
+index.html — ausente:   function clipPeakDb(c) {
+index.html — ausente:   function markSfxPeak(el, c) {
+index.html — ausente:   function sfxHotMsg() {
+index.html — ausente:     if (!audible('sfx')) return '';
+index.html — ausente: ` · ${n} SFX acima de −10 dB`
+index.html — ausente: mantenha só se for um elemento dramático
+index.html — ausente: if (track === 'sfx') markSfxPeak(inp.closest('.bt-clip'), clipsFor(track)[+inp.dataset.idx]);
+index.html — ausente: if (track === 'sfx') host.querySelectorAll('.bt-clip').forEach(el => markSfxPeak(el, arr[+el.dataset.idx]));
+index.html — ausente: ${measuresMsg(r)}${sfxHotMsg()}${skipped}
+regionPeak não achada
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5', 'B6'];
+ui-probe.js — ausente:   function sfxPeak() {
+ui-probe.js — ausente: add('sfx-peak',
+```
+
+(`exitCode 1`) — idêntico ao esperado no plano: as 13 linhas `index.html — ausente:` do CSS/constante/cache/quatro funções/mensagem/slider/render/`${measuresMsg(r)}${sfxHotMsg()}${skipped}`, `regionPeak não achada` e as três linhas `ui-probe.js — ausente:`. As duas linhas do B5 (`plateBuf = null; audioBufCache.clear(); miniWaveCache.clear();` e `if (![...MUSIC, ...SFX].some(c => c.path === path)) { … }`) **não** apareceram na lista de falhas, confirmando que o B6 não mexe nelas.
+
+**Step 2 — as 5 trocas aplicadas em `public/index.html`**, na ordem do plano: CSS `.bt-clip.sfx.over`/`.bt-clip.sfx.over .nm::before` logo depois de `.bt-clip.sfx{border-left:3px solid var(--sfx)}`; bloco novo do pico por efeito (`SFX_PEAK_MAX`, `regionPeakCache`, `regionPeak()`, `clipPeakDb()`, `markSfxPeak()`, `sfxHotMsg()`) logo depois de `setMeterData()`; listener `input` do slider de ganho — `markSfxPeak()` quando `track === 'sfx'`; fim de `renderClipTrack()` — `markSfxPeak()` em cada `.bt-clip` da SFX depois do `forEach` das peaks; `doConform()` — `${sfxHotMsg()}` acrescentado à mensagem entre `measuresMsg(r)` e `skipped`.
+
+**Step 3 — as 3 trocas aplicadas em `public/dev/ui-probe.js`**, na ordem do plano: `ORDER` com `'B6'` acrescentado; função `sfxPeak()` nova, antes do comentário "Espera o primeiro render do master…"; check `sfx-peak` no bloco `at('B6')`, logo depois do check `meter` do B5.
+
+**Step 4 — `node jobs/checks/b6-static.js` depois das trocas:**
+
+```
+PASS: B6 estático
+```
+
+**Checagens adicionais pedidas pelo Orquestrador** (âncoras textuais de tasks anteriores — não fazem parte do Step 4 do plano; nenhum dos scripts foi editado):
+
+```
+$ node jobs/checks/b0-static.js
+PASS: B0 estático
+
+$ node jobs/checks/b1-unit.js
+PASS: B1 unidade
+
+$ node jobs/checks/b2-static.js
+FAIL
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5'];
+
+$ node jobs/checks/b3-static.js
+FAIL
+index.html — ausente: ${measuresMsg(r)}${skipped}
+
+$ node jobs/checks/b5-static.js
+FAIL
+ui-probe.js — ausente: const ORDER = ['E0', 'E1', 'E2', 'E3a', 'E3b', 'B2', 'B3', 'B5'];
+```
+
+Sem regressão em B0 e B1. `b3-static` e `b5-static` falham exatamente nos dois pontos que o Step 4 do plano avisa que esta task muda de propósito (a mensagem do CONFORMAR e o `ORDER` do probe) — mesmo padrão de âncora-superada já visto entre a Task 6/B5 e as Tasks 3/B2 e 4/B3 no Status acima. `b2-static` também falha, por uma linha que o Step 4 do plano não citou nominalmente, mas pela mesma causa raiz: `jobs/checks/b2-static.js` também fixa o literal antigo de `ORDER` (sem `'B6'`, terminando em `'B5'`), então qualquer task que estenda `ORDER` quebra as três checagens que o fixam (`b2-static`, `b3-static` — via `ORDER` embutido junto da mensagem — e `b5-static`), não só as duas citadas no plano. Não é uma regressão de comportamento: nenhuma das três falhas é por um motivo diferente de "texto-âncora que esta task substituiu de propósito" — cada uma aponta exatamente para `ORDER` (B2, B5) ou para a mensagem do CONFORMAR (B3), e não para nenhum outro trecho do arquivo. Não editei `jobs/checks/b0-static.js`, `jobs/checks/b1-unit.js`, `jobs/checks/b2-static.js`, `jobs/checks/b3-static.js` nem `jobs/checks/b5-static.js` — atualizar essas âncoras é decisão do Orquestrador.
+
+**`git diff --stat` (arquivos rastreados; `jobs/checks/b6-static.js` não aparece — `jobs/` é ignorado pelo git):**
+
+```
+public/dev/ui-probe.js | 20 +++++++++++++++++++-
+public/index.html      | 50 +++++++++++++++++++++++++++++++++++++++++++++++++-
+2 files changed, 68 insertions(+), 2 deletions(-)
+```
+
+5 hunks em `public/index.html` (`git diff -- public/index.html | grep -c '^@@'`), batendo 1:1 com as 5 trocas do Step 2; 3 hunks em `public/dev/ui-probe.js`, batendo 1:1 com as 3 trocas do Step 3. Confirmado que nenhuma edição alterou terminador de linha: `public/index.html` (4002 CRLF, 0 linha só-LF) e `public/dev/ui-probe.js` (434 CRLF, 0 linha só-LF) seguem 100% CRLF depois das trocas.
+
+Nenhum desvio do plano nos Steps 1–4 propriamente ditos (as 5 âncoras de troca do `index.html` e as 3 do `ui-probe.js` bateram exatamente 1× cada antes de cada edição). `git status --short` mostra só `M public/dev/ui-probe.js` e `M public/index.html` (além de `M docs/plans/mixagem-audio.md`, deste Step 5) — nenhum outro arquivo rastreado tocado; `lib/`, `server.js` e `public/vendor/studio-player.js` não foram tocados, conforme o escopo desta task; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `8712fc8`. Parando no Step 5 conforme instruído; Steps 6–10 (validator, rota Player, rota canvas, checklist manual, git-workflow) ficam para o Orquestrador — que deve avaliar as três checagens de âncora superada (`b2-static`, `b3-static`, `b5-static`) antes de decidir se as atualiza.
 
 Nenhum desvio do plano nos Steps 1–4. `git status --short` mostra `M public/dev/ui-probe.js`, `M public/index.html` (além de `M docs/plans/mixagem-audio.md`, deste Step 5) — nenhum outro arquivo rastreado tocado; `lib/`, `server.js` e `public/vendor/studio-player.js` não foram tocados, como pedido; nenhum commit criado; nenhuma branch trocada; `main` local permanece em `72ac0d0`. Porta 4870 (servidor do usuário) confirmada `LISTENING` antes e depois, não tocada. Parando no Step 5 conforme instruído; Steps 6–10 (validator, rota Player, rota canvas, checklist manual do usuário, git-workflow) ficam para o Orquestrador.

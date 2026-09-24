@@ -507,6 +507,9 @@ aside.collapsed #prog{flex:1; margin-top:0; max-width:340px}
 .bt-clip.broll{border-left:3px solid var(--go)}
 .bt-clip.music{border-left:3px solid var(--warn)}
 .bt-clip.sfx{border-left:3px solid var(--sfx)}
+/* efeito com pico acima de −10 dBFS (B6): contorno e ▲, para o aviso não depender só da cor */
+.bt-clip.sfx.over{box-shadow:inset 0 0 0 1px var(--go)}
+.bt-clip.sfx.over .nm::before{content:'▲ '; color:var(--go)}
 /* Segmentos da pista VÍDEO (V1). Agora são .bt-clip como os de B-ROLL/TRILHA:
    a pista virou uma EDL de verdade — dividir, trimar, reordenar e deletar, com
    ripple. A posição de cada segmento é a soma das durações dos anteriores, e
@@ -1864,6 +1867,49 @@ window.sendToClipper = (p) => {
   function meterZone(db) { return db >= -2 ? 'red' : db >= -6 ? 'yellow' : 'green'; }
   function fmtDb(db) { return (db < 0 ? '−' : db > 0 ? '+' : '') + Math.abs(db).toFixed(1).replace('.', ','); }
   function setMeterData(k, v) { const m = $q('#bt-meter'); if (m) m.dataset[k] = v; }
+
+  /* ---------------- pico por efeito da SFX (B6) ----------------
+     A referência de Reels quer cada efeito abaixo de −10 dBFS no medidor de pico
+     tradicional, salvo elemento dramático. O app só avisa: o pico de amostra do
+     trecho usado do arquivo, vezes o ganho do clipe, sem processar nada (o
+     preview não tocaria um limiter só do export). */
+  const SFX_PEAK_MAX = -10;
+  // em cache por buffer: some junto quando o audioBufCache solta o arquivo
+  const regionPeakCache = new WeakMap();
+  function regionPeak(buf, srcIn, dur) {
+    const a = Math.max(0, Math.floor(srcIn * buf.sampleRate));
+    const b = Math.min(buf.length, Math.ceil((srcIn + dur) * buf.sampleRate));
+    let m = 0;
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = a; i < b; i++) { const v = d[i] < 0 ? -d[i] : d[i]; if (v > m) m = v; }
+    }
+    return m;
+  }
+  function clipPeakDb(c) {
+    const buf = audioBufCache.get(c.path);
+    if (!buf) return null;
+    let per = regionPeakCache.get(buf);
+    if (!per) regionPeakCache.set(buf, per = new Map());
+    const key = c.srcIn + '|' + c.dur;
+    if (!per.has(key)) per.set(key, regionPeak(buf, c.srcIn, c.dur));
+    const db = ampDb(per.get(key) * c.volume);
+    return isFinite(db) ? Math.round(db * 10) / 10 : null;
+  }
+  // classe, title e data-peak de um clipe de SFX: no render e, ao vivo, no slider
+  function markSfxPeak(el, c) {
+    const pk = clipPeakDb(c), over = pk != null && pk > SFX_PEAK_MAX;
+    el.classList.toggle('over', over);
+    if (pk == null) delete el.dataset.peak; else el.dataset.peak = pk.toFixed(1);
+    if (over) el.title = `pico ${fmtDb(pk)} dBFS — acima de −10; mantenha só se for um elemento dramático`;
+    else el.removeAttribute('title');
+  }
+  // quantos efeitos acima do limiar vão para o export (só com a SFX soando)
+  function sfxHotMsg() {
+    if (!audible('sfx')) return '';
+    const n = SFX.filter(c => { const pk = clipPeakDb(c); return pk != null && pk > SFX_PEAK_MAX; }).length;
+    return n ? ` · ${n} SFX acima de −10 dB` : '';
+  }
   function scheduleMaster() { clearTimeout(meterTimer); meterTimer = setTimeout(renderMaster, 200); }
   // O que muda o master: cortes, clipes, ganhos, quem soa e quais buffers já chegaram.
   function mixSignature(aud) {
@@ -2097,7 +2143,7 @@ window.sendToClipper = (p) => {
       const fora = (r.excluded || []).map(t => NAME[t]).join(', ');
       const why = r.mix && r.mix.solo ? 'solo: ' + NAME[r.mix.solo] : 'mudo';
       stage(`timeline conformada — ${r.duration.toFixed(1)}s · ${r.broll} B-ROLL · ${r.music} TRILHA · ${r.sfx} SFX` +
-        ` · ${r.captionedWords} palavras${fora ? ` · fora do export: ${fora} (${why})` : ''}${measuresMsg(r)}${skipped}`,
+        ` · ${r.captionedWords} palavras${fora ? ` · fora do export: ${fora} (${why})` : ''}${measuresMsg(r)}${sfxHotMsg()}${skipped}`,
         r.tpWarn === 'over');
     } catch (e) { stage(e.message, true); }
     finally { if (btn) btn.disabled = false; }
@@ -2526,6 +2572,7 @@ window.sendToClipper = (p) => {
           inp.setAttribute('aria-valuetext', inp.title);
           syncPlayer();
           scheduleMaster();
+          if (track === 'sfx') markSfxPeak(inp.closest('.bt-clip'), clipsFor(track)[+inp.dataset.idx]);
         });
         inp.addEventListener('change', () => snapshot());
       });
@@ -2534,6 +2581,7 @@ window.sendToClipper = (p) => {
         const peaksArr = miniWaveCache.get(arr[+cv.dataset.idx].path);
         if (peaksArr instanceof Float32Array) drawPeaksToCanvas(cv, peaksArr, waveColor);
       });
+      if (track === 'sfx') host.querySelectorAll('.bt-clip').forEach(el => markSfxPeak(el, arr[+el.dataset.idx]));
     }
   }
   function renderBrollTrack() { renderClipTrack('broll', 'bt-track-broll'); }
